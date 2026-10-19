@@ -17,6 +17,8 @@ make bin      # 只生成命令行二进制 ./health-vault
 make test     # 测试
 ```
 
+开发时用 `make dev`：界面在 http://localhost:5173 ，改前端保存后马上生效；后端在 127.0.0.1:8722，改了 `.go` 文件会自动重新编译和重启。数据放在临时目录 `/tmp/health-vault-dev`，不会碰真实数据。按 Ctrl+C 全部退出。桌面窗口本身的改动还是要 `make app` 后打开 App 检查。
+
 ## 使用
 
 ```bash

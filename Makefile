@@ -3,7 +3,8 @@
 #   make            build the UI and the binary (./health-vault)
 #   make app        bundle 健康档案.app (ad-hoc signed)
 #   make test       Go tests + UI typecheck
-#   make dev        API on :8721 with a throwaway data dir; run `npm run dev` in frontend/ for the UI
+#   make dev        UI on Vite :5173 (hot reload) + API on :8722 with a throwaway data dir,
+#                   rebuilt and restarted when a .go file changes (scripts/dev.sh)
 
 export PATH := /opt/homebrew/bin:$(PATH)
 # the Wails/AppKit objects target macOS 13; link for the same
@@ -41,8 +42,10 @@ test: frontend/node_modules
 	go test ./...
 	cd frontend && npx tsc -b
 
-dev:
-	go run . serve -data /tmp/health-vault-dev
+# the binary embeds frontend/dist, so it has to exist once before the first build
+dev: frontend/node_modules
+	@test -d frontend/dist || $(MAKE) ui
+	@./scripts/dev.sh
 
 clean:
 	rm -rf health-vault "$(APP)" frontend/dist
