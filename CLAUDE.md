@@ -45,4 +45,4 @@ make app         # 打包 健康档案.app
 - 改了 MCP 工具：用逐条发送的 stdio 驱动做一次端到端测试（见 LESSONS #1），不要一次性把请求全部塞进 stdin。
 - 改了界面：用一个临时数据目录启动 `./health-vault serve -data <临时目录> -port 8731`，在浏览器里检查桌面宽度和 375px 手机宽度（不能横向溢出）。先确认数据加载完再判断（LESSONS #4），重新构建后强制刷新（LESSONS #5）。
 - 改了桌面窗口：`./health-vault -data <临时目录> -port 8732` 启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。
-- **永远不要用默认数据目录做测试**，那里是用户真实的健康数据：`~/Library/Application Support/HealthVault`。
+- **永远不要用默认数据目录做测试**，那里是用户真实的健康数据：`~/Library/Application Support/HealthVault`。`make dev-real` 读写的就是这个目录，只给用户自己用，编码助手不要运行它；要测 `dev.sh --real` 这条路径，就把 `HEALTH_VAULT_DATA` 设成临时目录。

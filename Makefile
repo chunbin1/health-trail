@@ -5,6 +5,7 @@
 #   make test       Go tests + UI typecheck
 #   make dev        UI on Vite :5173 (hot reload) + API on :8722 with a throwaway data dir,
 #                   rebuilt and restarted when a .go file changes (scripts/dev.sh)
+#   make dev-real   the same on your real data, backed up first (never for tests)
 
 export PATH := /opt/homebrew/bin:$(PATH)
 # the Wails/AppKit objects target macOS 13; link for the same
@@ -15,7 +16,7 @@ export MACOSX_DEPLOYMENT_TARGET := 13.0
 APP     := 健康档案.app
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo 0.1.0)
 
-.PHONY: all ui bin app test dev clean
+.PHONY: all ui bin app test dev dev-real clean
 
 all: bin
 
@@ -46,6 +47,10 @@ test: frontend/node_modules
 dev: frontend/node_modules
 	@test -d frontend/dist || $(MAKE) ui
 	@./scripts/dev.sh
+
+dev-real: frontend/node_modules
+	@test -d frontend/dist || $(MAKE) ui
+	@./scripts/dev.sh --real
 
 clean:
 	rm -rf health-vault "$(APP)" frontend/dist

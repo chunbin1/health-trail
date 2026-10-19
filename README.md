@@ -19,6 +19,8 @@ make test     # 测试
 
 开发时用 `make dev`：界面在 http://localhost:5173 ，改前端保存后马上生效；后端在 127.0.0.1:8722，改了 `.go` 文件会自动重新编译和重启。数据放在临时目录 `/tmp/health-vault-dev`，不会碰真实数据。按 Ctrl+C 全部退出。桌面窗口本身的改动还是要 `make app` 后打开 App 检查。
 
+想用自己的真实数据边用边调试，就用 `make dev-real`：和 `make dev` 一样热更新，但读写的是真实数据目录。每次启动前会先把数据库和附件备份到 `~/Library/Application Support/HealthVault-dev-backups/<时间>`，保留最近 10 份。正式 App 开着也没关系，两边可以同时用。
+
 ## 使用
 
 ```bash

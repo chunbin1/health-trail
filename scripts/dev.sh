@@ -3,15 +3,35 @@
 #   - the UI on Vite (http://localhost:5173), with hot module reload
 #   - the API on 127.0.0.1:8722 with a throwaway data dir, rebuilt and
 #     restarted whenever a .go file changes
-# 8722, not the default 8721, so it never talks to an installed app that is
-# running on the real data. No watcher dependency: it polls file times once a
-# second.
+# 8722, not the default 8721, so it doesn't collide with an installed app.
+# No watcher dependency: it polls file times once a second.
+#
+# `make dev-real` (--real) runs the same thing on the real data directory, for
+# the user's own debugging. It backs the data up first: dev code migrates and
+# writes that database. Coding agents never run it (CLAUDE.md).
 set -u
 cd "$(dirname "$0")/.."
 
-PORT=8722
-DATA=${HEALTH_VAULT_DEV_DATA:-/tmp/health-vault-dev}
+export HEALTH_VAULT_DEV_PORT=${HEALTH_VAULT_DEV_PORT:-8722}
+PORT=$HEALTH_VAULT_DEV_PORT
 BIN=$(mktemp -d)/health-vault
+if [ "${1:-}" = --real ]; then
+  DATA=${HEALTH_VAULT_DATA:-$HOME/Library/Application Support/HealthVault}
+  if [ -f "$DATA/health.db" ]; then
+    backups="$DATA-dev-backups"
+    dest="$backups/$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$dest" || exit 1
+    # .backup takes a consistent copy even while the app is writing
+    sqlite3 "$DATA/health.db" ".backup '$dest/health.db'" || { echo "[dev] 备份失败，未启动"; exit 1; }
+    [ -d "$DATA/files" ] && cp -R "$DATA/files" "$dest/"
+    echo "[dev] 已备份真实数据到 $dest"
+    # keep the latest 10
+    ls -1d "$backups"/*/ | sort -r | tail -n +11 | while read -r old; do rm -rf "$old"; done
+  fi
+  echo "[dev] 使用真实数据：$DATA"
+else
+  DATA=${HEALTH_VAULT_DEV_DATA:-/tmp/health-vault-dev}
+fi
 api=
 vite=
 
