@@ -14,6 +14,13 @@ cd "$(dirname "$0")/.."
 
 export HEALTH_VAULT_DEV_PORT=${HEALTH_VAULT_DEV_PORT:-8722}
 PORT=$HEALTH_VAULT_DEV_PORT
+# A second dev run would leave its API unbound while its Vite proxies to the
+# first one, showing the other run's data. Refuse to start instead.
+if busy=$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | tail -n +2) && [ -n "$busy" ]; then
+  echo "[dev] 端口 $PORT 已被占用，可能另一个 make dev / make dev-real 还开着。先在那个终端按 Ctrl+C 再试："
+  echo "$busy"
+  exit 1
+fi
 BIN=$(mktemp -d)/health-vault
 if [ "${1:-}" = --real ]; then
   DATA=${HEALTH_VAULT_DATA:-$HOME/Library/Application Support/HealthVault}
