@@ -112,11 +112,16 @@ func (s *Store) FindHabit(ref string) (Record, error) {
 }
 
 // Checkin records a habit as done on date, or updates that day's value and
-// note when it already is.
+// note when it already is. For a habit that logs a metric (metric_type), a
+// value is also kept as that day's metric record, linked by metric_id.
 func (s *Store) Checkin(habitID int64, date string, value *float64, notes string) (Record, error) {
 	d, err := normalizeDate(date)
 	if err != nil {
 		return nil, invalid("%v", err)
+	}
+	h, err := s.Get("habits", habitID)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := s.query(`SELECT * FROM checkins WHERE habit_id = ? AND date = ?`, habitID, d)
 	if err != nil {
@@ -129,24 +134,61 @@ func (s *Store) Checkin(habitID int64, date string, value *float64, notes string
 	if notes != "" {
 		in["notes"] = notes
 	}
-	if len(rows) > 0 {
-		return s.Update("checkins", rows[0]["id"].(int64), in)
+	var newMetric int64
+	if mt, ok := h["metric_type"].(string); ok && value != nil {
+		var mid int64
+		if len(rows) > 0 {
+			mid, _ = rows[0]["metric_id"].(int64)
+		}
+		if mid > 0 && s.mustExist("metrics", mid) == nil {
+			if _, err := s.Update("metrics", mid, Record{"value": *value}); err != nil {
+				return nil, err
+			}
+		} else {
+			at := d
+			if d == today() {
+				at = time.Now().Format("2006-01-02 15:04")
+			}
+			m, err := s.Create("metrics", Record{"measured_at": at, "metric_type": mt, "value": *value, "context": h["name"]})
+			if err != nil {
+				return nil, err
+			}
+			newMetric = m["id"].(int64)
+			in["metric_id"] = newMetric
+		}
 	}
-	return s.Create("checkins", in)
+	var c Record
+	if len(rows) > 0 {
+		c, err = s.Update("checkins", rows[0]["id"].(int64), in)
+	} else {
+		c, err = s.Create("checkins", in)
+	}
+	if err != nil && newMetric > 0 {
+		s.Delete("metrics", newMetric)
+	}
+	return c, err
 }
 
-// Uncheck removes a habit's check-in on date. It reports whether there was one.
+// Uncheck removes a habit's check-in on date, and the metric record it
+// logged, if any. It reports whether there was one.
 func (s *Store) Uncheck(habitID int64, date string) (bool, error) {
 	d, err := normalizeDate(date)
 	if err != nil {
 		return false, invalid("%v", err)
 	}
-	res, err := s.DB.Exec(`DELETE FROM checkins WHERE habit_id = ? AND date = ?`, habitID, d)
-	if err != nil {
+	rows, err := s.query(`SELECT * FROM checkins WHERE habit_id = ? AND date = ?`, habitID, d)
+	if err != nil || len(rows) == 0 {
 		return false, err
 	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
+	if err := s.Delete("checkins", rows[0]["id"].(int64)); err != nil {
+		return false, err
+	}
+	if mid, ok := rows[0]["metric_id"].(int64); ok {
+		if err := s.Delete("metrics", mid); err != nil && err != ErrNotFound {
+			return true, err
+		}
+	}
+	return true, nil
 }
 
 type HabitStats struct {
@@ -220,7 +262,8 @@ func (s *Store) CheckinStats(from, to string, habitID int64) ([]HabitStats, erro
 		if days > 0 {
 			st.Rate = float64(st.DaysDone) / float64(days)
 		}
-		if hasTotal {
+		// readings such as 体重 don't add up
+		if hasTotal && h["metric_type"] == nil {
 			st.Total = &total
 		}
 		st.CurrentStreak, err = s.streak(h["id"].(int64))

@@ -210,6 +210,13 @@ func prepare(e *Entity, r Record) {
 	switch e.Name {
 	case "lab_results":
 		prepareLab(r)
+	case "habits":
+		// a habit that logs a metric asks for it in the metric's unit
+		if r["unit"] == nil {
+			if t, ok := r["metric_type"].(string); ok && MetricUnits[t] != "" {
+				r["unit"] = MetricUnits[t]
+			}
+		}
 	case "metrics":
 		if r["unit"] == nil {
 			if t, ok := r["metric_type"].(string); ok && MetricUnits[t] != "" {

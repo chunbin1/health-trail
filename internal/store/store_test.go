@@ -245,6 +245,53 @@ func TestCheckinsAndStreak(t *testing.T) {
 	}
 }
 
+// A habit with a metric_type logs its value as a metric record too: one per
+// day, updated on a second check-in, removed with the check-in.
+func TestCheckinLogsMetric(t *testing.T) {
+	s := open(t)
+	h, err := s.Create("habits", Record{"name": "晨起称体重", "metric_type": "体重"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h["unit"] != "kg" {
+		t.Errorf("habit unit = %v, want kg from the metric", h["unit"])
+	}
+	id := h["id"].(int64)
+	w := 65.2
+	c, err := s.Checkin(id, "today", &w, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mid, _ := c["metric_id"].(int64)
+	m, err := s.Get("metrics", mid)
+	if err != nil || m["metric_type"] != "体重" || m["value"] != 65.2 || m["unit"] != "kg" || m["context"] != "晨起称体重" {
+		t.Fatalf("metric = %v %v", m, err)
+	}
+	w = 65.0
+	if c, err = s.Checkin(id, "today", &w, ""); err != nil || c["metric_id"] != mid {
+		t.Fatalf("second check-in = %v %v", c, err)
+	}
+	if rows, n, _ := s.List("metrics", ListQuery{}); n != 1 || rows[0]["value"] != 65.0 {
+		t.Errorf("metrics after update = %v", rows)
+	}
+	if st, _ := s.CheckinStats("", "", id); st[0].Total != nil {
+		t.Errorf("readings were summed: %v", *st[0].Total)
+	}
+	// no value: a plain check-in, no metric
+	if c, err = s.Checkin(id, "2026-01-02", nil, ""); err != nil || c["metric_id"] != nil {
+		t.Errorf("check-in without value = %v %v", c, err)
+	}
+	if ok, err := s.Uncheck(id, "today"); !ok || err != nil {
+		t.Fatalf("uncheck = %v %v", ok, err)
+	}
+	if _, n, _ := s.List("metrics", ListQuery{}); n != 0 {
+		t.Errorf("metric left after uncheck: %d", n)
+	}
+	if _, err := s.Create("habits", Record{"name": "量血压", "metric_type": "血压"}); err == nil {
+		t.Error("血压 needs two values and should not be a habit metric")
+	}
+}
+
 func TestOverviewAndTimeline(t *testing.T) {
 	s := open(t)
 	c, _ := s.Create("conditions", Record{"name": "急性扁桃体炎", "status": "进行中", "onset_date": "2026-10-14"})

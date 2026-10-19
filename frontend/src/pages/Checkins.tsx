@@ -7,7 +7,8 @@ import { openRecord, useApp, useLoad } from '../state'
 import { Empty, IconButton, KindIcon } from '../ui'
 
 // The day's habits as buttons: one tap checks in (or asks for the amount,
-// for a habit with a unit); a tap on a done habit undoes it.
+// for a habit with a unit, or the reading, for one that logs a body metric
+// such as 体重); a tap on a done habit undoes it.
 export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
   const { changed, toast } = useApp()
   const [asking, setAsking] = useState<HabitDay | null>(null)
@@ -18,7 +19,8 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
       if (d.checkin) {
         await api.uncheck(d.habit.id, date)
       } else if (d.habit.unit) {
-        setAmount(d.habit.target != null ? String(d.habit.target) : '')
+        // a metric's target is a goal, not today's reading
+        setAmount(d.habit.target != null && !d.habit.metric_type ? String(d.habit.target) : '')
         setAsking(d)
         return
       } else {
@@ -64,14 +66,14 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
           <form onSubmit={(e) => { e.preventDefault(); submitAmount() }}>
             <div className="modal-body">
               <label className="field">
-                <span className="lbl">今天完成了多少？</span>
+                <span className="lbl">{asking.habit.metric_type ? `今天的${asking.habit.metric_type}是多少？` : '今天完成了多少？'}</span>
                 <div className="row" style={{ flexWrap: 'nowrap' }}>
-                  <input className="input num" autoFocus inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ maxWidth: 160, fontSize: 18, height: 44 }} />
+                  <input className="input num" autoFocus inputMode="decimal" required={!!asking.habit.metric_type} value={amount} onChange={(e) => setAmount(e.target.value)} style={{ maxWidth: 160, fontSize: 18, height: 44 }} />
                   <span className="ink2">{asking.habit.unit}</span>
                 </div>
               </label>
             </div>
-            <div className="modal-foot"><span className="spacer" /><button type="button" className="btn" onClick={() => setAsking(null)}>取消</button><button className="btn primary">打卡</button></div>
+            <div className="modal-foot"><span className="spacer" /><button type="button" className="btn" onClick={() => setAsking(null)}>取消</button><button className="btn primary">{asking.habit.metric_type ? '记录' : '打卡'}</button></div>
           </form>
         </Modal>
       )}

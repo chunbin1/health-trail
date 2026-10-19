@@ -158,6 +158,7 @@ var Entities = []*Entity{
 			{Name: "icon", Label: "图标", Type: Text, List: true, Hint: "一个 emoji，如 💊"},
 			{Name: "unit", Label: "单位", Type: Text, List: true, Hint: "需要记数量时填，如：分钟、杯"},
 			{Name: "target", Label: "每日目标", Type: Real, List: true},
+			{Name: "metric_type", Label: "同时记入身体数据", Type: Enum, Options: HabitMetricTypes, Hint: "如 晨起称体重 选 体重：打卡时填数值，同时记一条身体数据"},
 			{Name: "archived", Label: "已归档", Type: Bool},
 			{Name: "notes", Label: "备注", Type: Text},
 		},
@@ -169,6 +170,7 @@ var Entities = []*Entity{
 			{Name: "habit_id", Label: "打卡项", Type: Ref, Ref: "habits", Required: true, Cascade: true, List: true},
 			{Name: "date", Label: "日期", Type: Date, Required: true, List: true},
 			{Name: "value", Label: "数量", Type: Real, List: true},
+			{Name: "metric_id", Label: "身体数据记录", Type: Ref, Ref: "metrics"},
 			{Name: "notes", Label: "备注", Type: Text},
 		},
 		Unique: []string{"habit_id", "date"},
@@ -177,6 +179,10 @@ var Entities = []*Entity{
 
 // MetricTypes are the body metrics the app knows a default unit for.
 var MetricTypes = []string{"体重", "血压", "心率", "血糖", "体温", "血氧", "腰围", "睡眠时长", "步数", "其他"}
+
+// HabitMetricTypes are the metrics a habit can log with its check-in: those
+// measured as a single number (not 血压, which needs two).
+var HabitMetricTypes = []string{"体重", "心率", "血糖", "体温", "血氧", "腰围", "睡眠时长", "步数"}
 
 var MetricUnits = map[string]string{
 	"体重": "kg", "血压": "mmHg", "心率": "次/分", "血糖": "mmol/L", "体温": "°C",
