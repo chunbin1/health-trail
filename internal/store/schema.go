@@ -13,6 +13,7 @@ const (
 	Real     FieldType = "real"
 	Date     FieldType = "date"     // YYYY-MM-DD
 	DateTime FieldType = "datetime" // YYYY-MM-DD HH:MM
+	Time     FieldType = "time"     // HH:MM, a time of day
 	Enum     FieldType = "enum"
 	Ref      FieldType = "ref" // id of a row in another entity
 	Bool     FieldType = "bool"
@@ -159,6 +160,7 @@ var Entities = []*Entity{
 			{Name: "unit", Label: "单位", Type: Text, List: true, Hint: "需要记数量时填，如：分钟、杯"},
 			{Name: "target", Label: "每日目标", Type: Real, List: true},
 			{Name: "metric_type", Label: "同时记入身体数据", Type: Enum, Options: HabitMetricTypes, Hint: "如 晨起称体重 选 体重：打卡时填数值，同时记一条身体数据"},
+			{Name: "remind_at", Label: "提醒时间", Type: Time, List: true, Hint: "如 23:00：每天到这个时间还没打卡，桌面 App 会发系统通知"},
 			{Name: "archived", Label: "已归档", Type: Bool},
 			{Name: "notes", Label: "备注", Type: Text},
 		},

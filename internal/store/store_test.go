@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -289,6 +290,70 @@ func TestCheckinLogsMetric(t *testing.T) {
 	}
 	if _, err := s.Create("habits", Record{"name": "量血压", "metric_type": "血压"}); err == nil {
 		t.Error("血压 needs two values and should not be a habit metric")
+	}
+}
+
+func TestHabitReminders(t *testing.T) {
+	s := open(t)
+	for in, want := range map[string]string{"23:00": "23:00", "23：00": "23:00", " 9:5 ": "09:05", "23": "23:00", "23点": "23:00", "23点30分": "23:30", "11点半": "11:30"} {
+		if got, err := normalizeTime(in); got != want || err != nil {
+			t.Errorf("normalizeTime(%q) = %q %v, want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"24:00", "23:60", "晚上", "23:00:00"} {
+		if _, err := normalizeTime(in); err == nil {
+			t.Errorf("normalizeTime(%q) accepted", in)
+		}
+	}
+	if _, err := s.Create("habits", Record{"name": "坏", "remind_at": "25点"}); err == nil {
+		t.Error("remind_at 25点 accepted")
+	}
+
+	sleep, err := s.Create("habits", Record{"name": "作息守住", "icon": "⏰", "remind_at": "23：00"})
+	if err != nil || sleep["remind_at"] != "23:00" {
+		t.Fatalf("habit = %v %v", sleep, err)
+	}
+	walk, _ := s.Create("habits", Record{"name": "散步", "remind_at": "08:00"})
+	s.Create("habits", Record{"name": "不提醒"})
+	s.Create("habits", Record{"name": "已归档", "remind_at": "09:00", "archived": true})
+
+	loc := time.FixedZone("CST", 8*3600)
+	now := time.Date(2026, 10, 19, 21, 0, 0, 0, loc)
+	rs, err := s.Reminders(now, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 散步 today at 08:00 has passed; 作息 tonight is still to come
+	want := []string{
+		fmt.Sprintf("habit-%v-2026-10-19-23:00", sleep["id"]),
+		fmt.Sprintf("habit-%v-2026-10-20-08:00", walk["id"]),
+		fmt.Sprintf("habit-%v-2026-10-20-23:00", sleep["id"]),
+		fmt.Sprintf("habit-%v-2026-10-21-08:00", walk["id"]),
+		fmt.Sprintf("habit-%v-2026-10-21-23:00", sleep["id"]),
+	}
+	var got []string
+	for _, r := range rs {
+		got = append(got, r.ID)
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("reminders =\n%v\nwant\n%v", got, want)
+	}
+	if rs[0].Title != "⏰ 作息守住" || !rs[0].At.Equal(time.Date(2026, 10, 19, 23, 0, 0, 0, loc)) {
+		t.Errorf("first = %+v", rs[0])
+	}
+
+	// checked in today: tonight's reminder goes, tomorrow's stays
+	if _, err := s.Checkin(sleep["id"].(int64), "2026-10-19", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	rs, _ = s.Reminders(now, 3)
+	if len(rs) != 4 || rs[0].ID != want[1] {
+		t.Errorf("after check-in = %v", rs)
+	}
+
+	// capped below macOS's 64 pending notifications
+	if rs, _ := s.Reminders(now, 100); len(rs) != MaxReminders {
+		t.Errorf("100 days gave %d reminders, want %d", len(rs), MaxReminders)
 	}
 }
 

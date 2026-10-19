@@ -104,6 +104,8 @@ function Input({ field: f, entity, value, onChange }: { field: Field; entity: En
         <input className="input" type="datetime-local" value={toLocalInput(v)}
           onChange={(e) => onChange(e.target.value.replace('T', ' '))} />
       )
+    case 'time':
+      return <input className="input" type="time" value={v} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 160 }} />
     case 'enum':
       if (f.options!.length <= 4)
         return (

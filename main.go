@@ -26,6 +26,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
 	"github.com/lee/health-vault/internal/mcpserver"
 	"github.com/lee/health-vault/internal/server"
@@ -245,6 +246,7 @@ func runApp(dataDir, port string) {
 		Name:        "健康档案",
 		Description: "个人健康档案",
 		Assets:      application.AssetOptions{Handler: a.handler()},
+		Services:    []application.Service{application.NewService(&reminders{st: a.st, ns: notifications.New()})},
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		// one window per data directory: a second launch on the same data
 		// focuses the open window, while a test copy on other data runs apart

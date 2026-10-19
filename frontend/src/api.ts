@@ -1,7 +1,7 @@
 // The schema comes from the server (internal/store/schema.go): the forms
 // and lists here are drawn from it rather than declared twice.
 
-export type FieldType = 'text' | 'longtext' | 'int' | 'real' | 'date' | 'datetime' | 'enum' | 'ref' | 'bool'
+export type FieldType = 'text' | 'longtext' | 'int' | 'real' | 'date' | 'datetime' | 'time' | 'enum' | 'ref' | 'bool'
 
 export interface Field {
   name: string

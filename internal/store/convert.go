@@ -107,6 +107,12 @@ func convert(f Field, v any) (any, error) {
 			return nil, fmt.Errorf("需要时间（YYYY-MM-DD HH:MM），收到 %v", v)
 		}
 		return normalizeDateTime(s)
+	case Time:
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("需要时间（HH:MM，如 23:00），收到 %v", v)
+		}
+		return normalizeTime(s)
 	case Enum:
 		s, ok := v.(string)
 		if !ok {
@@ -187,6 +193,30 @@ func normalizeDateTime(s string) (string, error) {
 		return fmt.Sprintf("%s %02d:%02d", d, h, mi), nil
 	}
 	return d, nil
+}
+
+var clockRe = regexp.MustCompile(`^(\d{1,2})(?:\s*[:：点时]\s*(\d{1,2}|半)?\s*分?)?$`)
+
+// normalizeTime returns a time of day as "HH:MM". It takes 23:00, 23：00,
+// 9:5, 23 and 23点 / 23点30 / 11点半.
+func normalizeTime(s string) (string, error) {
+	m := clockRe.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return "", fmt.Errorf("需要时间（HH:MM，如 23:00），收到 %q", s)
+	}
+	h, _ := strconv.Atoi(m[1])
+	mi := 0
+	switch m[2] {
+	case "":
+	case "半":
+		mi = 30
+	default:
+		mi, _ = strconv.Atoi(m[2])
+	}
+	if h > 23 || mi > 59 {
+		return "", fmt.Errorf("时间 %q 不存在", s)
+	}
+	return fmt.Sprintf("%02d:%02d", h, mi), nil
 }
 
 func normalizeFlag(s string) string {

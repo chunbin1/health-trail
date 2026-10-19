@@ -31,6 +31,8 @@ make test     # 测试
 ./health-vault info         # 显示数据目录和连接 Claude 的配置
 ```
 
+**提醒**：给打卡项填上「提醒时间」（如 23:00），到点还没打卡，Mac 会弹系统通知。通知由桌面 App 提前排好未来 7 天，App 关着也会按时弹出；只要每周至少打开一次 App 就不会断。只有从 `健康档案.app` 启动才有提醒，第一次会请求通知权限。
+
 数据目录默认是 `~/Library/Application Support/HealthVault`，可以用 `-data` 参数或环境变量 `HEALTH_VAULT_DATA` 修改。备份时复制整个目录即可。
 
 ## 接入 Claude

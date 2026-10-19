@@ -108,6 +108,8 @@ func typesDoc() string {
 				extra = append(extra, "日期")
 			case store.DateTime:
 				extra = append(extra, "时间")
+			case store.Time:
+				extra = append(extra, "每天的时刻 HH:MM")
 			case store.Int, store.Real:
 				extra = append(extra, "数字")
 			case store.Bool:

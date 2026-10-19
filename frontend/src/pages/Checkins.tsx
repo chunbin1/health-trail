@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, Plus } from 'lucide-react'
+import { Bell, ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, Plus } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, today, type HabitDay } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { Modal } from '../components/Modal'
@@ -54,7 +54,10 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
               <div className="state">
                 {d.checkin
                   ? d.checkin.value != null ? `${fmtNum(d.checkin.value)} ${d.habit.unit || ''}` : '已完成'
-                  : d.habit.target != null ? `目标 ${fmtNum(d.habit.target)} ${d.habit.unit || ''}` : '未完成'}
+                  : <>
+                      {d.habit.target != null ? `目标 ${fmtNum(d.habit.target)} ${d.habit.unit || ''}` : '未完成'}
+                      {d.habit.remind_at && <span className="nowrap"> · <Bell size={11} style={{ verticalAlign: '-1px' }} aria-label="提醒" /> {d.habit.remind_at}</span>}
+                    </>}
               </div>
             </span>
             <span className="check">{d.checkin ? <CircleCheck size={22} strokeWidth={2.2} /> : <Circle size={22} strokeWidth={1.6} />}</span>
