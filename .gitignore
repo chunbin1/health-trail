@@ -1,0 +1,6 @@
+/health-vault
+/健康档案.app/
+/frontend/node_modules/
+/frontend/dist/
+/frontend/*.tsbuildinfo
+.DS_Store
