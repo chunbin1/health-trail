@@ -54,9 +54,11 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
               <div className="state">
                 {d.checkin
                   ? d.checkin.value != null ? `${fmtNum(d.checkin.value)} ${d.habit.unit || ''}` : '已完成'
+                  : d.habit.target == null && !d.habit.remind_at ? '未完成'
                   : <>
-                      {d.habit.target != null ? `目标 ${fmtNum(d.habit.target)} ${d.habit.unit || ''}` : '未完成'}
-                      {d.habit.remind_at && <span className="nowrap"> · <Bell size={11} style={{ verticalAlign: '-1px' }} aria-label="提醒" /> {d.habit.remind_at}</span>}
+                      {d.habit.remind_at && <><Bell size={11} style={{ verticalAlign: '-1px' }} aria-label="提醒" /> {d.habit.remind_at}</>}
+                      {d.habit.target != null && d.habit.remind_at && ' · '}
+                      {d.habit.target != null && `目标 ${fmtNum(d.habit.target)} ${d.habit.unit || ''}`}
                     </>}
               </div>
             </span>

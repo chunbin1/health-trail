@@ -489,7 +489,7 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
   box-shadow: var(--shadow);
 }
 .habit .name { font-weight: 600; font-size: 14px; }
-.habit .state { font-size: 12px; color: var(--ink-3); }
+.habit .state { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .habit .check { margin-left: auto; color: var(--line-2); }
 .habit.done { background: var(--accent-soft); }
 .habit.done .check { color: var(--accent); }
