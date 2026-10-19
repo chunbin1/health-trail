@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, File, FileImage, FileText, Paperclip, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { useRef, useState, type MouseEvent } from 'react'
+import { ArrowDown, ArrowUp, File, FileImage, FileText, Paperclip, Pencil, Pill, Plus, Trash2, Upload, X } from 'lucide-react'
 import { api, fmtDate, fmtNum, flagClass, labValue, metricValue, type Entity, type Field, type Rec } from '../api'
 import { closeRecord, openRecord, recTitle, useApp, useLoad, useRefOptions } from '../state'
 import { Empty, IconButton, KindIcon, RangeBar } from '../ui'
@@ -8,7 +8,7 @@ import { LabImport } from './LabImport'
 import { Drawer, Modal } from './Modal'
 
 const CHILD_LABELS: Record<string, string> = {
-  symptoms: '症状记录', visits: '就诊记录', medications: '用药', reports: '检查报告', lab_results: '检验指标', checkins: '打卡记录',
+  symptoms: '症状记录', visits: '就诊记录', medications: '用药', reports: '检查报告', lab_results: '检验指标', checkins: '打卡记录', doses: '服药记录',
 }
 
 // The detail of one record: its fields, what hangs off it, its files.
@@ -99,7 +99,8 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
             .map(([k, rows]) => (
               <section key={k} className="card">
                 <div className="card-head">
-                  <h2>{CHILD_LABELS[k] || k}<span className="muted small">{(rows as Rec[]).length || ''}</span></h2>
+                  <h2>{CHILD_LABELS[k] || k}<span className="muted small">{k === 'doses' ? doseTotal(rows as Rec[]) : (rows as Rec[]).length || ''}</span></h2>
+                  {k === 'doses' && <TakeDose med={r} />}
                   {k !== 'checkins' && <IconButton label={`添加${CHILD_LABELS[k]}`} small onClick={() => setAdding(k)}><Plus size={16} /></IconButton>}
                 </div>
                 <ChildList entity={entity(k)} rows={rows as Rec[]} />
@@ -147,8 +148,33 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   )
 }
 
+// One tap logs one pill of med taken now; another time or amount goes
+// through the + form.
+export function TakeDose({ med }: { med: Rec }) {
+  const { changed, toast } = useApp()
+  const [busy, setBusy] = useState(false)
+  async function take(ev: MouseEvent) {
+    ev.stopPropagation()
+    setBusy(true)
+    try {
+      const d = await api.create('doses', { medication_id: med.id, taken_at: 'now' })
+      changed()
+      toast(`已记录：${med.name} ${fmtNum(d.amount)} 颗 · ${String(d.taken_at).slice(11)}`)
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return <button className="btn sm" disabled={busy} onClick={take}><Pill size={14} />吃了</button>
+}
+
+function doseTotal(rows: Rec[]) {
+  return rows.length ? `共 ${fmtNum(rows.reduce((n, d) => n + (d.amount ?? 1), 0))} 颗` : ''
+}
+
 function childDefaults(parent: string, child: string, r: Rec) {
-  const key = { conditions: 'condition_id', visits: 'visit_id', reports: 'report_id', habits: 'habit_id' }[parent]
+  const key = { conditions: 'condition_id', visits: 'visit_id', reports: 'report_id', habits: 'habit_id', medications: 'medication_id' }[parent]
   const d: Record<string, any> = key ? { [key]: r.id } : {}
   if (child === 'lab_results') d.test_date = r.report_date
   return d
@@ -189,8 +215,8 @@ function ChildList({ entity: e, rows }: { entity: Entity; rows: Rec[] }) {
     <div className="list">
       {rows.slice(0, 50).map((c) => (
         <div className="row-item no-ico" key={c.id} onClick={() => openRecord(e.name, c.id)}>
-          <div className="body title">{e.name === 'metrics' ? `${c.metric_type} ${metricValue(c)}` : recTitle(e, c)}</div>
-          {e.dateKey && <span className="side">{fmtDate(String(c[e.dateKey] ?? '').slice(0, 10))}</span>}
+          <div className="body title">{e.name === 'metrics' ? `${c.metric_type} ${metricValue(c)}` : e.name === 'doses' ? `${fmtNum(c.amount)} 颗${c.notes ? ' · ' + c.notes : ''}` : recTitle(e, c)}</div>
+          {e.dateKey && <span className="side">{fmtDate(e.name === 'doses' ? c.taken_at : String(c[e.dateKey] ?? '').slice(0, 10))}</span>}
         </div>
       ))}
     </div>

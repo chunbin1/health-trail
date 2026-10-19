@@ -217,6 +217,10 @@ func prepare(e *Entity, r Record) {
 				r["unit"] = MetricUnits[t]
 			}
 		}
+	case "doses":
+		if r["amount"] == nil {
+			r["amount"] = 1.0
+		}
 	case "metrics":
 		if r["unit"] == nil {
 			if t, ok := r["metric_type"].(string); ok && MetricUnits[t] != "" {

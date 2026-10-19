@@ -3,7 +3,7 @@ import { ChevronRight, Plus, Sparkles } from 'lucide-react'
 import { api, fmtDate, fmtNum, metricValue, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { Modal } from '../components/Modal'
-import { LabValue } from '../components/RecordDrawer'
+import { LabValue, TakeDose } from '../components/RecordDrawer'
 import { openRecord, recTitle, useApp, useLoad } from '../state'
 import { Empty, KindIcon, RangeBar, Ring, Sparkline, kindStyle } from '../ui'
 import { HabitGrid } from './Checkins'
@@ -109,7 +109,14 @@ export function Overview() {
             <Panel title="进行中的健康问题" rows={o.active_conditions} kind="conditions" more="#/conditions" empty="没有进行中的健康问题"
               render={(r) => <><div className="body title">{r.name}</div>{r.status && <span className="tag k" style={kindStyle('conditions')}>{r.status}</span>}</>} />
             <Panel title="在用药物" rows={o.current_medications} kind="medications" more="#/medications" empty="没有在用的药物"
-              render={(r) => <div className="body"><div className="title">{r.name}</div><div className="meta">{[r.dosage, r.frequency].filter(Boolean).join(' · ')}</div></div>} />
+              render={(r) => <>
+                <div className="body">
+                  <div className="title">{r.name}</div>
+                  <div className="meta">{[r.dosage, r.frequency].filter(Boolean).join(' · ')}</div>
+                  {r.last_taken && <div className="meta">上次 {fmtDate(r.last_taken)} · 共 {fmtNum(r.taken_total)} 颗</div>}
+                </div>
+                <TakeDose med={r} />
+              </>} />
             {o.upcoming_follow_ups.length > 0 && (
               <Panel title="待复诊" rows={o.upcoming_follow_ups} kind="visits" empty=""
                 render={(r) => <><div className="body"><div className="title">{fmtDate(r.follow_up_date)}</div><div className="meta">{recTitle(entity('visits'), r)}</div></div></>} />

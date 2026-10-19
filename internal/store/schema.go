@@ -111,6 +111,15 @@ var Entities = []*Entity{
 		},
 	},
 	{
+		Name: "doses", Label: "服药记录", DateKey: "taken_at", TitleKey: "taken_at",
+		Fields: []Field{
+			{Name: "medication_id", Label: "药物", Type: Ref, Ref: "medications", Required: true, Cascade: true, List: true},
+			{Name: "taken_at", Label: "服用时间", Type: DateTime, Required: true, List: true},
+			{Name: "amount", Label: "数量", Type: Real, Unit: "颗", List: true, Hint: "不填按 1 颗算"},
+			{Name: "notes", Label: "备注", Type: Text},
+		},
+	},
+	{
 		Name: "reports", Label: "检查报告", DateKey: "report_date", TitleKey: "title",
 		Fields: []Field{
 			{Name: "report_date", Label: "报告日期", Type: Date, Required: true, List: true},

@@ -39,7 +39,11 @@ func (s *Store) Overview() (*Overview, error) {
 		*dst, err = s.query(sqlText, args...)
 	}
 	q(&o.ActiveConditions, `SELECT * FROM conditions WHERE status IS NULL OR status != '已痊愈' ORDER BY onset_date DESC, id DESC`)
-	q(&o.CurrentMeds, `SELECT * FROM medications WHERE (status IS NULL OR status NOT IN ('已停用', '计划中')) AND (end_date IS NULL OR end_date >= ?) ORDER BY start_date DESC`, today())
+	// with when each was last taken and how many pills in all, from doses
+	q(&o.CurrentMeds, `SELECT m.*,
+		(SELECT MAX(taken_at) FROM doses WHERE medication_id = m.id) AS last_taken,
+		(SELECT SUM(amount) FROM doses WHERE medication_id = m.id) AS taken_total
+		FROM medications m WHERE (status IS NULL OR status NOT IN ('已停用', '计划中')) AND (end_date IS NULL OR end_date >= ?) ORDER BY start_date DESC`, today())
 	q(&o.RecentVisits, `SELECT * FROM visits ORDER BY visit_date DESC, id DESC LIMIT 5`)
 	q(&o.UpcomingFollowUp, `SELECT * FROM visits WHERE follow_up_date >= ? ORDER BY follow_up_date LIMIT 5`, today())
 	q(&o.RecentSymptoms, `SELECT * FROM symptoms WHERE substr(occurred_at,1,10) >= ? ORDER BY occurred_at DESC LIMIT 10`,
@@ -460,6 +464,7 @@ func (s *Store) Related(entityName string, id int64) (Record, error) {
 		"visits":     {{"medications", "visit_id"}, {"reports", "visit_id"}},
 		"reports":    {{"lab_results", "report_id"}},
 		"habits":     {{"checkins", "habit_id"}},
+		"medications": {{"doses", "medication_id"}},
 	}
 	for _, c := range children[entityName] {
 		rows, _, err := s.List(c[0], ListQuery{Filters: map[string]any{c[1]: id}, Limit: 1000, Asc: c[0] == "lab_results"})
@@ -492,6 +497,8 @@ func (s *Store) Timeline(limit int) ([]Record, error) {
 			title = "COALESCE(diagnosis, department, hospital, visit_type, '就诊')"
 		case "metrics":
 			title = "metric_type || ' ' || value || COALESCE('/' || value2, '') || COALESCE(' ' || unit, '')"
+		case "doses":
+			title = "'服用 ' || COALESCE((SELECT name FROM medications WHERE id = medication_id), '药') || ' ' || printf('%g', amount) || ' 颗'"
 		}
 		parts = append(parts, fmt.Sprintf(`SELECT '%s' AS type, id, %s AS date, %s AS title FROM %s WHERE %s IS NOT NULL`,
 			e.Name, e.DateKey, title, e.Name, e.DateKey))

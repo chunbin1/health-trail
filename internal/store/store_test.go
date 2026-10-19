@@ -357,6 +357,59 @@ func TestHabitReminders(t *testing.T) {
 	}
 }
 
+func TestDoses(t *testing.T) {
+	s := open(t)
+	med, err := s.Create("medications", Record{"name": "布洛芬缓释胶囊", "status": "按需"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mid := med["id"].(int64)
+	d1, err := s.Create("doses", Record{"medication_id": mid, "taken_at": "2026-10-18 22:21"})
+	if err != nil || d1["amount"] != 1.0 {
+		t.Fatalf("dose without amount = %v %v, want 1", d1, err)
+	}
+	if _, err := s.Create("doses", Record{"medication_id": mid, "taken_at": "2026-10-19 08:05", "amount": 2}); err != nil {
+		t.Fatal(err)
+	}
+	// an edit that leaves amount out keeps it
+	if d, err := s.Update("doses", d1["id"].(int64), Record{"notes": "饭后"}); err != nil || d["amount"] != 1.0 {
+		t.Errorf("edit = %v %v", d, err)
+	}
+	if _, err := s.Create("doses", Record{"taken_at": "now"}); err == nil {
+		t.Error("dose without a medication accepted")
+	}
+
+	o, err := s.Overview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(o.CurrentMeds) != 1 || o.CurrentMeds[0]["last_taken"] != "2026-10-19 08:05" || o.CurrentMeds[0]["taken_total"] != 3.0 {
+		t.Errorf("current meds = %v", o.CurrentMeds)
+	}
+	rel, _ := s.Related("medications", mid)
+	if ds, _ := rel["doses"].([]Record); len(ds) != 2 {
+		t.Errorf("related doses = %v", rel["doses"])
+	}
+	tl, _ := s.Timeline(10)
+	var titles []string
+	for _, r := range tl {
+		if r["type"] == "doses" {
+			titles = append(titles, fmt.Sprint(r["title"]))
+		}
+	}
+	if strings.Join(titles, "|") != "服用 布洛芬缓释胶囊 2 颗|服用 布洛芬缓释胶囊 1 颗" {
+		t.Errorf("timeline doses = %v", titles)
+	}
+
+	// deleting the medication takes its doses with it
+	if err := s.Delete("medications", mid); err != nil {
+		t.Fatal(err)
+	}
+	if _, n, _ := s.List("doses", ListQuery{}); n != 0 {
+		t.Errorf("%d doses left after deleting the medication", n)
+	}
+}
+
 func TestOverviewAndTimeline(t *testing.T) {
 	s := open(t)
 	c, _ := s.Create("conditions", Record{"name": "急性扁桃体炎", "status": "进行中", "onset_date": "2026-10-14"})
