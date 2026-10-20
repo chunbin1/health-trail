@@ -21,8 +21,16 @@ import (
 )
 
 // Prefix starts every backup's file name; only files with it are listed,
-// pruned or restored, so other files in the folder are left alone.
-const Prefix = "健康档案-"
+// pruned or restored, so other files in the folder are left alone. Names are
+// plain ASCII: cloud drives, Windows and terminals all take them as they are.
+const Prefix = "health-vault-"
+
+// BeforeRestore marks the backup made of the current data before a restore.
+const BeforeRestore = "-before-restore"
+
+// legacyPrefix is what the first backups were called; they still list and
+// restore.
+const legacyPrefix = "健康档案-"
 
 const dbName = "health.db"
 
@@ -49,7 +57,7 @@ func CheckDir(st *store.Store, dir string) error {
 	return nil
 }
 
-// Create writes a backup of st into dir as 健康档案-<time><suffix>.zip and
+// Create writes a backup of st into dir as health-vault-<time><suffix>.zip and
 // returns its name. The database is copied with VACUUM INTO, a consistent
 // snapshot even while the app or Claude is writing.
 func Create(st *store.Store, dir, suffix string, now time.Time) (string, error) {
@@ -143,7 +151,11 @@ func List(dir string) ([]Entry, error) {
 	out := []Entry{}
 	for _, d := range des {
 		n := d.Name()
-		if d.IsDir() || !strings.HasPrefix(n, Prefix) || !strings.HasSuffix(n, ".zip") {
+		prefix := Prefix
+		if strings.HasPrefix(n, legacyPrefix) {
+			prefix = legacyPrefix
+		}
+		if d.IsDir() || !strings.HasPrefix(n, prefix) || !strings.HasSuffix(n, ".zip") {
 			continue
 		}
 		info, err := d.Info()
@@ -151,7 +163,7 @@ func List(dir string) ([]Entry, error) {
 			continue
 		}
 		e := Entry{Name: n, Size: info.Size(), Time: info.ModTime().Format("2006-01-02 15:04:05")}
-		stamp := strings.TrimPrefix(n, Prefix)
+		stamp := strings.TrimPrefix(n, prefix)
 		if len(stamp) >= 17 {
 			if t, err := time.ParseInLocation("2006-01-02-150405", stamp[:17], time.Local); err == nil {
 				e.Time = t.Format("2006-01-02 15:04:05")
@@ -163,7 +175,7 @@ func List(dir string) ([]Entry, error) {
 		if out[i].Time != out[j].Time {
 			return out[i].Time > out[j].Time
 		}
-		return out[i].Name > out[j].Name // within a second: 健康档案-…-恢复前 after 健康档案-…
+		return out[i].Name > out[j].Name // a fixed order within one second
 	})
 	return out, nil
 }

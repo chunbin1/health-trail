@@ -100,7 +100,7 @@ func (b *backups) restore(name string) error {
 	if !found {
 		return errors.New("备份位置里没有这份备份")
 	}
-	if _, err := b.runLocked("-恢复前"); err != nil {
+	if _, err := b.runLocked(backup.BeforeRestore); err != nil {
 		return errors.New("恢复前先备份当前数据失败，没有恢复：" + err.Error())
 	}
 	return backup.Restore(b.st, filepath.Join(s.Config.Dir, name))
@@ -241,7 +241,7 @@ func suggestedBackupDir() string {
 	}
 	icloud := filepath.Join(home, "Library", "Mobile Documents", "com~apple~CloudDocs")
 	if info, err := os.Stat(icloud); err == nil && info.IsDir() {
-		return filepath.Join(icloud, "健康档案备份")
+		return filepath.Join(icloud, "HealthVaultBackups")
 	}
 	return ""
 }

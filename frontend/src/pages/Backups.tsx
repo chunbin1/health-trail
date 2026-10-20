@@ -68,7 +68,7 @@ export function Backups() {
   }
 
   async function restore(name: string, time: string) {
-    if (!confirm(t('恢复到 {time} 的备份？\n\n恢复前会先把当前数据另存一份（文件名带「恢复前」），恢复错了可以从那份再恢复回来。', { time: fmtDate(time.slice(0, 16)) }))) return
+    if (!confirm(t('恢复到 {time} 的备份？\n\n恢复前会先把当前数据另存一份（文件名以 before-restore 结尾），恢复错了可以从那份再恢复回来。', { time: fmtDate(time.slice(0, 16)) }))) return
     setBusy(name)
     try {
       await api.restoreBackup(name)
@@ -91,7 +91,7 @@ export function Backups() {
         <section className="card">
           <div className="card-head"><h2>{t('备份位置')}</h2></div>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
-            <input className="input" style={{ flex: 1, minWidth: 0 }} value={dir} placeholder={t('选择或填写一个文件夹，如 /Users/你/Documents/健康档案备份')}
+            <input className="input" style={{ flex: 1, minWidth: 0 }} value={dir} placeholder={t('选择或填写一个文件夹，如 /Users/你/Documents/HealthVaultBackups')}
               onChange={(e) => setDir(e.target.value)} onBlur={() => saveDir(dir)} onKeyDown={(e) => e.key === 'Enter' && saveDir(dir)} />
             {data.can_choose_dir && <button className="btn" onClick={choose}><FolderOpen size={15} />{t('选择…')}</button>}
           </div>
@@ -137,7 +137,7 @@ export function Backups() {
               {data.backups.map((b) => (
                 <div key={b.name} className="row-item no-ico" style={{ cursor: 'default' }}>
                   <div className="body">
-                    <div className="title">{fmtDate(b.time.slice(0, 16))}{b.name.includes('-恢复前') && <span className="tag" style={{ marginLeft: 8 }}>{t('恢复前')}</span>}</div>
+                    <div className="title">{fmtDate(b.time.slice(0, 16))}{(b.name.includes('-before-restore') || b.name.includes('-恢复前')) && <span className="tag" style={{ marginLeft: 8 }}>{t('恢复前')}</span>}</div>
                     <div className="meta ellipsis">{b.name} · {size(b.size)}</div>
                   </div>
                   <button className="btn sm" disabled={!!busy} onClick={() => restore(b.name, b.time)}><ArchiveRestore size={14} />{busy === b.name ? t('恢复中…') : t('恢复')}</button>

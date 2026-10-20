@@ -51,7 +51,7 @@ func TestBackupAndRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if name != "健康档案-2026-10-20-230005.zip" {
+	if name != "health-vault-2026-10-20-230005.zip" {
 		t.Errorf("name = %q", name)
 	}
 
@@ -162,6 +162,18 @@ func TestDirAndPrune(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "别的文件.zip")); err != nil {
 		t.Error("prune removed a file that isn't a backup")
+	}
+
+	// the first backups had Chinese names; they still list, by their time
+	old := filepath.Join(dir, "健康档案-2026-09-30-210000-恢复前.zip")
+	os.WriteFile(old, []byte("x"), 0o600)
+	es, _ = List(dir)
+	if len(es) != 4 || es[3].Name != filepath.Base(old) || es[3].Time != "2026-09-30 21:00:00" {
+		t.Errorf("with an old backup = %+v", es)
+	}
+	Prune(dir, 3)
+	if _, err := os.Stat(old); err == nil {
+		t.Error("an old backup beyond the count was kept")
 	}
 }
 
