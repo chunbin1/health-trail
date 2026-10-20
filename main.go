@@ -117,6 +117,7 @@ type app struct {
 	srv      *server.Server
 	listener *listener
 	settings *settings
+	backups  *backups
 	token    string
 	port     string
 }
@@ -127,7 +128,7 @@ func newApp(dataDir, port string) *app {
 	if err != nil {
 		log.Fatalf("读取访问令牌失败：%v", err)
 	}
-	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir)}
+	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir)}
 	mcpSrv := mcpserver.New(st, version)
 	a.srv = &server.Server{
 		Store: st,
@@ -176,7 +177,34 @@ func (a *app) handler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(a.info(r))
 	})
+	a.backups.routes(mux)
 	mux.Handle("/", api)
+	return mux
+}
+
+// windowHandler is what the app's own window loads: the same API, marked as
+// coming from the window, plus a folder dialog that only the window may open
+// (over the network it would pop up on the Mac for anyone with the token).
+func (a *app) windowHandler(wapp func() *application.App) http.Handler {
+	h := a.handler()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/backup/choose-dir", func(w http.ResponseWriter, r *http.Request) {
+		title := "选择备份文件夹"
+		if a.settings.lang() == "en" {
+			title = "Choose a backup folder"
+		}
+		dir, err := wapp().Dialog.OpenFile().SetTitle(title).
+			CanChooseDirectories(true).CanChooseFiles(false).CanCreateDirectories(true).
+			PromptForSingleSelection()
+		if err != nil {
+			writeError(w, err.Error())
+			return
+		}
+		writeJSON(w, map[string]string{"dir": dir}) // "" when cancelled
+	})
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), inWindow{}, true)))
+	}))
 	return mux
 }
 
@@ -270,8 +298,10 @@ func runServe(dataDir, port string, lanFlag bool) {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go a.backups.loop(ctx)
 	<-ctx.Done()
 	a.listener.close()
+	a.backups.quit()
 }
 
 func runApp(dataDir, port string) {
@@ -286,10 +316,14 @@ func runApp(dataDir, port string) {
 	defer a.listener.close()
 
 	var win *application.WebviewWindow
-	wapp := application.New(application.Options{
+	var wapp *application.App
+	ctx, stopBackups := context.WithCancel(context.Background())
+	go a.backups.loop(ctx)
+	wapp = application.New(application.Options{
 		Name:        "健康档案",
 		Description: "个人健康档案",
-		Assets:      application.AssetOptions{Handler: a.handler()},
+		Assets:      application.AssetOptions{Handler: a.windowHandler(func() *application.App { return wapp })},
+		OnShutdown:  func() { stopBackups(); a.backups.quit() },
 		Services:    []application.Service{application.NewService(&reminders{st: a.st, ns: notifications.New(), lang: a.settings.lang})},
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		// one window per data directory: a second launch on the same data

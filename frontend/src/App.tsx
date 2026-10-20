@@ -4,6 +4,7 @@ import { api, type Overview as OV } from './api'
 import { t, tx, type Key, type Lang } from './i18n'
 import { RecordDrawer } from './components/RecordDrawer'
 import { Checkins } from './pages/Checkins'
+import { Backups } from './pages/Backups'
 import { Connect } from './pages/Connect'
 import { Metrics } from './pages/Metrics'
 import { Overview } from './pages/Overview'
@@ -28,6 +29,7 @@ const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string 
     items: [
       { page: 'reports', label: '检查报告', count: 'reports' },
       { page: 'metrics', label: '身体数据', count: 'metrics' },
+      { page: 'backup', label: '备份' },
     ],
   },
 ]
@@ -54,6 +56,7 @@ export function App() {
     case 'reports': body = <Reports />; break
     case 'metrics': body = <Metrics />; break
     case 'connect': body = <Connect />; break
+    case 'backup': body = <Backups />; break
     case 'search': body = <Search q={q} setQ={setQ} />; break
     case 'conditions': case 'symptoms': case 'visits': case 'medications':
       body = <RecordsPage key={page} entityName={page} />; break
@@ -105,7 +108,7 @@ export function App() {
       </nav>
       <div className={'more-sheet' + (more ? ' open' : '')} onClick={() => setMore(false)}>
         <div className="panel" onClick={(e) => e.stopPropagation()}>
-          {['conditions', 'symptoms', 'visits', 'medications', 'search'].map((p) =>
+          {['conditions', 'symptoms', 'visits', 'medications', 'backup', 'search'].map((p) =>
             navItem(p, LABEL[p], NAV.flatMap((g) => g.items).find((i) => i.page === p)?.count))}
           <div className="foot-row">{navItem('connect', '连接 AI')}<LangMenu /></div>
         </div>

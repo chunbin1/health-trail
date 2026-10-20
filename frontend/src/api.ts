@@ -110,6 +110,32 @@ export interface Info {
   mcp_args: string
 }
 
+export interface BackupConfig {
+  dir: string
+  keep: number
+  daily: boolean
+  daily_at: string
+  weekly: boolean
+  weekday: number
+  weekly_at: string
+  on_change: boolean
+  on_quit: boolean
+}
+
+export interface BackupEntry {
+  name: string
+  size: number
+  time: string
+}
+
+export interface BackupState {
+  config: BackupConfig
+  status: { last_at?: string; last_file?: string; last_error?: string; error_at?: string }
+  backups: BackupEntry[]
+  suggested_dir: string
+  can_choose_dir: boolean
+}
+
 export class ApiError extends Error {}
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -144,6 +170,11 @@ export const api = {
   info: () => req<Info>('GET', '/api/info'),
   setLAN: (lan: boolean) => req<Info>('PUT', '/api/settings', { lan }),
   setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),
+  backup: () => req<BackupState>('GET', '/api/backup'),
+  saveBackup: (c: BackupConfig) => req<BackupConfig>('PUT', '/api/backup', c),
+  runBackup: () => req<{ name: string }>('POST', '/api/backup/run'),
+  restoreBackup: (name: string) => req<{ ok: boolean }>('POST', '/api/backup/restore', { name }),
+  chooseBackupDir: () => req<{ dir: string }>('POST', '/api/backup/choose-dir'),
   overview: () => req<Overview>('GET', '/api/overview'),
   timeline: (limit = 20) => req<{ type: string; id: number; date: string; title: string }[]>('GET', '/api/timeline' + qs({ limit })),
   search: (q: string) => req<{ type: string; type_label: string; rows: Rec[]; total: number }[]>('GET', '/api/search' + qs({ q })),
