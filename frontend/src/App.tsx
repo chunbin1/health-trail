@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Check, MoreHorizontal, Search as SearchIcon, Settings } from 'lucide-react'
+import { Check, Languages, MoreHorizontal, Search as SearchIcon } from 'lucide-react'
 import { api, type Overview as OV } from './api'
 import { t, tx, type Key, type Lang } from './i18n'
 import { RecordDrawer } from './components/RecordDrawer'
@@ -83,7 +83,7 @@ export function App() {
             {g.items.map((i) => navItem(i.page, i.label, i.count))}
           </div>
         ))}
-        <div className="side-foot foot-row">{navItem('connect', '连接 Claude')}<SettingsMenu /></div>
+        <div className="side-foot foot-row">{navItem('connect', '连接 Claude')}<LangMenu /></div>
       </nav>
       <div className="main-wrap">
         <div className="drag-strip drag" />
@@ -107,7 +107,7 @@ export function App() {
         <div className="panel" onClick={(e) => e.stopPropagation()}>
           {['conditions', 'symptoms', 'visits', 'medications', 'search'].map((p) =>
             navItem(p, LABEL[p], NAV.flatMap((g) => g.items).find((i) => i.page === p)?.count))}
-          <div className="foot-row">{navItem('connect', '连接 Claude')}<SettingsMenu /></div>
+          <div className="foot-row">{navItem('connect', '连接 Claude')}<LangMenu /></div>
         </div>
       </div>
 
@@ -119,12 +119,12 @@ export function App() {
 // Each language named in itself, as language menus do.
 const LANG_NAMES: Record<Lang, string> = { zh: '中文', en: 'English' }
 
-// Settings behind a gear: a mouse over it (or a tap, where there is no
-// hover) opens them. For now that's the language.
-function SettingsMenu() {
+// The language, behind the usual 文A icon: a mouse over it (or a tap, where
+// there is no hover) opens the choice of both.
+function LangMenu() {
   const { lang, switchLang } = useApp()
   // how it was opened: a hover closes when the mouse leaves; a click
-  // (including one on a gear the hover already opened) stays until another
+  // (including one on an icon the hover already opened) stays until another
   // click, a choice, a click outside or Escape
   const [open, setOpen] = useState<false | 'hover' | 'click'>(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -144,11 +144,10 @@ function SettingsMenu() {
   const leave = (e: ReactPointerEvent) => e.pointerType === 'mouse' && setOpen(false)
 
   return (
-    <div ref={ref} className="settings-menu" onPointerEnter={enter} onPointerLeave={leave}>
+    <div ref={ref} className="lang-menu" onPointerEnter={enter} onPointerLeave={leave}>
       {open && (
-        <div className="settings-pop" role="menu" aria-label={t('设置')}>
+        <div className="lang-pop" role="menu" aria-label={t('语言')}>
           <div className="box">
-            <div className="set-label">{t('语言')}</div>
             {(['zh', 'en'] as const).map((l) => (
               <button key={l} type="button" role="menuitemradio" aria-checked={lang === l} lang={l === 'en' ? 'en' : 'zh-CN'}
                 className={'lang-opt' + (lang === l ? ' on' : '')} onClick={() => { switchLang(l); setOpen(false) }}>
@@ -158,9 +157,9 @@ function SettingsMenu() {
           </div>
         </div>
       )}
-      <button type="button" className={'icon-btn' + (open ? ' on' : '')} aria-label={t('设置')} title={t('设置')}
+      <button type="button" className={'icon-btn' + (open ? ' on' : '')} aria-label={t('语言')} title={t('语言')}
         aria-haspopup="menu" aria-expanded={!!open} onClick={() => setOpen(open === 'click' ? false : 'click')}>
-        <Settings size={18} />
+        <Languages size={18} />
       </button>
     </div>
   )

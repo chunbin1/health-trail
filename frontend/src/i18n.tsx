@@ -64,7 +64,6 @@ const EN = {
   '更多': 'More',
   '搜索': 'Search',
   '语言': 'Language',
-  '设置': 'Settings',
   '时间': 'Time',
   '现在': 'Now',
   '搜索所有记录，如 胃、头孢、协和': 'Search all records, e.g. stomach, cefalexin, a hospital',
