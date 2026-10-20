@@ -42,9 +42,11 @@ function Root() {
     setLangState(l)
     api.setLang(l).catch(() => {})
   }
-  // remounted on a switch, so everything is drawn again in the new language
+  // A switch re-renders everything in the new language (t() reads it at
+  // render, nothing caches text) but remounts nothing: a remount would throw
+  // away where the person was, such as the day open on the check-in page.
   return (
-    <AppProvider key={lang} schema={schema} lang={lang} switchLang={switchLang}>
+    <AppProvider schema={schema} lang={lang} switchLang={switchLang}>
       <App />
     </AppProvider>
   )
