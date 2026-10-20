@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { MoreHorizontal, Search as SearchIcon } from 'lucide-react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { Check, MoreHorizontal, Search as SearchIcon } from 'lucide-react'
 import { api, type Overview as OV } from './api'
-import { t, tx, type Key } from './i18n'
+import { t, tx, type Key, type Lang } from './i18n'
 import { RecordDrawer } from './components/RecordDrawer'
 import { Checkins } from './pages/Checkins'
 import { Connect } from './pages/Connect'
@@ -38,7 +38,7 @@ LABEL.search = '搜索'
 
 export function App() {
   const [route, go] = useRoute()
-  const { version, lang, switchLang } = useApp()
+  const { version } = useApp()
   const [counts, setCounts] = useState<OV['counts']>({})
   const [q, setQ] = useState('')
   const [more, setMore] = useState(false)
@@ -67,12 +67,6 @@ export function App() {
     </a>
   )
 
-  // named in the language it switches to
-  const langButton = (
-    <button type="button" className="nav-item" onClick={() => switchLang(lang === 'en' ? 'zh' : 'en')} title={t('切换语言')}>
-      <KindIcon kind="language" size="sm" /><span lang={lang === 'en' ? 'zh-CN' : 'en'}>{t('English')}</span>
-    </button>
-  )
 
   return (
     <div className="app">
@@ -89,7 +83,7 @@ export function App() {
             {g.items.map((i) => navItem(i.page, i.label, i.count))}
           </div>
         ))}
-        <div className="side-foot">{navItem('connect', '连接 Claude')}{langButton}</div>
+        <div className="side-foot">{navItem('connect', '连接 Claude')}<LangMenu /></div>
       </nav>
       <div className="main-wrap">
         <div className="drag-strip drag" />
@@ -113,11 +107,59 @@ export function App() {
         <div className="panel" onClick={(e) => e.stopPropagation()}>
           {['conditions', 'symptoms', 'visits', 'medications', 'search', 'connect'].map((p) =>
             navItem(p, LABEL[p], NAV.flatMap((g) => g.items).find((i) => i.page === p)?.count))}
-          {langButton}
+          <LangMenu />
         </div>
       </div>
 
       {route.open && <RecordDrawer key={route.open.entity + route.open.id} entityName={route.open.entity} id={route.open.id} />}
+    </div>
+  )
+}
+
+// Each language named in itself, as language menus do.
+const LANG_NAMES: Record<Lang, string> = { zh: '中文', en: 'English' }
+
+// The language row: it shows the current language, and a mouse over it (or
+// a tap, where there is no hover) opens the choice of both.
+function LangMenu() {
+  const { lang, switchLang } = useApp()
+  // how it was opened: a hover closes when the mouse leaves; a click
+  // (including one on a row the hover already opened) stays until another
+  // click, a choice, a click outside or Escape
+  const [open, setOpen] = useState<false | 'hover' | 'click'>(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const outside = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [open])
+  // touch has no hover: a tap is a click
+  const enter = (e: ReactPointerEvent) => e.pointerType === 'mouse' && setOpen((o) => o || 'hover')
+  const leave = (e: ReactPointerEvent) => e.pointerType === 'mouse' && setOpen(false)
+
+  return (
+    <div ref={ref} className="lang-menu" onPointerEnter={enter} onPointerLeave={leave}>
+      {open && (
+        <div className="lang-pop" role="menu" aria-label={t('语言')}>
+          <div className="box">
+            {(['zh', 'en'] as const).map((l) => (
+              <button key={l} type="button" role="menuitemradio" aria-checked={lang === l} lang={l === 'en' ? 'en' : 'zh-CN'}
+                className={'lang-opt' + (lang === l ? ' on' : '')} onClick={() => { switchLang(l); setOpen(false) }}>
+                {LANG_NAMES[l]}{lang === l && <Check size={15} />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <button type="button" className="nav-item" aria-haspopup="menu" aria-expanded={!!open} onClick={() => setOpen(open === 'click' ? false : 'click')}>
+        <KindIcon kind="language" size="sm" />{t('语言')}<span className="value">{LANG_NAMES[lang]}</span>
+      </button>
     </div>
   )
 }

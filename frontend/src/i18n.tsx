@@ -63,8 +63,7 @@ const EN = {
   '连接 Claude': 'Connect Claude',
   '更多': 'More',
   '搜索': 'Search',
-  'English': '中文', // the switch names the language it switches to
-  '切换语言': 'Switch language',
+  '语言': 'Language',
   '搜索所有记录，如 胃、头孢、协和': 'Search all records, e.g. stomach, cefalexin, a hospital',
   '没有找到「{q}」': 'Nothing found for “{q}”',
   '无法连接到健康档案服务：{error}': 'Can’t reach the Health Vault service: {error}',
