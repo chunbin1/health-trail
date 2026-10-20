@@ -3,6 +3,7 @@ import { api, nowLocal, today, type Entity, type Field, type Rec } from '../api'
 import { paren, t, tx } from '../i18n'
 import { recTitle, useApp, useRefOptions } from '../state'
 import { EmojiPicker, Switch } from '../ui'
+import { DateTimeInput } from './DateTimeInput'
 
 // A form for any record type, drawn from the schema. `defaults` pre-fills
 // a new record (e.g. the condition a symptom belongs to). Rendered inside a
@@ -102,11 +103,10 @@ function Input({ field: f, entity, value, onChange }: { field: Field; entity: En
       return <input className="input" type="date" value={v} onChange={(e) => onChange(e.target.value)} />
     case 'datetime':
       return (
-        <input className="input" type="datetime-local" value={toLocalInput(v)}
-          onChange={(e) => onChange(e.target.value.replace('T', ' '))} />
+        <DateTimeInput value={v} onChange={onChange} required={f.required} />
       )
     case 'time':
-      return <input className="input" type="time" value={v} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: 160 }} />
+      return <DateTimeInput mode="time" value={v} onChange={onChange} required={f.required} />
     case 'enum':
       if (f.options!.length <= 4)
         return (
@@ -127,11 +127,6 @@ function Input({ field: f, entity, value, onChange }: { field: Field; entity: En
     default:
       return <input className="input" value={v} onChange={(e) => onChange(e.target.value)} />
   }
-}
-
-function toLocalInput(v: string) {
-  if (!v) return ''
-  return v.length === 10 ? v + 'T00:00' : v.replace(' ', 'T')
 }
 
 function RefSelect({ field, value, onChange }: { field: Field; value: any; onChange: (v: any) => void }) {

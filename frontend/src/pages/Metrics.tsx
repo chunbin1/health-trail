@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Plus } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, nowLocal, today } from '../api'
+import { DateTimeInput } from '../components/DateTimeInput'
 import { LineChart } from '../components/LineChart'
 import { paren, t, tx } from '../i18n'
 import { hashParam, openRecord, useApp, useLoad } from '../state'
@@ -95,7 +96,7 @@ export function Metrics() {
             </label>
             <label className="field" style={{ width: 220 }}>
               <span className="lbl">{t('时间（不填为现在）')}</span>
-              <input className="input" type="datetime-local" value={at.replace(' ', 'T')} onChange={(e) => setAt(e.target.value.replace('T', ' '))} />
+              <DateTimeInput value={at} onChange={setAt} />
             </label>
             <button className="btn primary" style={{ height: 38 }}><Plus size={16} />{t('记录|button')}</button>
           </form>

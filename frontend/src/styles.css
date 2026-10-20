@@ -585,3 +585,38 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
   .page-head .btn.primary { height: 32px; }
   .drawer-title h1 { font-size: 19px; }
 }
+
+/* ============ date & time picker (react-datepicker, restyled) ============ */
+.dt-wrap { display: block; width: 100%; }
+.dt-wrap.time { max-width: 160px; }
+.dt-wrap .react-datepicker__input-container { display: block; }
+.dt-wrap .react-datepicker__close-icon { padding-right: 10px; }
+.dt-wrap .react-datepicker__close-icon::after { background: var(--ink-3); font-size: 11px; height: 15px; width: 15px; padding: 0; line-height: 15px; }
+.dt-popper { z-index: 60; }
+.dt-popper .react-datepicker {
+  font-family: var(--font); font-size: 13px; color: var(--ink); background: var(--surface);
+  border: 0; border-radius: var(--r); box-shadow: var(--shadow-lg);
+}
+.dt-popper .react-datepicker__header { background: var(--surface); border-bottom: 1px solid var(--line); padding-top: 10px; }
+.dt-popper .react-datepicker__current-month,
+.dt-popper .react-datepicker-time__header { color: var(--ink); font-size: 13px; font-weight: 600; }
+.dt-popper .react-datepicker__day-name { color: var(--ink-3); }
+.dt-popper .react-datepicker__day { color: var(--ink); border-radius: 8px; }
+.dt-popper .react-datepicker__day:hover,
+.dt-popper .react-datepicker__time-list-item:hover { background: var(--surface-3) !important; }
+.dt-popper .react-datepicker__day--outside-month { color: var(--ink-3); }
+.dt-popper .react-datepicker__day--today { font-weight: 700; color: var(--accent); }
+.dt-popper .react-datepicker__day--keyboard-selected { background: var(--accent-soft); color: var(--ink); }
+.dt-popper .react-datepicker__day--selected,
+.dt-popper .react-datepicker__time-list-item--selected {
+  background: var(--accent) !important; color: var(--accent-ink) !important; font-weight: 600;
+}
+.dt-popper .react-datepicker__navigation-icon::before { border-color: var(--ink-3); }
+.dt-popper .react-datepicker__time-container { border-left: 1px solid var(--line); }
+.dt-popper .react-datepicker__time-container--with-today-button { border: 0; }
+.dt-popper .react-datepicker__time,
+.dt-popper .react-datepicker__time-box { background: var(--surface) !important; border-radius: 0 var(--r) var(--r) 0; }
+.dt-popper .react-datepicker__time-list-item { color: var(--ink); border-radius: 6px; }
+.dt-popper .react-datepicker__header--time--only { border-radius: var(--r) var(--r) 0 0; }
+.dt-popper .react-datepicker__children-container { clear: both; width: auto; margin: 0; padding: 0 10px 10px; }
+.dt-foot { display: flex; justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 10px; }
