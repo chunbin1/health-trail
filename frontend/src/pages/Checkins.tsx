@@ -110,11 +110,10 @@ export function Checkins() {
       <div className="stack">
         <section className="card">
           <div className="card-head">
-            {/* 回到今天 sits by the date, not by the arrows: appearing there it
-                would move them, and the next tap would land on the wrong one */}
-            <h2 style={{ marginRight: 0 }}>{isToday ? t('今天') : fmtDate(date)}</h2>
+            {/* 回到今天 goes left of the arrows, never right: the arrows stay at
+                the edge, so its appearing doesn't move them under the finger */}
+            <h2>{isToday ? t('今天') : fmtDate(date)}</h2>
             {!isToday && <button className="btn sm ghost" onClick={() => setDate(today())}>{t('回到今天')}</button>}
-            <span className="spacer" />
             <IconButton label={t('前一天')} small onClick={() => setDate(addDays(date, -1))}><ChevronLeft size={18} /></IconButton>
             <IconButton label={t('后一天')} small onClick={() => !isToday && setDate(addDays(date, 1))} className={isToday ? 'muted' : ''}><ChevronRight size={18} /></IconButton>
           </div>
