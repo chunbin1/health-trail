@@ -76,7 +76,7 @@ export function Overview() {
       {empty && (
         <div className="notice" style={{ marginBottom: 20 }}>
           <Sparkles size={18} />
-          <span>{tr('这里会汇总你的健康状况。先到 {link} 接好，然后把体检报告截图发给 Claude，或者说「帮我记一下：今天头痛，大概 4 分」，它会直接写进来。', { link: <a href="#/connect">{t('连接 Claude|link')}</a> })}</span>
+          <span>{tr('这里会汇总你的健康状况。先到 {link} 接好，然后把体检报告截图发给 AI，或者说「帮我记一下：今天头痛，大概 4 分」，它会直接写进来。', { link: <a href="#/connect">{t('连接 AI|link')}</a> })}</span>
         </div>
       )}
 

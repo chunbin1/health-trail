@@ -1,11 +1,11 @@
 # 健康档案（health-vault）
 
-一个存在自己电脑上的个人健康档案：健康问题、症状、就诊、用药、体检和化验报告、身体数据、每日打卡。可以通过 MCP 接入 Claude，让 Claude 帮你录入和分析。
+一个存在自己电脑上的个人健康档案：健康问题、症状、就诊、用药、体检和化验报告、身体数据、每日打卡。可以通过 MCP 接入 Claude、Codex 等 AI，让它们帮你录入和分析。
 
 - **数据只在本机**：一个 SQLite 文件，加上一个附件目录。
 - **Mac 窗口**：Wails v3（系统 WebView）+ React。
 - **手机**：同一 Wi-Fi 或 Tailscale 下用浏览器打开（需要访问令牌），可以「添加到主屏幕」。
-- **Claude**：14 个 MCP 工具，加 5 个分析模板。截图发给 Claude 就能录入化验单，也可以直接问它「我的 CRP 怎么变化的」。
+- **AI**：14 个 MCP 工具，加 5 个分析模板，Claude、Codex 以及其他支持 MCP 的 AI 都能接。截图发给 AI 就能录入化验单，也可以直接问它「我的 CRP 怎么变化的」。
 
 ## 构建
 
@@ -27,17 +27,17 @@ make test     # 测试
 ./health-vault              # 打开窗口（同时在 127.0.0.1:8721 提供本地服务）
 ./health-vault serve        # 不开窗口，只运行服务（比如放在常开的 Mac mini 上）
 ./health-vault serve -lan   # 允许手机访问
-./health-vault mcp          # MCP stdio 模式，给 Claude 桌面版 / Claude Code 用
-./health-vault info         # 显示数据目录和连接 Claude 的配置
+./health-vault mcp          # MCP stdio 模式，给 Claude、Codex 等 AI 用
+./health-vault info         # 显示数据目录和连接 AI 的配置
 ```
 
 **提醒**：给打卡项填上「提醒时间」（如 23:00），到点还没打卡，Mac 会弹系统通知。通知由桌面 App 提前排好未来 7 天，App 关着也会按时弹出；只要每周至少打开一次 App 就不会断。只有从 `健康档案.app` 启动才有提醒，第一次会请求通知权限。
 
 数据目录默认是 `~/Library/Application Support/HealthVault`，可以用 `-data` 参数或环境变量 `HEALTH_VAULT_DATA` 修改。备份时复制整个目录即可。
 
-## 接入 Claude
+## 接入 AI
 
-App 里的「连接 Claude」页面会显示带着当前程序路径的配置，可以直接复制。
+App 里的「连接 AI」页面会显示带着当前程序路径的配置，可以直接复制。
 
 **Claude 桌面版**（设置 → 开发者 → 编辑配置）：
 
@@ -55,13 +55,21 @@ App 里的「连接 Claude」页面会显示带着当前程序路径的配置，
 claude mcp add health-vault -s user -- "/Applications/健康档案.app/Contents/MacOS/health-vault" mcp
 ```
 
+**Codex**（命令行和编辑器插件共用）：
+
+```bash
+codex mcp add health-vault -- "/Applications/健康档案.app/Contents/MacOS/health-vault" mcp
+```
+
+**其他支持 MCP 的 AI**（Cursor、Cherry Studio 等）：添加一个 stdio 类型的 MCP 服务器，命令填上面的程序路径，参数填 `mcp`；或者用 HTTP 地址 `http://127.0.0.1:8721/mcp`（需要 App 开着）。
+
 接好之后可以这样用：
 - 「把这张化验单录进去」，附上截图；
 - 「今天吃过药了」「跑了 5 公里」；
 - 「我近两年的尿酸怎么变化的？」；
 - 在 Claude 桌面版的「＋」菜单里选用分析模板：**解读最近的化验单**、**整理就诊摘要**、**分析症状**、**健康状况总评**、**打卡复盘**。
 
-> Claude 读取记录时，相关内容会发送给 Anthropic 处理；数据本身只存在你的电脑上。Claude 的分析不能代替医生的诊断。
+> AI 读取记录时，相关内容会发送给它的服务商处理（Claude 发给 Anthropic，Codex 发给 OpenAI）；数据本身只存在你的电脑上。AI 的分析不能代替医生的诊断。
 
 ## 安全
 
@@ -72,7 +80,7 @@ claude mcp add health-vault -s user -- "/Applications/健康档案.app/Contents/
 
 ## 第二期计划
 
-- 手机上的 Claude App 访问（需要公网隧道和 OAuth 登录）
+- 手机上的 AI App（Claude、ChatGPT）访问（需要公网隧道和 OAuth 登录）
 - App 内直接问 Claude（Claude API）
 - Apple 健康数据导入
 - 数据加密、自动备份

@@ -52,7 +52,7 @@ export function RecordsPage({ entityName, extra }: { entityName: string; extra?:
       {!loading && data?.rows.length === 0 ? (
         <div className="card">
           <Empty icon={KIND[entityName]?.icon}>
-            {q || status ? t('没有符合条件的记录') : tr('还没有{label}。点右上角添加，{br}或者在 Claude 里说一句就能记下。', { label: plural(e), br: <br /> })}
+            {q || status ? t('没有符合条件的记录') : tr('还没有{label}。点右上角添加，{br}或者跟 AI 说一句就能记下。', { label: plural(e), br: <br /> })}
           </Empty>
         </div>
       ) : (

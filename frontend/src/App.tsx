@@ -33,7 +33,7 @@ const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string 
 ]
 const TABS = ['overview', 'checkins', 'reports', 'metrics']
 const LABEL: Record<string, Key> = Object.fromEntries(NAV.flatMap((g) => g.items.map((i) => [i.page, i.label])))
-LABEL.connect = '连接 Claude'
+LABEL.connect = '连接 AI'
 LABEL.search = '搜索'
 
 export function App() {
@@ -83,7 +83,7 @@ export function App() {
             {g.items.map((i) => navItem(i.page, i.label, i.count))}
           </div>
         ))}
-        <div className="side-foot foot-row">{navItem('connect', '连接 Claude')}<LangMenu /></div>
+        <div className="side-foot foot-row">{navItem('connect', '连接 AI')}<LangMenu /></div>
       </nav>
       <div className="main-wrap">
         <div className="drag-strip drag" />
@@ -107,7 +107,7 @@ export function App() {
         <div className="panel" onClick={(e) => e.stopPropagation()}>
           {['conditions', 'symptoms', 'visits', 'medications', 'search'].map((p) =>
             navItem(p, LABEL[p], NAV.flatMap((g) => g.items).find((i) => i.page === p)?.count))}
-          <div className="foot-row">{navItem('connect', '连接 Claude')}<LangMenu /></div>
+          <div className="foot-row">{navItem('connect', '连接 AI')}<LangMenu /></div>
         </div>
       </div>
 

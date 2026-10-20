@@ -97,7 +97,7 @@ export function LabImport({ report, onClose, onSaved }: { report?: Rec; onClose:
               <textarea className="input" style={{ minHeight: 220, fontFamily: 'var(--mono)', fontSize: 13 }}
                 placeholder={t('把化验单的表格文字粘贴到这里，例如：\n\n超敏C-反应蛋白\t111.87↑\tmg/L\t0-6\n白细胞\t17.62↑\t10^9/L\t3.5-9.5\n\n从手机复制的「一格一行」格式也可以。')}
                 value={text} onChange={(e) => setText(e.target.value)} />
-              <div className="notice"><Sparkles size={16} /><span>{t('只有截图或 PDF？直接发给 Claude，说「帮我把这份化验单录进健康档案」。')}</span></div>
+              <div className="notice"><Sparkles size={16} /><span>{t('只有截图或 PDF？直接发给 AI，说「帮我把这份化验单录进健康档案」。')}</span></div>
             </>
           ) : (
             <>

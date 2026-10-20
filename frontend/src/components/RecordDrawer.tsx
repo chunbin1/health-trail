@@ -237,7 +237,7 @@ export function LabValue({ r }: { r: Rec }) {
 }
 
 export function LabTable({ rows, onPick }: { rows: Rec[]; onPick?: (name: string) => void }) {
-  if (rows.length === 0) return <Empty compact>{t('还没有指标。可以粘贴导入，或把报告截图发给 Claude 录入。')}</Empty>
+  if (rows.length === 0) return <Empty compact>{t('还没有指标。可以粘贴导入，或把报告截图发给 AI 录入。')}</Empty>
   const groups = new Map<string, Rec[]>()
   for (const r of rows) {
     const k = r.panel || ''

@@ -202,6 +202,13 @@ func (a *app) info(r *http.Request) map[string]any {
 	desktop := map[string]any{"mcpServers": map[string]any{"health-vault": map[string]any{"command": exe, "args": args}}}
 	desktopJSON, _ := json.MarshalIndent(desktop, "", "  ")
 	httpURL := "http://127.0.0.1:" + a.port + "/mcp"
+	// Codex keeps MCP servers in ~/.codex/config.toml, shared by its CLI and
+	// editor extension; a TOML basic string escapes like a JSON one
+	tomlArgs := make([]string, len(args))
+	for i, s := range args {
+		tomlArgs[i] = tomlString(s)
+	}
+	codexConfig := fmt.Sprintf("[mcp_servers.health-vault]\ncommand = %s\nargs = [%s]", tomlString(exe), strings.Join(tomlArgs, ", "))
 	var phone []string
 	if a.settings.LAN {
 		for _, ip := range server.LANAddrs() {
@@ -217,10 +224,33 @@ func (a *app) info(r *http.Request) map[string]any {
 		"phone_urls":            phone,
 		"mcp_stdio_command":     exe,
 		"claude_desktop_config": string(desktopJSON),
-		"claude_code_command":   fmt.Sprintf("claude mcp add health-vault -s user -- %q %s", exe, strings.Join(args, " ")),
+		"claude_code_command":   "claude mcp add health-vault -s user -- " + shellJoin(exe, args),
 		"mcp_http_url":          httpURL,
 		"claude_code_http":      "claude mcp add --transport http health-vault -s user " + httpURL,
+		"codex_command":         "codex mcp add health-vault -- " + shellJoin(exe, args),
+		"codex_config":          codexConfig,
+		"codex_http":            "codex mcp add health-vault --url " + httpURL,
+		"mcp_args":              strings.Join(args, " "),
 	}
+}
+
+// shellJoin writes a command line to paste into a terminal: the program
+// quoted, and any argument with a space (a data folder under "Application
+// Support") quoted too.
+func shellJoin(exe string, args []string) string {
+	parts := []string{fmt.Sprintf("%q", exe)}
+	for _, s := range args {
+		if strings.ContainsAny(s, " '\"") {
+			s = fmt.Sprintf("%q", s)
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, " ")
+}
+
+func tomlString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }
 
 func runServe(dataDir, port string, lanFlag bool) {
@@ -304,5 +334,5 @@ func runInfo(dataDir, port string) {
 	a := newApp(dataDir, port)
 	defer a.st.Close()
 	i := a.info(nil)
-	fmt.Printf("数据目录：%s\n\nClaude Desktop（claude_desktop_config.json）：\n%s\n\nClaude Code：\n  %s\n\n", dataDir, i["claude_desktop_config"], i["claude_code_command"])
+	fmt.Printf("数据目录：%s\n\nClaude Desktop（claude_desktop_config.json）：\n%s\n\nClaude Code：\n  %s\n\nCodex：\n  %s\n\n", dataDir, i["claude_desktop_config"], i["claude_code_command"], i["codex_command"])
 }

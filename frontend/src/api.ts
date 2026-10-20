@@ -104,6 +104,10 @@ export interface Info {
   claude_code_command: string
   mcp_http_url: string
   claude_code_http: string
+  codex_command: string
+  codex_config: string
+  codex_http: string
+  mcp_args: string
 }
 
 export class ApiError extends Error {}

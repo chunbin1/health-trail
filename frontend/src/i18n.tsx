@@ -60,7 +60,7 @@ const EN = {
   '用药': 'Medications',
   '检查报告': 'Reports',
   '身体数据': 'Body metrics',
-  '连接 Claude': 'Connect Claude',
+  '连接 AI': 'Connect AI',
   '更多': 'More',
   '搜索': 'Search',
   '语言': 'Language',
@@ -127,7 +127,7 @@ const EN = {
   '已记录：{name} {amount} · {time}': 'Logged: {name}, {amount} · {time}',
   '吃了': 'Took it',
   '共 {n} 颗': ['{n} pill in all', '{n} pills in all'],
-  '还没有指标。可以粘贴导入，或把报告截图发给 Claude 录入。': 'No results yet. Paste them in, or send Claude a screenshot of the report.',
+  '还没有指标。可以粘贴导入，或把报告截图发给 AI 录入。': 'No results yet. Paste them in, or send your AI a screenshot of the report.',
   '服用 {name} {amount}': 'Took {name}, {amount}',
 
   // lab import
@@ -146,8 +146,8 @@ const EN = {
   '如：血常规、肝功能': 'e.g. CBC, liver function',
   '把化验单的表格文字粘贴到这里，例如：\n\n超敏C-反应蛋白\t111.87↑\tmg/L\t0-6\n白细胞\t17.62↑\t10^9/L\t3.5-9.5\n\n从手机复制的「一格一行」格式也可以。':
     'Paste the table text of a lab report here, e.g.:\n\nhs-CRP\t111.87↑\tmg/L\t0-6\nWBC\t17.62↑\t10^9/L\t3.5-9.5\n\nText copied on a phone, one cell per line, works too.',
-  '只有截图或 PDF？直接发给 Claude，说「帮我把这份化验单录进健康档案」。':
-    'Only have a screenshot or PDF? Send it to Claude and say “Add this lab report to my health vault.”',
+  '只有截图或 PDF？直接发给 AI，说「帮我把这份化验单录进健康档案」。':
+    'Only have a screenshot or PDF? Send it to your AI and say “Add this lab report to my health vault.”',
   '识别出 {n} 项，其中 {abnormal} 项异常。请对照原报告核对，可以直接修改。':
     'Recognized {n}, {abnormal} out of range. Check them against the original report; you can edit them here.',
   '自动': 'Auto',
@@ -185,14 +185,22 @@ const EN = {
   '复制': 'Copy',
   '已复制': 'Copied',
   '复制失败，请手动选择': 'Couldn’t copy; select the text by hand',
-  '让 Claude 读写你的健康档案，帮你录入和分析': 'Let Claude read and write your health records, to log and analyze them for you',
-  '接好以后可以直接对 Claude 说：「把这张化验单录进去」（附上截图）、「今天吃过药了」、「我近两年的尿酸怎么变化的」。':
-    'Once connected, just tell Claude: “Add this lab report” (with a screenshot), “I took my meds today”, “How has my uric acid changed over the last two years?”',
-  '输入框的 {plus} 菜单里还有分析模板：解读最近的化验单、整理就诊摘要、分析症状、健康状况总评、打卡复盘。':
-    'The {plus} menu in the message box also has analysis templates: reading recent lab results, a visit summary, symptom analysis, an overall health review and a check-in review.',
-  'Claude 读取记录时，相关内容会发送给 Anthropic 处理；数据本身只存在这台电脑上。Claude 的分析不能代替医生诊断。':
-    'When Claude reads your records, what it reads is sent to Anthropic for processing; the data itself stays on this computer. Claude’s analysis is no substitute for a doctor’s diagnosis.',
+  '让 Claude、Codex 等 AI 读写你的健康档案，帮你录入和分析': 'Let Claude, Codex or another AI read and write your health records, to log and analyze them for you',
+  '接好以后可以直接对 AI 说：「把这张化验单录进去」（附上截图）、「今天吃过药了」、「我近两年的尿酸怎么变化的」。':
+    'Once connected, just tell your AI: “Add this lab report” (with a screenshot), “I took my meds today”, “How has my uric acid changed over the last two years?”',
+  'Claude 桌面版输入框的 {plus} 菜单里还有分析模板：解读最近的化验单、整理就诊摘要、分析症状、健康状况总评、打卡复盘。':
+    'In Claude Desktop, the {plus} menu in the message box also has analysis templates: reading recent lab results, a visit summary, symptom analysis, an overall health review and a check-in review.',
+  'AI 读取记录时，相关内容会发送给它的服务商处理（Claude 发给 Anthropic，Codex 发给 OpenAI）；数据本身只存在这台电脑上。AI 的分析不能代替医生诊断。':
+    'When an AI reads your records, what it reads is sent to its provider for processing (Anthropic for Claude, OpenAI for Codex); the data itself stays on this computer. No AI’s analysis is a substitute for a doctor’s diagnosis.',
   'Claude 桌面版': 'Claude Desktop',
+  '在终端运行一次；Codex 命令行和编辑器插件共用这个设置。': 'Run once in a terminal; the Codex CLI and editor extension share this setting.',
+  '或者手动加进 ~/.codex/config.toml：': 'Or add it to ~/.codex/config.toml by hand:',
+  '其他支持 MCP 的 AI': 'Other AI apps that support MCP',
+  'Cursor、Cherry Studio 等：添加一个 MCP 服务器，类型选「命令行（stdio）」，填下面的命令和参数；或者类型选 HTTP，填地址（需要本 App 开着）。':
+    'Cursor, Cherry Studio and others: add an MCP server, choose the command-line (stdio) type and fill in the command and arguments below; or choose HTTP and use the address (this app must be open).',
+  '命令': 'Command',
+  '参数': 'Arguments',
+  'HTTP 地址': 'HTTP address',
   '设置 → 开发者 → 编辑配置，把下面的内容合并进 claude_desktop_config.json，然后用 ⌘Q 完全退出 Claude 再重新打开。':
     'Settings → Developer → Edit Config: merge the following into claude_desktop_config.json, then quit Claude completely with ⌘Q and open it again.',
   '在终端运行一次，对所有项目生效。': 'Run once in a terminal; it applies to all projects.',
@@ -204,8 +212,8 @@ const EN = {
   '本地服务没有启动：{error}': 'The local service isn’t running: {error}',
   '链接里带着访问令牌，只发给自己，不要分享给别人。': 'The link carries an access token: send it only to yourself and never share it.',
   '没有找到局域网地址，请检查网络连接。': 'No local network address found; check the network connection.',
-  '手机上的 Claude App 只能连接公网服务器，这部分放在第二期（需要隧道和登录授权）。':
-    'The Claude app on a phone can only connect to servers on the internet; that is planned for phase two (it needs a tunnel and sign-in).',
+  '手机上的 AI App（如 Claude、ChatGPT）只能连接公网服务器，这部分放在第二期（需要隧道和登录授权）。':
+    'AI apps on a phone (such as Claude or ChatGPT) can only connect to servers on the internet; that is planned for phase two (it needs a tunnel and sign-in).',
   '数据库是 health.db（SQLite），附件在 files/。备份时复制整个目录即可；建议开启 FileVault 磁盘加密。':
     'The database is health.db (SQLite) and attachments are in files/. To back up, copy the whole folder. Turning on FileVault disk encryption is recommended.',
   '数据目录': 'Data folder',
@@ -240,9 +248,9 @@ const EN = {
   '中午好': 'Good afternoon',
   '下午好': 'Good afternoon',
   '晚上好': 'Good evening',
-  '这里会汇总你的健康状况。先到 {link} 接好，然后把体检报告截图发给 Claude，或者说「帮我记一下：今天头痛，大概 4 分」，它会直接写进来。':
-    'This page sums up your health. First {link}, then send Claude a screenshot of a checkup report, or say “Note this down: headache today, about a 4” — it writes straight in here.',
-  '连接 Claude|link': 'connect Claude',
+  '这里会汇总你的健康状况。先到 {link} 接好，然后把体检报告截图发给 AI，或者说「帮我记一下：今天头痛，大概 4 分」，它会直接写进来。':
+    'This page sums up your health. First {link}, then send your AI a screenshot of a checkup report, or say “Note this down: headache today, about a 4” — it writes straight in here.',
+  '连接 AI|link': 'connect your AI',
   '进行中的健康问题': 'Active health issues',
   '在用药物': 'Current medications',
   '异常指标': 'Abnormal results',
@@ -268,7 +276,7 @@ const EN = {
   ' · 共 {n} 条': ' · {n} in all',
   '搜索{label}': 'Search {label}',
   '没有符合条件的记录': 'No matching records',
-  '还没有{label}。点右上角添加，{br}或者在 Claude 里说一句就能记下。': 'No {label} yet. Add one with the button above,{br}or just tell Claude.',
+  '还没有{label}。点右上角添加，{br}或者跟 AI 说一句就能记下。': 'No {label} yet. Add one with the button above,{br}or just tell your AI.',
   '未填日期': 'No date',
   '程度 {n}/10': 'Severity {n}/10',
 
