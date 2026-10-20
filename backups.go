@@ -62,16 +62,21 @@ func (b *backups) save(s backupState) error {
 func (b *backups) run(suffix string) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.runLocked(suffix)
+	return b.runLocked(suffix, true)
 }
 
-func (b *backups) runLocked(suffix string) (string, error) {
+// runLocked makes a backup, then trims the folder to the newest Keep unless
+// prune is false: the backup made before a restore mustn't delete the one
+// being restored (with Keep at 1 it would be the only other file).
+func (b *backups) runLocked(suffix string, prune bool) (string, error) {
 	s := b.load()
 	now := time.Now()
 	name, err := backup.Create(b.st, s.Config.Dir, suffix, now)
 	if err == nil {
-		if perr := backup.Prune(s.Config.Dir, s.Config.Keep); perr != nil {
-			log.Printf("清理旧备份失败：%v", perr)
+		if prune {
+			if perr := backup.Prune(s.Config.Dir, s.Config.Keep); perr != nil {
+				log.Printf("清理旧备份失败：%v", perr)
+			}
 		}
 		s.Status.LastAt, s.Status.LastFile, s.Status.LastError, s.Status.ErrorAt = now.Format(stamp), name, "", ""
 	} else {
@@ -100,7 +105,7 @@ func (b *backups) restore(name string) error {
 	if !found {
 		return errors.New("备份位置里没有这份备份")
 	}
-	if _, err := b.runLocked(backup.BeforeRestore); err != nil {
+	if _, err := b.runLocked(backup.BeforeRestore, false); err != nil {
 		return errors.New("恢复前先备份当前数据失败，没有恢复：" + err.Error())
 	}
 	return backup.Restore(b.st, filepath.Join(s.Config.Dir, name))

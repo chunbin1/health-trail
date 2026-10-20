@@ -26,7 +26,7 @@ const Quiet = 10 * time.Minute
 // Defaults fills in what an empty config leaves out.
 func (c *Config) Defaults() {
 	if c.Keep <= 0 {
-		c.Keep = 30
+		c.Keep = 1
 	}
 	if c.DailyAt == "" {
 		c.DailyAt = "21:00"

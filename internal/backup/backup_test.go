@@ -211,7 +211,7 @@ func TestDue(t *testing.T) {
 	}
 	var empty Config
 	empty.Defaults()
-	if empty.Check() != nil || empty.Keep != 30 {
+	if empty.Check() != nil || empty.Keep != 1 {
 		t.Errorf("defaults = %+v", empty)
 	}
 }
