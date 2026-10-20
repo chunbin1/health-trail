@@ -136,6 +136,7 @@ func (s *Server) schema(w http.ResponseWriter, r *http.Request) {
 		"entities":     store.Entities,
 		"metric_types": store.MetricTypes,
 		"metric_units": store.MetricUnits,
+		"en":           map[string]any{"text": store.English, "nouns": store.EnglishNouns},
 	})
 }
 

@@ -1,21 +1,39 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronRight, Plus, Sparkles } from 'lucide-react'
-import { api, fmtDate, fmtNum, metricValue, type Rec } from '../api'
+import { api, fmtDate, fmtNum, metricValue, MONTHS, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { Modal } from '../components/Modal'
 import { LabValue, TakeDose } from '../components/RecordDrawer'
+import { isEN, noun, t, tr, tx, type Key } from '../i18n'
 import { openRecord, recTitle, useApp, useLoad } from '../state'
 import { Empty, KindIcon, RangeBar, Ring, Sparkline, kindStyle } from '../ui'
 import { HabitGrid } from './Checkins'
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六']
-const QUICK = [
-  ['symptoms', '症状'], ['visits', '就诊'], ['medications', '用药'], ['metrics', '身体数据'], ['conditions', '健康问题'],
-] as const
+const WEEK_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const QUICK: [string, Key][] = [
+  ['symptoms', '症状|quick'], ['visits', '就诊|quick'], ['medications', '用药|quick'], ['metrics', '身体数据|quick'], ['conditions', '健康问题|quick'],
+]
 
 function greeting() {
   const h = new Date().getHours()
-  return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好'
+  return t(h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好')
+}
+
+function todayLine(d: Date) {
+  return isEN()
+    ? `${WEEK_EN[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`
+    : `${d.getMonth() + 1}月${d.getDate()}日 星期${WEEK[d.getDay()]}`
+}
+
+// Timeline titles are put together by the server in Chinese; the parts
+// that are schema text or a dose's wording are translated here.
+function timelineTitle(type: string, title: string) {
+  if (!isEN()) return title
+  if (type === 'metrics') return title.split(' ').map((w) => tx(w)).join(' ')
+  const dose = type === 'doses' && /^服用 (.*) (\S+) 颗$/.exec(title)
+  if (dose) return t('服用 {name} {amount}', { name: dose[1], amount: t('{n} 颗', { n: dose[2] }) })
+  return tx(title)
 }
 
 export function Overview() {
@@ -43,13 +61,13 @@ export function Overview() {
     <>
       <div className="hello">
         <div className="titles">
-          <div className="sub">{d.getMonth() + 1}月{d.getDate()}日 星期{WEEK[d.getDay()]}</div>
+          <div className="sub">{todayLine(d)}</div>
           <h1>{greeting()}</h1>
         </div>
         <div className="row">
           {QUICK.map(([k, label]) => (
             <button key={k} className="btn" onClick={() => setAdding(k)}>
-              <Plus size={14} style={{ color: `var(--c-${k})` }} strokeWidth={2.6} />{label}
+              <Plus size={14} style={{ color: `var(--c-${k})` }} strokeWidth={2.6} />{t(label)}
             </button>
           ))}
         </div>
@@ -58,37 +76,37 @@ export function Overview() {
       {empty && (
         <div className="notice" style={{ marginBottom: 20 }}>
           <Sparkles size={18} />
-          <span>这里会汇总你的健康状况。先到 <a href="#/connect">连接 Claude</a> 接好，然后把体检报告截图发给 Claude，或者说「帮我记一下：今天头痛，大概 4 分」，它会直接写进来。</span>
+          <span>{tr('这里会汇总你的健康状况。先到 {link} 接好，然后把体检报告截图发给 Claude，或者说「帮我记一下：今天头痛，大概 4 分」，它会直接写进来。', { link: <a href="#/connect">{t('连接 Claude|link')}</a> })}</span>
         </div>
       )}
 
       <div className="stats">
-        <Stat kind="conditions" href="#/conditions" n={o.active_conditions.length} label="进行中的健康问题" />
-        <Stat kind="medications" href="#/medications" n={o.current_medications.length} label="在用药物" />
-        <Stat kind="lab_results" href="#/reports" n={o.abnormal_labs_latest.length} label="异常指标" warn={o.abnormal_labs_latest.length > 0} />
+        <Stat kind="conditions" href="#/conditions" n={o.active_conditions.length} label={t('进行中的健康问题')} />
+        <Stat kind="medications" href="#/medications" n={o.current_medications.length} label={t('在用药物')} />
+        <Stat kind="lab_results" href="#/reports" n={o.abnormal_labs_latest.length} label={t('异常指标')} warn={o.abnormal_labs_latest.length > 0} />
         <a className="stat" href="#/checkins" style={kindStyle('checkins')}>
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <KindIcon kind="checkins" />
             <Ring value={done} total={o.today_checkins.length} size={30} />
           </div>
-          <div><div className="n">{done}<small>/{o.today_checkins.length}</small></div><div className="k">今日打卡</div></div>
+          <div><div className="n">{done}<small>/{o.today_checkins.length}</small></div><div className="k">{t('今日打卡')}</div></div>
         </a>
       </div>
 
       <div className="stack">
         <section className="card">
-          <div className="card-head"><h2>今日打卡</h2><a href="#/checkins" className="card-link">管理<ChevronRight size={14} /></a></div>
+          <div className="card-head"><h2>{t('今日打卡')}</h2><a href="#/checkins" className="card-link">{t('管理')}<ChevronRight size={14} /></a></div>
           <HabitGrid days={o.today_checkins} date={o.today} />
         </section>
 
         <div className="grid-2">
           <section className="card">
             <div className="card-head">
-              <h2>需要留意的指标</h2>
-              <a href="#/reports" className="card-link">趋势<ChevronRight size={14} /></a>
+              <h2>{t('需要留意的指标')}</h2>
+              <a href="#/reports" className="card-link">{t('趋势')}<ChevronRight size={14} /></a>
             </div>
             {o.abnormal_labs_latest.length === 0
-              ? <Empty compact>各项指标最近一次的结果都在参考范围内</Empty>
+              ? <Empty compact>{t('各项指标最近一次的结果都在参考范围内')}</Empty>
               : (
                 <table className="data">
                   <tbody>
@@ -102,23 +120,23 @@ export function Overview() {
                   </tbody>
                 </table>
               )}
-            {o.abnormal_labs_latest.length > 7 && <div className="muted small" style={{ marginTop: 8 }}>还有 {o.abnormal_labs_latest.length - 7} 项</div>}
+            {o.abnormal_labs_latest.length > 7 && <div className="muted small" style={{ marginTop: 8 }}>{t('还有 {n} 项', { n: o.abnormal_labs_latest.length - 7 })}</div>}
           </section>
 
           <div className="stack" style={{ gap: 16 }}>
-            <Panel title="进行中的健康问题" rows={o.active_conditions} kind="conditions" more="#/conditions" empty="没有进行中的健康问题"
-              render={(r) => <><div className="body title">{r.name}</div>{r.status && <span className="tag k" style={kindStyle('conditions')}>{r.status}</span>}</>} />
-            <Panel title="在用药物" rows={o.current_medications} kind="medications" more="#/medications" empty="没有在用的药物"
+            <Panel title={t('进行中的健康问题')} rows={o.active_conditions} kind="conditions" more="#/conditions" empty={t('没有进行中的健康问题')}
+              render={(r) => <><div className="body title">{r.name}</div>{r.status && <span className="tag k" style={kindStyle('conditions')}>{tx(r.status)}</span>}</>} />
+            <Panel title={t('在用药物')} rows={o.current_medications} kind="medications" more="#/medications" empty={t('没有在用的药物')}
               render={(r) => <>
                 <div className="body">
                   <div className="title">{r.name}</div>
                   <div className="meta">{[r.dosage, r.frequency].filter(Boolean).join(' · ')}</div>
-                  {r.last_taken && <div className="meta">上次 {fmtDate(r.last_taken)} · 共 {fmtNum(r.taken_total)} 颗</div>}
+                  {r.last_taken && <div className="meta">{t('上次 {date} · {total}', { date: fmtDate(r.last_taken), total: t('共 {n} 颗', { n: fmtNum(r.taken_total) }) })}</div>}
                 </div>
                 <TakeDose med={r} />
               </>} />
             {o.upcoming_follow_ups.length > 0 && (
-              <Panel title="待复诊" rows={o.upcoming_follow_ups} kind="visits" empty=""
+              <Panel title={t('待复诊')} rows={o.upcoming_follow_ups} kind="visits" empty=""
                 render={(r) => <><div className="body"><div className="title">{fmtDate(r.follow_up_date)}</div><div className="meta">{recTitle(entity('visits'), r)}</div></div></>} />
             )}
           </div>
@@ -126,13 +144,13 @@ export function Overview() {
 
         {o.latest_metrics.length > 0 && (
           <section className="card">
-            <div className="card-head"><h2>身体数据</h2><a href="#/metrics" className="card-link">全部<ChevronRight size={14} /></a></div>
+            <div className="card-head"><h2>{t('身体数据')}</h2><a href="#/metrics" className="card-link">{t('全部')}<ChevronRight size={14} /></a></div>
             <div className="tiles">
               {o.latest_metrics.map((m) => (
                 <div key={m.id} className="tile" style={kindStyle('metrics')}
                   onClick={() => (location.hash = '/metrics?type=' + encodeURIComponent(m.metric_type))}>
-                  <div className="k">{m.metric_type}</div>
-                  <div className="v">{metricValue(m)}<small>{m.unit}</small></div>
+                  <div className="k">{tx(m.metric_type)}</div>
+                  <div className="v">{metricValue(m)}<small>{tx(m.unit)}</small></div>
                   <Sparkline values={series?.[m.metric_type] || []} />
                   <div className="d">{fmtDate(m.measured_at)}</div>
                 </div>
@@ -142,14 +160,14 @@ export function Overview() {
         )}
 
         <section className="card">
-          <div className="card-head"><h2>最近记录</h2></div>
-          {timeline?.length === 0 && <Empty compact>还没有记录</Empty>}
+          <div className="card-head"><h2>{t('最近记录')}</h2></div>
+          {timeline?.length === 0 && <Empty compact>{t('还没有记录')}</Empty>}
           <div className="list timeline">
-            {timeline?.map((t) => (
-              <div key={t.type + t.id} className="row-item" onClick={() => openRecord(t.type, t.id)}>
-                <KindIcon kind={t.type} size="sm" />
-                <div className="body title" style={{ fontWeight: 500 }}>{t.title}</div>
-                <span className="side"><span className="tag">{entity(t.type)?.label}</span><span className="nowrap" style={{ width: 70, textAlign: 'right' }}>{fmtDate(t.date.slice(0, 10))}</span></span>
+            {timeline?.map((it) => (
+              <div key={it.type + it.id} className="row-item" onClick={() => openRecord(it.type, it.id)}>
+                <KindIcon kind={it.type} size="sm" />
+                <div className="body title" style={{ fontWeight: 500 }}>{timelineTitle(it.type, it.title)}</div>
+                <span className="side"><span className="tag">{tx(entity(it.type)?.label)}</span><span className="nowrap" style={{ minWidth: 70, textAlign: 'right' }}>{fmtDate(it.date.slice(0, 10))}</span></span>
               </div>
             ))}
           </div>
@@ -157,8 +175,8 @@ export function Overview() {
       </div>
 
       {adding && (
-        <Modal title={`添加${entity(adding).label}`} icon={<KindIcon kind={adding} />} onClose={() => setAdding(null)}>
-          <EntityForm entity={entity(adding)} onCancel={() => setAdding(null)} onSaved={() => { setAdding(null); toast('已添加') }} />
+        <Modal title={t('添加{label}', { label: noun(entity(adding)) })} icon={<KindIcon kind={adding} />} onClose={() => setAdding(null)}>
+          <EntityForm entity={entity(adding)} onCancel={() => setAdding(null)} onSaved={() => { setAdding(null); toast(t('已添加')) }} />
         </Modal>
       )}
     </>
@@ -179,7 +197,7 @@ function Panel({ title, rows, kind, render, more, empty }: { title: string; rows
     <section className="card" style={{ paddingBottom: rows.length ? 8 : 18 }}>
       <div className="card-head" style={{ marginBottom: 4 }}>
         <h2><KindIcon kind={kind} size="sm" />{title}</h2>
-        {more && <a href={more} className="card-link">全部<ChevronRight size={14} /></a>}
+        {more && <a href={more} className="card-link">{t('全部')}<ChevronRight size={14} /></a>}
       </div>
       {rows.length === 0 && <Empty compact>{empty}</Empty>}
       <div className="list">

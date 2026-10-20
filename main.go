@@ -145,11 +145,24 @@ func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT /api/settings", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
-			LAN *bool `json:"lan"`
+			LAN  *bool   `json:"lan"`
+			Lang *string `json:"lang"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, `{"error":"无效的请求"}`, http.StatusBadRequest)
 			return
+		}
+		if in.Lang != nil {
+			if *in.Lang != "zh" && *in.Lang != "en" {
+				http.Error(w, `{"error":"lang 只能是 zh 或 en"}`, http.StatusBadRequest)
+				return
+			}
+			a.settings.mu.Lock()
+			a.settings.Lang = strings.TrimPrefix(*in.Lang, "zh")
+			a.settings.mu.Unlock()
+			if err := a.settings.save(); err != nil {
+				log.Printf("保存设置失败：%v", err)
+			}
 		}
 		if in.LAN != nil && *in.LAN != a.settings.LAN {
 			a.settings.LAN = *in.LAN
@@ -198,6 +211,7 @@ func (a *app) info(r *http.Request) map[string]any {
 	return map[string]any{
 		"version":               version,
 		"lan":                   a.settings.LAN,
+		"lang":                  a.settings.lang(),
 		"listening":             a.listener.addr(),
 		"listen_error":          a.listener.errText(),
 		"phone_urls":            phone,
@@ -246,7 +260,7 @@ func runApp(dataDir, port string) {
 		Name:        "健康档案",
 		Description: "个人健康档案",
 		Assets:      application.AssetOptions{Handler: a.handler()},
-		Services:    []application.Service{application.NewService(&reminders{st: a.st, ns: notifications.New()})},
+		Services:    []application.Service{application.NewService(&reminders{st: a.st, ns: notifications.New(), lang: a.settings.lang})},
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		// one window per data directory: a second launch on the same data
 		// focuses the open window, while a test copy on other data runs apart

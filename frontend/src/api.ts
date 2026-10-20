@@ -1,3 +1,5 @@
+import { isEN, t } from './i18n'
+
 // The schema comes from the server (internal/store/schema.go): the forms
 // and lists here are drawn from it rather than declared twice.
 
@@ -27,6 +29,8 @@ export interface Schema {
   entities: Entity[]
   metric_types: string[]
   metric_units: Record<string, string>
+  // what the English UI shows for the Chinese above (schema_en.go)
+  en: { text: Record<string, string>; nouns: Record<string, string> }
 }
 
 export type Rec = Record<string, any> & { id: number }
@@ -91,6 +95,7 @@ export interface Info {
   data_dir: string
   version: string
   lan: boolean
+  lang: string
   listening: string
   listen_error: string
   phone_urls: string[] | null
@@ -117,9 +122,9 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   try {
     data = text ? JSON.parse(text) : null
   } catch {
-    throw new ApiError(`服务器返回了无法解析的内容（${res.status}）`)
+    throw new ApiError(t('服务器返回了无法解析的内容（{status}）', { status: res.status }))
   }
-  if (!res.ok) throw new ApiError(data?.error || `请求失败（${res.status}）`)
+  if (!res.ok) throw new ApiError(data?.error || t('请求失败（{status}）', { status: res.status }))
   return data as T
 }
 
@@ -134,6 +139,7 @@ export const api = {
   schema: () => req<Schema>('GET', '/api/schema'),
   info: () => req<Info>('GET', '/api/info'),
   setLAN: (lan: boolean) => req<Info>('PUT', '/api/settings', { lan }),
+  setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),
   overview: () => req<Overview>('GET', '/api/overview'),
   timeline: (limit = 20) => req<{ type: string; id: number; date: string; title: string }[]>('GET', '/api/timeline' + qs({ limit })),
   search: (q: string) => req<{ type: string; type_label: string; rows: Rec[]; total: number }[]>('GET', '/api/search' + qs({ q })),
@@ -182,11 +188,20 @@ export const addDays = (date: string, n: number) => {
 
 export function fmtDate(s?: string | null): string {
   if (!s) return ''
-  const [d, t] = s.split(' ')
+  const [d, time] = s.split(' ')
   const [y, m, day] = d.split('-')
   const thisYear = String(new Date().getFullYear())
-  const date = y === thisYear ? `${Number(m)}月${Number(day)}日` : `${y}年${Number(m)}月${Number(day)}日`
-  return t ? `${date} ${t}` : date
+  let date: string
+  if (isEN()) date = `${MONTHS[Number(m) - 1]?.slice(0, 3)} ${Number(day)}` + (y === thisYear ? '' : `, ${y}`)
+  else date = y === thisYear ? `${Number(m)}月${Number(day)}日` : `${y}年${Number(m)}月${Number(day)}日`
+  return time ? `${date} ${time}` : date
+}
+
+export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+// fmtMonth names a month: 2026年10月, October 2026.
+export function fmtMonth(y: string, m: string) {
+  return isEN() ? `${MONTHS[Number(m) - 1]} ${y}` : `${y}年${Number(m)}月`
 }
 
 export function fmtNum(v: any): string {

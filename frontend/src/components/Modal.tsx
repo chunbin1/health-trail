@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { X } from 'lucide-react'
+import { t } from '../i18n'
 import { IconButton } from '../ui'
 
 function useEscape(onClose: () => void) {
@@ -20,7 +21,7 @@ export function Modal({ title, icon, onClose, children, wide }: { title: string;
         <div className="modal-head">
           {icon}
           <h2>{title}</h2>
-          <IconButton label="关闭" onClick={onClose}><X size={18} /></IconButton>
+          <IconButton label={t('关闭')} onClick={onClose}><X size={18} /></IconButton>
         </div>
         {children}
       </div>
@@ -36,7 +37,7 @@ export function Drawer({ onClose, head, children }: { onClose: () => void; head?
         <div className="drawer-head">
           {head}
           <span className="spacer" />
-          <IconButton label="关闭" onClick={onClose}><X size={18} /></IconButton>
+          <IconButton label={t('关闭')} onClick={onClose}><X size={18} /></IconButton>
         </div>
         <div className="drawer-body">{children}</div>
       </div>

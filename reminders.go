@@ -22,6 +22,7 @@ const reminderDays = 7
 type reminders struct {
 	st        *store.Store
 	ns        *notifications.NotificationService
+	lang      func() string // the UI's language, which notifications follow
 	scheduled map[string]bool
 }
 
@@ -67,8 +68,15 @@ func (r *reminders) sync(now time.Time) {
 		log.Printf("读取提醒失败：%v", err)
 		return
 	}
+	// the language is part of the id, so switching it replaces the
+	// scheduled notifications with ones in the new language
+	en := r.lang() == "en"
 	want := map[string]store.Reminder{}
 	for _, p := range plan {
+		if en {
+			p.ID += "-en"
+			p.Body = "Time's up, and it isn't checked off today"
+		}
 		want[p.ID] = p
 	}
 	for id := range r.scheduled {

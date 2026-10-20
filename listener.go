@@ -73,7 +73,15 @@ func (l *listener) close() {
 
 type settings struct {
 	path string
-	LAN  bool `json:"lan"`
+	mu   sync.Mutex // Lang is read by the reminders goroutine
+	LAN  bool   `json:"lan"`
+	Lang string `json:"lang,omitempty"` // UI language: "" (Chinese) or "en"
+}
+
+func (s *settings) lang() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Lang
 }
 
 func loadSettings(dir string) *settings {
@@ -85,6 +93,8 @@ func loadSettings(dir string) *settings {
 }
 
 func (s *settings) save() error {
+	s.mu.Lock()
 	b, _ := json.MarshalIndent(s, "", "  ")
+	s.mu.Unlock()
 	return os.WriteFile(s.path, b, 0o600)
 }

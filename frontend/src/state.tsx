@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, type Entity, type Rec, type Schema } from './api'
+import { t, tx, type Lang } from './i18n'
 
 interface Ctx {
   schema: Schema
@@ -7,12 +8,14 @@ interface Ctx {
   version: number // bumped after every write; views reload on it
   changed: () => void
   toast: (msg: string) => void
+  lang: Lang
+  switchLang: (l: Lang) => void
 }
 
 const AppCtx = createContext<Ctx>(null!)
 export const useApp = () => useContext(AppCtx)
 
-export function AppProvider({ schema, children }: { schema: Schema; children: ReactNode }) {
+export function AppProvider({ schema, lang, switchLang, children }: { schema: Schema; lang: Lang; switchLang: (l: Lang) => void; children: ReactNode }) {
   const [version, setVersion] = useState(0)
   const [msg, setMsg] = useState('')
   const entity = useCallback((name: string) => schema.entities.find((e) => e.name === name)!, [schema])
@@ -22,7 +25,7 @@ export function AppProvider({ schema, children }: { schema: Schema; children: Re
     window.setTimeout(() => setMsg((cur) => (cur === m ? '' : cur)), 2200)
   }, [])
   return (
-    <AppCtx.Provider value={{ schema, entity, version, changed, toast }}>
+    <AppCtx.Provider value={{ schema, entity, version, changed, toast, lang, switchLang }}>
       {children}
       {msg && <div className="toast">{msg}</div>}
     </AppCtx.Provider>
@@ -115,7 +118,7 @@ export function useRefOptions(entity: string | undefined) {
 }
 
 export function recTitle(e: Entity, r: Rec): string {
-  if (e.name === 'visits') return [r.diagnosis, r.department, r.hospital].filter(Boolean).join(' · ') || r.visit_type || '就诊'
-  if (e.name === 'metrics') return r.metric_type
+  if (e.name === 'visits') return [r.diagnosis, r.department, r.hospital].filter(Boolean).join(' · ') || tx(r.visit_type) || t('就诊|quick')
+  if (e.name === 'metrics') return tx(r.metric_type)
   return String(r[e.titleKey] ?? `#${r.id}`)
 }

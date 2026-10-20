@@ -12,6 +12,7 @@
 main.go, listener.go     入口：app（Wails 窗口 + 本地服务）/ serve / mcp（stdio）/ info
 internal/store/          数据层，唯一的数据来源
   schema.go              所有记录类型和字段的定义 ← 加字段从这里开始
+  schema_en.go           schema 里的中文在英文界面显示成什么（有测试检查覆盖）
   store.go               建表/迁移、增删改查、校验
   convert.go             字段类型转换、日期规范化、检验值和参考范围解析
   labparse.go            粘贴的化验单文字 → 指标行
@@ -19,9 +20,10 @@ internal/store/          数据层，唯一的数据来源
 internal/server/         REST API（/api/...）、安全层 guard.go、UI 静态文件
 internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
 frontend/                React + TS + Vite，构建结果嵌进 Go 程序
+  src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
 ```
 
-**schema.go 是唯一的数据来源**：数据表（自动迁移、只增不删）、API 接受的字段、MCP 工具说明里的字段列表、前端表单，全部从它生成。加一个字段只需改 schema.go，其他地方会自动跟上；需要特殊展示的地方再改前端。
+**schema.go 是唯一的数据来源**：数据表（自动迁移、只增不删）、API 接受的字段、MCP 工具说明里的字段列表、前端表单，全部从它生成。加一个字段只需改 schema.go（再在 schema_en.go 里补英文，`TestEnglishCoversSchema` 会提醒），其他地方会自动跟上；需要特殊展示的地方再改前端。
 
 ## 硬规则
 
@@ -31,6 +33,7 @@ frontend/                React + TS + Vite，构建结果嵌进 Go 程序
 - **错误要让 Claude 看得懂**：业务错误返回 `store.ValidationError`，消息里写明哪个字段、允许哪些值，MCP 层通过 `failed()` 作为工具结果返回（IsError），而不是协议错误。
 - **一份报告要么全部写入，要么一条不写**：批量写入用 `CreateMany`（事务）；`ImportLabs` 失败时要删掉它新建的报告。
 - **界面统一**：颜色和图标用 `ui.tsx` 的 `KIND`（每类记录一个图标 + `--c-<kind>` 颜色）和 `styles.css` 里的 token，不要在组件里写死颜色。图表系列颜色要先用 dataviz 的 `validate_palette.js` 校验浅色和深色两套。
+- **界面文字中英两套**：前端写死的文字一律 `t('中文原文')`，并在 `i18n.tsx` 的 `EN` 里加英文（漏了类型检查不过）；schema 来的字段名、提示、枚举选项、单位用 `tx()` 显示。枚举存进数据库的值永远是中文，只翻译显示。语言保存在数据目录的 settings.json（`lang`）。MCP 的说明和 prompts 保持中文。
 - **不编造医疗结论**：MCP 的 instructions 和 prompts 要求 Claude 只依据数据说话、提醒就医。改这些文字时保留这些约束。
 
 ## 验证

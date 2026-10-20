@@ -1,13 +1,14 @@
 import { useRef, useState, type MouseEvent } from 'react'
 import { ArrowDown, ArrowUp, File, FileImage, FileText, Paperclip, Pencil, Pill, Plus, Trash2, Upload, X } from 'lucide-react'
-import { api, fmtDate, fmtNum, flagClass, labValue, metricValue, type Entity, type Field, type Rec } from '../api'
+import { api, fmtDate, fmtNum, flagClass, labValue, metricValue, today, type Entity, type Field, type Rec } from '../api'
+import { noun, t, tx, type Key } from '../i18n'
 import { closeRecord, openRecord, recTitle, useApp, useLoad, useRefOptions } from '../state'
 import { Empty, IconButton, KindIcon, RangeBar } from '../ui'
 import { EntityForm } from './EntityForm'
 import { LabImport } from './LabImport'
 import { Drawer, Modal } from './Modal'
 
-const CHILD_LABELS: Record<string, string> = {
+const CHILD_LABELS: Record<string, Key> = {
   symptoms: '症状记录', visits: '就诊记录', medications: '用药', reports: '检查报告', lab_results: '检验指标', checkins: '打卡记录', doses: '服药记录',
 }
 
@@ -25,11 +26,11 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   const r = data?.record
 
   async function remove() {
-    if (!r || !confirm(`删除这条${e.label}？${entityName === 'reports' ? '报告里的所有指标也会一起删除。' : ''}此操作不可撤销。`)) return
+    if (!r || !confirm(t('删除这条{label}？{extra}此操作不可撤销。', { label: noun(e), extra: entityName === 'reports' ? t('报告里的所有指标也会一起删除。') : '' }))) return
     try {
       await api.remove(entityName, id)
       changed()
-      toast('已删除')
+      toast(t('已删除'))
       closeRecord()
     } catch (err: any) {
       alert(err.message)
@@ -42,22 +43,24 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
       try {
         await api.upload(entityName, id, f)
       } catch (err: any) {
-        alert(`${f.name}：${err.message}`)
+        alert(t('{name}：{error}', { name: f.name, error: err.message }))
       }
     }
     changed()
   }
 
   async function removeFile(aid: number) {
-    if (!confirm('删除这个附件？')) return
+    if (!confirm(t('删除这个附件？'))) return
     await api.removeAttachment(aid)
     changed()
   }
 
-  const head = r && (
+  // a past check-in is history: it can be looked at, not changed
+  const locked = entityName === 'checkins' && r?.date !== today()
+  const head = r && !locked && (
     <>
-      <button className="btn sm" onClick={() => setEditing(true)}><Pencil size={14} />编辑</button>
-      <IconButton label="删除" className="danger" onClick={remove}><Trash2 size={16} /></IconButton>
+      <button className="btn sm" onClick={() => setEditing(true)}><Pencil size={14} />{t('编辑')}</button>
+      <IconButton label={t('删除')} className="danger" onClick={remove}><Trash2 size={16} /></IconButton>
     </>
   )
 
@@ -69,10 +72,10 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
           <div className="drawer-title">
             <KindIcon kind={entityName} size="lg" />
             <div style={{ minWidth: 0 }}>
-              <div className="sub">{e.label}{e.dateKey && r[e.dateKey] ? ' · ' + fmtDate(r[e.dateKey]) : ''}</div>
-              <h1>{entityName === 'metrics' ? `${r.metric_type} ${metricValue(r)} ${r.unit || ''}` : recTitle(e, r)}</h1>
+              <div className="sub">{tx(e.label)}{e.dateKey && r[e.dateKey] ? ' · ' + fmtDate(r[e.dateKey]) : ''}</div>
+              <h1>{entityName === 'metrics' ? `${tx(r.metric_type)} ${metricValue(r)} ${tx(r.unit) || ''}` : recTitle(e, r)}</h1>
               {entityName === 'lab_results' && (
-                <div className="row" style={{ marginTop: 6 }}><LabValue r={r} /><span className="muted small">参考 {r.ref_range || '—'}</span></div>
+                <div className="row" style={{ marginTop: 6 }}><LabValue r={r} /><span className="muted small">{t('参考 {range}', { range: r.ref_range || '—' })}</span></div>
               )}
             </div>
           </div>
@@ -86,9 +89,9 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
           {entityName === 'reports' && (
             <section className="card">
               <div className="card-head">
-                <h2>检验指标</h2>
-                <button className="btn sm" onClick={() => setImporting(true)}>粘贴导入</button>
-                <IconButton label="添加一项" small onClick={() => setAdding('lab_results')}><Plus size={16} /></IconButton>
+                <h2>{t('检验指标')}</h2>
+                <button className="btn sm" onClick={() => setImporting(true)}>{t('粘贴导入')}</button>
+                <IconButton label={t('添加一项')} small onClick={() => setAdding('lab_results')}><Plus size={16} /></IconButton>
               </div>
               <LabTable rows={data.lab_results || []} />
             </section>
@@ -99,9 +102,9 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
             .map(([k, rows]) => (
               <section key={k} className="card">
                 <div className="card-head">
-                  <h2>{CHILD_LABELS[k] || k}<span className="muted small">{k === 'doses' ? doseTotal(rows as Rec[]) : (rows as Rec[]).length || ''}</span></h2>
+                  <h2>{CHILD_LABELS[k] ? t(CHILD_LABELS[k]) : k}<span className="muted small">{k === 'doses' ? doseTotal(rows as Rec[]) : (rows as Rec[]).length || ''}</span></h2>
                   {k === 'doses' && <TakeDose med={r} />}
-                  {k !== 'checkins' && <IconButton label={`添加${CHILD_LABELS[k]}`} small onClick={() => setAdding(k)}><Plus size={16} /></IconButton>}
+                  {k !== 'checkins' && <IconButton label={t('添加{label}', { label: noun(entity(k)) })} small onClick={() => setAdding(k)}><Plus size={16} /></IconButton>}
                 </div>
                 <ChildList entity={entity(k)} rows={rows as Rec[]} />
               </section>
@@ -109,12 +112,12 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
 
           <section className="card">
             <div className="card-head">
-              <h2>附件</h2>
-              <button className="btn sm" onClick={() => fileRef.current?.click()}><Upload size={14} />上传</button>
+              <h2>{t('附件')}</h2>
+              <button className="btn sm" onClick={() => fileRef.current?.click()}><Upload size={14} />{t('上传')}</button>
               <input ref={fileRef} type="file" multiple hidden accept="image/*,application/pdf,.heic"
                 onChange={(ev) => { upload(ev.target.files); ev.target.value = '' }} />
             </div>
-            {data.attachments.length === 0 && <Empty compact>报告原件、处方照片等可以放在这里</Empty>}
+            {data.attachments.length === 0 && <Empty compact>{t('报告原件、处方照片等可以放在这里')}</Empty>}
             {data.attachments.map((a) => {
               const Icon = a.mime?.startsWith('image/') ? FileImage : a.mime === 'application/pdf' ? FileText : File
               return (
@@ -122,25 +125,25 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
                   <Icon size={18} className="muted" />
                   <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer">{a.filename}</a>
                   <span className="small muted nowrap">{Math.max(1, Math.round(a.size / 1024))} KB</span>
-                  <IconButton label="删除附件" small className="danger" onClick={() => removeFile(a.id)}><X size={15} /></IconButton>
+                  <IconButton label={t('删除附件')} small className="danger" onClick={() => removeFile(a.id)}><X size={15} /></IconButton>
                 </div>
               )
             })}
           </section>
           <div className="small muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Paperclip size={12} />创建于 {r.created_at} · 更新于 {r.updated_at}
+            <Paperclip size={12} />{t('创建于 {created} · 更新于 {updated}', { created: r.created_at, updated: r.updated_at })}
           </div>
         </>
       )}
       {editing && r && (
-        <Modal title={`编辑${e.label}`} icon={<KindIcon kind={entityName} />} onClose={() => setEditing(false)}>
-          <EntityForm entity={e} record={r} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); toast('已保存') }} />
+        <Modal title={t('编辑{label}', { label: noun(e) })} icon={<KindIcon kind={entityName} />} onClose={() => setEditing(false)}>
+          <EntityForm entity={e} record={r} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); toast(t('已保存')) }} />
         </Modal>
       )}
       {adding && r && (
-        <Modal title={`添加${entity(adding).label}`} icon={<KindIcon kind={adding} />} onClose={() => setAdding(null)}>
+        <Modal title={t('添加{label}', { label: noun(entity(adding)) })} icon={<KindIcon kind={adding} />} onClose={() => setAdding(null)}>
           <EntityForm entity={entity(adding)} defaults={childDefaults(entityName, adding, r)}
-            onCancel={() => setAdding(null)} onSaved={() => { setAdding(null); toast('已添加') }} />
+            onCancel={() => setAdding(null)} onSaved={() => { setAdding(null); toast(t('已添加')) }} />
         </Modal>
       )}
       {importing && r && <LabImport report={r} onClose={() => setImporting(false)} onSaved={() => setImporting(false)} />}
@@ -159,18 +162,18 @@ export function TakeDose({ med }: { med: Rec }) {
     try {
       const d = await api.create('doses', { medication_id: med.id, taken_at: 'now' })
       changed()
-      toast(`已记录：${med.name} ${fmtNum(d.amount)} 颗 · ${String(d.taken_at).slice(11)}`)
+      toast(t('已记录：{name} {amount} · {time}', { name: med.name, amount: t('{n} 颗', { n: d.amount }), time: String(d.taken_at).slice(11) }))
     } catch (err: any) {
       alert(err.message)
     } finally {
       setBusy(false)
     }
   }
-  return <button className="btn sm" disabled={busy} onClick={take}><Pill size={14} />吃了</button>
+  return <button className="btn sm" disabled={busy} onClick={take}><Pill size={14} />{t('吃了')}</button>
 }
 
 function doseTotal(rows: Rec[]) {
-  return rows.length ? `共 ${fmtNum(rows.reduce((n, d) => n + (d.amount ?? 1), 0))} 颗` : ''
+  return rows.length ? t('共 {n} 颗', { n: fmtNum(rows.reduce((n, d) => n + (d.amount ?? 1), 0)) }) : ''
 }
 
 function childDefaults(parent: string, child: string, r: Rec) {
@@ -184,14 +187,14 @@ function FieldRow({ f, r }: { f: Field; r: Rec }) {
   const v = r[f.name]
   return (
     <div className="kv-row">
-      <dt>{f.label}</dt>
+      <dt>{tx(f.label)}</dt>
       <dd>
         {f.type === 'ref' ? <RefLink field={f} id={v} />
           : f.type === 'date' || f.type === 'datetime' ? fmtDate(v)
-          : f.type === 'bool' ? (v ? '是' : '否')
-          : f.name === 'flag' ? <span className={'tag ' + flagClass(v)}>{v}</span>
-          : f.type === 'enum' ? <span className="tag">{v}</span>
-          : `${fmtNum(v)}${f.unit ? ' ' + f.unit : ''}`}
+          : f.type === 'bool' ? (v ? t('是') : t('否'))
+          : f.name === 'flag' ? <span className={'tag ' + flagClass(v)}>{tx(v)}</span>
+          : f.type === 'enum' ? <span className="tag">{tx(v)}</span>
+          : `${fmtNum(v)}${f.unit ? ' ' + tx(f.unit) : ''}`}
       </dd>
     </div>
   )
@@ -210,12 +213,12 @@ export function RefLink({ field, id }: { field: Field; id: number }) {
 }
 
 function ChildList({ entity: e, rows }: { entity: Entity; rows: Rec[] }) {
-  if (rows.length === 0) return <Empty compact>暂无</Empty>
+  if (rows.length === 0) return <Empty compact>{t('暂无')}</Empty>
   return (
     <div className="list">
       {rows.slice(0, 50).map((c) => (
         <div className="row-item no-ico" key={c.id} onClick={() => openRecord(e.name, c.id)}>
-          <div className="body title">{e.name === 'metrics' ? `${c.metric_type} ${metricValue(c)}` : e.name === 'doses' ? `${fmtNum(c.amount)} 颗${c.notes ? ' · ' + c.notes : ''}` : recTitle(e, c)}</div>
+          <div className="body title">{e.name === 'metrics' ? `${tx(c.metric_type)} ${metricValue(c)}` : e.name === 'doses' ? `${t('{n} 颗', { n: fmtNum(c.amount) })}${c.notes ? ' · ' + c.notes : ''}` : recTitle(e, c)}</div>
           {e.dateKey && <span className="side">{fmtDate(e.name === 'doses' ? c.taken_at : String(c[e.dateKey] ?? '').slice(0, 10))}</span>}
         </div>
       ))}
@@ -227,14 +230,14 @@ export function LabValue({ r }: { r: Rec }) {
   const Arrow = r.flag === '偏高' ? ArrowUp : r.flag === '偏低' ? ArrowDown : null
   return (
     <span className={'val ' + flagClass(r.flag)}>
-      {labValue(r)}{Arrow && <Arrow size={13} strokeWidth={2.6} aria-label={r.flag} />}
+      {labValue(r)}{Arrow && <Arrow size={13} strokeWidth={2.6} aria-label={tx(r.flag)} />}
       {r.unit && <span className="muted small" style={{ fontWeight: 400, marginLeft: 4 }}>{r.unit}</span>}
     </span>
   )
 }
 
 export function LabTable({ rows, onPick }: { rows: Rec[]; onPick?: (name: string) => void }) {
-  if (rows.length === 0) return <Empty compact>还没有指标。可以粘贴导入，或把报告截图发给 Claude 录入。</Empty>
+  if (rows.length === 0) return <Empty compact>{t('还没有指标。可以粘贴导入，或把报告截图发给 Claude 录入。')}</Empty>
   const groups = new Map<string, Rec[]>()
   for (const r of rows) {
     const k = r.panel || ''
@@ -244,7 +247,7 @@ export function LabTable({ rows, onPick }: { rows: Rec[]; onPick?: (name: string
   return (
     <div className="table-wrap">
       <table className="data">
-        <thead><tr><th>项目</th><th>结果</th><th style={{ width: '28%' }}>参考范围</th><th className="nowrap" /></tr></thead>
+        <thead><tr><th>{t('项目')}</th><th>{t('结果')}</th><th style={{ width: '28%' }}>{t('参考范围')}</th><th className="nowrap" /></tr></thead>
         <tbody>
           {[...groups.entries()].map(([panel, rs]) => [
             panel && groups.size > 1 && <tr key={'p' + panel} className="panel-row"><td colSpan={4}>{panel}</td></tr>,

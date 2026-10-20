@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { fmtDate, fmtNum } from '../api'
+import { t, tx } from '../i18n'
 import { Empty } from '../ui'
 
 export interface Point {
@@ -34,11 +35,11 @@ export function LineChart({ points, low, high, unit, height = 240, names }: {
     ro.observe(box.current)
     return () => ro.disconnect()
   }, [points.length === 0])
-  if (points.length === 0) return <Empty>还没有数据</Empty>
+  if (points.length === 0) return <Empty>{t('还没有数据')}</Empty>
   const two = points.some((p) => p.v2 != null)
   const H = height, L = 40, R = two ? 54 : 14, T = 14, B = 26
-  const t = (d: string) => new Date(d.replace(' ', 'T')).getTime()
-  const ts = points.map((p) => t(p.date))
+  const ms = (d: string) => new Date(d.replace(' ', 'T')).getTime()
+  const ts = points.map((p) => ms(p.date))
   let t0 = Math.min(...ts), t1 = Math.max(...ts)
   if (t0 === t1) { t0 -= 864e5; t1 += 864e5 }
   const vals = points.flatMap((p) => (p.v2 != null ? [p.v, p.v2] : [p.v]))
@@ -51,7 +52,7 @@ export function LineChart({ points, low, high, unit, height = 240, names }: {
   const y = (v: number) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B)
   const ticks = niceTicks(y0, y1, 4)
   const path = (key: 'v' | 'v2') =>
-    points.filter((p) => p[key] != null).map((p, i) => `${i ? 'L' : 'M'}${x(t(p.date)).toFixed(1)},${y(p[key] as number).toFixed(1)}`).join('')
+    points.filter((p) => p[key] != null).map((p, i) => `${i ? 'L' : 'M'}${x(ms(p.date)).toFixed(1)},${y(p[key] as number).toFixed(1)}`).join('')
   const xLabels = [0, Math.floor((points.length - 1) / 2), points.length - 1].filter((v, i, a) => a.indexOf(v) === i)
   const h = hover != null ? points[hover] : null
   const last = points[points.length - 1]
@@ -72,7 +73,7 @@ export function LineChart({ points, low, high, unit, height = 240, names }: {
         </div>
       )}
       <svg className="chart" width={W} height={H} onMouseMove={move} onMouseLeave={() => setHover(null)} role="img"
-        aria-label={`${points.length} 个读数，最近 ${fmtNum(last.v)}${last.v2 != null ? '/' + fmtNum(last.v2) : ''} ${unit || ''}`}>
+        aria-label={t('{n} 个读数，最近 {value} {unit}', { n: points.length, value: fmtNum(last.v) + (last.v2 != null ? '/' + fmtNum(last.v2) : ''), unit: unit || '' })}>
         {(low != null || high != null) && (
           <>
             <rect className="band" x={L} width={W - L - R} y={y(high ?? y1)} height={Math.max(0, y(low ?? y0) - y(high ?? y1))} />
@@ -111,7 +112,7 @@ export function LineChart({ points, low, high, unit, height = 240, names }: {
         <div className="chart-tip" style={{ left: Math.min(Math.max(x(ts[hover!]), 70), W - 70) }}>
           <div className="d">{fmtDate(h.date)}</div>
           <div><b className="num">{fmtNum(h.v)}{h.v2 != null ? ' / ' + fmtNum(h.v2) : ''}</b> {unit}
-            {h.flag && h.flag !== '正常' && <span className={h.flag === '偏高' ? 'flag-high' : 'flag-low'}> · {h.flag}</span>}
+            {h.flag && h.flag !== '正常' && <span className={h.flag === '偏高' ? 'flag-high' : 'flag-low'}> · {tx(h.flag)}</span>}
           </div>
         </div>
       )}

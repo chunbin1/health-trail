@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { Plus, Search } from 'lucide-react'
-import { api, fmtDate, fmtNum, flagClass, metricValue, type Entity, type Rec } from '../api'
+import { api, fmtDate, fmtMonth, fmtNum, flagClass, metricValue, type Entity, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { Modal } from '../components/Modal'
+import { isEN, noun, t, tr, tx, type Key } from '../i18n'
 import { openRecord, recTitle, useApp, useLoad, useRefOptions } from '../state'
 import { Empty, KIND, KindIcon, kindStyle } from '../ui'
 
-const SUBTITLE: Record<string, string> = {
+const SUBTITLE: Record<string, Key> = {
   conditions: '诊断过的、正在处理的、长期存在的健康问题',
   symptoms: '每一次不舒服：什么时候、多严重、可能的诱因',
   visits: '门诊、复诊、急诊、住院和线上问诊',
@@ -28,21 +29,21 @@ export function RecordsPage({ entityName, extra }: { entityName: string; extra?:
     <>
       <div className="page-head">
         <div className="titles">
-          <h1>{e.label}</h1>
-          <div className="sub">{SUBTITLE[entityName]}{data ? ` · 共 ${data.total} 条` : ''}</div>
+          <h1>{tx(e.label)}</h1>
+          <div className="sub">{SUBTITLE[entityName] && t(SUBTITLE[entityName])}{data ? t(' · 共 {n} 条', { n: data.total }) : ''}</div>
         </div>
         {extra}
-        <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} />添加{e.label}</button>
+        <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} />{t('添加{label}', { label: noun(e) })}</button>
       </div>
       <div className="row" style={{ marginBottom: 16, gap: 12 }}>
         <div className="input-search">
           <Search size={15} />
-          <input className="input" placeholder={`搜索${e.label}`} value={q} onChange={(ev) => setQ(ev.target.value)} />
+          <input className="input" placeholder={t('搜索{label}', { label: plural(e) })} value={q} onChange={(ev) => setQ(ev.target.value)} />
         </div>
         {statusField && (
           <div className="seg">
             {['', ...statusField.options!].map((o) => (
-              <button key={o} className={status === o ? 'on' : ''} onClick={() => setStatus(o)}>{o || '全部'}</button>
+              <button key={o} className={status === o ? 'on' : ''} onClick={() => setStatus(o)}>{o ? tx(o) : t('全部')}</button>
             ))}
           </div>
         )}
@@ -51,24 +52,27 @@ export function RecordsPage({ entityName, extra }: { entityName: string; extra?:
       {!loading && data?.rows.length === 0 ? (
         <div className="card">
           <Empty icon={KIND[entityName]?.icon}>
-            {q || status ? '没有符合条件的记录' : <>还没有{e.label}。点右上角添加，<br />或者在 Claude 里说一句就能记下。</>}
+            {q || status ? t('没有符合条件的记录') : tr('还没有{label}。点右上角添加，{br}或者在 Claude 里说一句就能记下。', { label: plural(e), br: <br /> })}
           </Empty>
         </div>
       ) : (
         <div className="card flush"><RecordList entity={e} rows={data?.rows || []} grouped /></div>
       )}
       {adding && (
-        <Modal title={`添加${e.label}`} icon={<KindIcon kind={entityName} />} onClose={() => setAdding(false)}>
-          <EntityForm entity={e} onCancel={() => setAdding(false)} onSaved={(r) => { setAdding(false); toast('已添加'); openRecord(e.name, r.id) }} />
+        <Modal title={t('添加{label}', { label: noun(e) })} icon={<KindIcon kind={entityName} />} onClose={() => setAdding(false)}>
+          <EntityForm entity={e} onCancel={() => setAdding(false)} onSaved={(r) => { setAdding(false); toast(t('已添加')); openRecord(e.name, r.id) }} />
         </Modal>
       )}
     </>
   )
 }
 
+// plural names the entity's records mid-sentence: 「搜索用药」, "Search medications".
+const plural = (e: Entity) => (isEN() ? tx(e.label).toLowerCase() : e.label)
+
 function monthOf(s: string) {
   const [y, m] = s.split('-')
-  return y && m ? `${y}年${Number(m)}月` : '未填日期'
+  return y && m ? fmtMonth(y, m) : t('未填日期')
 }
 
 // Rows with the kind's icon, a title, a line of detail, and the status and
@@ -91,16 +95,16 @@ export function RecordList({ entity: e, rows, grouped }: { entity: Entity; rows:
             <div className="row-item" onClick={() => openRecord(e.name, r.id)}>
               <KindIcon kind={e.name} />
               <div className="body">
-                <div className="title">{e.name === 'metrics' ? `${r.metric_type} ${metricValue(r)} ${r.unit || ''}` : recTitle(e, r)}</div>
+                <div className="title">{e.name === 'metrics' ? `${tx(r.metric_type)} ${metricValue(r)} ${tx(r.unit) || ''}` : recTitle(e, r)}</div>
                 <div className="meta">
                   {meta.map((f, i) => (
-                    <span key={f.name}>{i > 0 && ' · '}{f.type === 'ref' ? <RefName entity={f.ref!} id={r[f.name]} /> : f.name === 'severity' ? `程度 ${r[f.name]}/10` : `${fmtNum(r[f.name])}${f.unit || ''}`}</span>
+                    <span key={f.name}>{i > 0 && ' · '}{f.type === 'ref' ? <RefName entity={f.ref!} id={r[f.name]} /> : f.name === 'severity' ? t('程度 {n}/10', { n: r[f.name] }) : `${fmtNum(r[f.name])}${tx(f.unit) || ''}`}</span>
                   ))}
                 </div>
               </div>
               <span className="side">
                 {enums.map((f) => (
-                  <span key={f.name} className={'tag ' + (f.name === 'flag' ? flagClass(r[f.name]) : 'k')} style={f.name === 'flag' ? undefined : kindStyle(e.name)}>{r[f.name]}</span>
+                  <span key={f.name} className={'tag ' + (f.name === 'flag' ? flagClass(r[f.name]) : 'k')} style={f.name === 'flag' ? undefined : kindStyle(e.name)}>{tx(r[f.name])}</span>
                 ))}
                 {date && <span className="nowrap num" style={{ minWidth: 64, textAlign: 'right' }}>{fmtDate(date.slice(0, 10))}</span>}
               </span>

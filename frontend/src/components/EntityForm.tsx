@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { api, nowLocal, today, type Entity, type Field, type Rec } from '../api'
+import { paren, t, tx } from '../i18n'
 import { recTitle, useApp, useRefOptions } from '../state'
 import { EmojiPicker, Switch } from '../ui'
 
@@ -61,18 +62,18 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
             if (f.type === 'bool')
               return (
                 <div key={f.name} className="field inline full">
-                  <span className="lbl">{f.label}</span>
-                  <Switch checked={!!values[f.name]} onChange={(v) => set(f.name, v)} label={f.label} />
+                  <span className="lbl">{tx(f.label)}</span>
+                  <Switch checked={!!values[f.name]} onChange={(v) => set(f.name, v)} label={tx(f.label)} />
                 </div>
               )
             const wide = f.type === 'longtext' || (entity.name === 'habits' && f.name === 'icon')
             return (
               <label key={f.name} className={'field' + (wide ? ' full' : '')}>
                 <span className="lbl">
-                  {f.label}{f.unit ? `（${f.unit}）` : ''}{f.required && <span className="req">*</span>}
+                  {paren(tx(f.label), tx(f.unit))}{f.required && <span className="req">*</span>}
                 </span>
                 <Input field={f} entity={entity} value={values[f.name]} onChange={(v) => set(f.name, v)} />
-                {f.hint && !(entity.name === 'habits' && f.name === 'icon') && <span className="hint">{f.hint}</span>}
+                {f.hint && !(entity.name === 'habits' && f.name === 'icon') && <span className="hint">{tx(f.hint)}</span>}
               </label>
             )
           })}
@@ -81,8 +82,8 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
       </div>
       <div className="modal-foot">
         <span className="spacer" />
-        <button type="button" className="btn" onClick={onCancel}>取消</button>
-        <button className="btn primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button>
+        <button type="button" className="btn" onClick={onCancel}>{t('取消')}</button>
+        <button className="btn primary" disabled={saving}>{saving ? t('保存中…') : t('保存')}</button>
       </div>
     </form>
   )
@@ -93,7 +94,7 @@ function Input({ field: f, entity, value, onChange }: { field: Field; entity: En
   if (entity.name === 'habits' && f.name === 'icon') return <EmojiPicker value={v} onChange={onChange} />
   switch (f.type) {
     case 'longtext':
-      return <textarea className="input" value={v} placeholder={f.hint} onChange={(e) => onChange(e.target.value)} />
+      return <textarea className="input" value={v} placeholder={tx(f.hint)} onChange={(e) => onChange(e.target.value)} />
     case 'int':
     case 'real':
       return <input className="input num" inputMode="decimal" value={v} onChange={(e) => onChange(e.target.value)} />
@@ -111,14 +112,14 @@ function Input({ field: f, entity, value, onChange }: { field: Field; entity: En
         return (
           <div className="seg" role="radiogroup">
             {f.options!.map((o) => (
-              <button type="button" key={o} className={v === o ? 'on' : ''} onClick={() => onChange(v === o && !f.required ? '' : o)}>{o}</button>
+              <button type="button" key={o} className={v === o ? 'on' : ''} onClick={() => onChange(v === o && !f.required ? '' : o)}>{tx(o)}</button>
             ))}
           </div>
         )
       return (
         <select className="input" value={v} onChange={(e) => onChange(e.target.value)}>
-          {!f.required && <option value="">未选择</option>}
-          {f.options!.map((o) => <option key={o}>{o}</option>)}
+          {!f.required && <option value="">{t('未选择')}</option>}
+          {f.options!.map((o) => <option key={o} value={o}>{tx(o)}</option>)}
         </select>
       )
     case 'ref':
@@ -139,10 +140,10 @@ function RefSelect({ field, value, onChange }: { field: Field; value: any; onCha
   const e = entity(field.ref!)
   return (
     <select className="input" value={value ?? ''} onChange={(ev) => onChange(ev.target.value === '' ? '' : Number(ev.target.value))}>
-      <option value="">不关联</option>
+      <option value="">{t('不关联')}</option>
       {rows.map((r) => (
         <option key={r.id} value={r.id}>
-          {recTitle(e, r)}{e.dateKey && r[e.dateKey] ? `（${String(r[e.dateKey]).slice(0, 10)}）` : ''}
+          {paren(recTitle(e, r), e.dateKey && r[e.dateKey] ? String(r[e.dateKey]).slice(0, 10) : '')}
         </option>
       ))}
     </select>
