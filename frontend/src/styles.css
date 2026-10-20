@@ -158,21 +158,7 @@ svg.lucide { flex: none; }
 button.nav-item { width: 100%; border: 0; background: none; cursor: pointer; text-align: left; }
 .foot-row { display: flex; align-items: center; gap: 4px; }
 .foot-row > .nav-item { flex: 1; min-width: 0; }
-/* the language menu opens upward from its icon; its padding bridges the gap,
-   so the mouse can move onto it without leaving */
-.lang-menu { position: relative; flex: none; }
-.lang-menu .icon-btn.on { background: var(--surface-3); color: var(--ink); }
-.lang-pop { position: absolute; right: 0; bottom: 100%; width: 160px; padding-bottom: 4px; z-index: 20; }
-.lang-pop .box {
-  background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 4px;
-  animation: pop 0.12s ease-out;
-}
-.lang-opt {
-  display: flex; align-items: center; justify-content: space-between; width: 100%; height: 34px; padding: 0 10px;
-  border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; font-size: 13px; cursor: pointer; text-align: left;
-}
-.lang-opt:hover { background: rgba(127, 127, 127, 0.1); }
-.lang-opt.on { font-weight: 600; color: var(--accent); }
+.foot-row > .icon-btn.on { background: var(--surface); box-shadow: var(--shadow); color: var(--ink); }
 
 /* desktop window: the sidebar runs under the traffic lights and is the drag handle */
 html.mac-window .sidebar { padding-top: 46px; background: color-mix(in srgb, var(--sidebar) 72%, transparent); border-right-color: color-mix(in srgb, var(--line) 70%, transparent); }

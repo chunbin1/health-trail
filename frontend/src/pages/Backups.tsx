@@ -10,9 +10,9 @@ const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '�
 
 const size = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
 
-// Backups: where they go, what makes one, and the ones there are, each of
-// which can be restored. Settings save as they change.
-export function Backups() {
+// Backups, as cards on the settings page: where they go, what makes one, and
+// the ones there are, each of which can be restored. Changes save at once.
+export function BackupSettings() {
   const { changed, toast } = useApp()
   const { data, error, reload } = useLoad(() => api.backup(), [])
   const [cfg, setCfg] = useState<BackupConfig>()
@@ -84,12 +84,9 @@ export function Backups() {
 
   return (
     <>
-      <div className="page-head">
-        <div className="titles"><h1>{t('备份')}</h1><div className="sub">{t('把数据库和附件打包成一个 zip 文件，存到你选的文件夹')}</div></div>
-      </div>
-      <div className="stack" style={{ maxWidth: 760 }}>
         <section className="card">
           <div className="card-head"><h2>{t('备份位置')}</h2></div>
+          <div className="small muted" style={{ marginBottom: 10 }}>{t('把数据库和附件打包成一个 zip 文件，存到你选的文件夹')}</div>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
             <input className="input" style={{ flex: 1, minWidth: 0 }} value={dir} placeholder={t('选择或填写一个文件夹，如 /Users/你/Documents/HealthVaultBackups')}
               onChange={(e) => setDir(e.target.value)} onBlur={() => saveDir(dir)} onKeyDown={(e) => e.key === 'Enter' && saveDir(dir)} />
@@ -146,7 +143,6 @@ export function Backups() {
             </div>
           )}
         </section>
-      </div>
     </>
   )
 }

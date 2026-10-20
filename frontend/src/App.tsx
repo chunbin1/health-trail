@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Check, Languages, MoreHorizontal, Search as SearchIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { MoreHorizontal, Search as SearchIcon, Settings as SettingsIcon } from 'lucide-react'
 import { api, type Overview as OV } from './api'
-import { t, tx, type Key, type Lang } from './i18n'
+import { t, tx, type Key } from './i18n'
 import { RecordDrawer } from './components/RecordDrawer'
 import { Checkins } from './pages/Checkins'
-import { Backups } from './pages/Backups'
 import { Connect } from './pages/Connect'
 import { Metrics } from './pages/Metrics'
 import { Overview } from './pages/Overview'
 import { RecordList, RecordsPage } from './pages/RecordsPage'
 import { Reports } from './pages/Reports'
+import { Settings } from './pages/Settings'
 import { useApp, useLoad, useRoute } from './state'
 import { Empty, KindIcon, KIND } from './ui'
 
@@ -29,13 +29,13 @@ const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string 
     items: [
       { page: 'reports', label: '检查报告', count: 'reports' },
       { page: 'metrics', label: '身体数据', count: 'metrics' },
-      { page: 'backup', label: '备份' },
     ],
   },
 ]
 const TABS = ['overview', 'checkins', 'reports', 'metrics']
 const LABEL: Record<string, Key> = Object.fromEntries(NAV.flatMap((g) => g.items.map((i) => [i.page, i.label])))
 LABEL.connect = '连接 AI'
+LABEL.settings = '设置'
 LABEL.search = '搜索'
 
 export function App() {
@@ -56,7 +56,7 @@ export function App() {
     case 'reports': body = <Reports />; break
     case 'metrics': body = <Metrics />; break
     case 'connect': body = <Connect />; break
-    case 'backup': body = <Backups />; break
+    case 'settings': case 'backup': body = <Settings />; break
     case 'search': body = <Search q={q} setQ={setQ} />; break
     case 'conditions': case 'symptoms': case 'visits': case 'medications':
       body = <RecordsPage key={page} entityName={page} />; break
@@ -70,6 +70,13 @@ export function App() {
     </a>
   )
 
+
+  // the settings sit behind a gear at the end of the 连接 AI row
+  const settingsLink = (
+    <a href="#/settings" className={'icon-btn' + (page === 'settings' ? ' on' : '')} aria-label={t('设置')} title={t('设置')}>
+      <SettingsIcon size={18} />
+    </a>
+  )
 
   return (
     <div className="app">
@@ -86,7 +93,7 @@ export function App() {
             {g.items.map((i) => navItem(i.page, i.label, i.count))}
           </div>
         ))}
-        <div className="side-foot foot-row">{navItem('connect', '连接 AI')}<LangMenu /></div>
+        <div className="side-foot foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>
       </nav>
       <div className="main-wrap">
         <div className="drag-strip drag" />
@@ -108,62 +115,13 @@ export function App() {
       </nav>
       <div className={'more-sheet' + (more ? ' open' : '')} onClick={() => setMore(false)}>
         <div className="panel" onClick={(e) => e.stopPropagation()}>
-          {['conditions', 'symptoms', 'visits', 'medications', 'backup', 'search'].map((p) =>
+          {['conditions', 'symptoms', 'visits', 'medications', 'search'].map((p) =>
             navItem(p, LABEL[p], NAV.flatMap((g) => g.items).find((i) => i.page === p)?.count))}
-          <div className="foot-row">{navItem('connect', '连接 AI')}<LangMenu /></div>
+          <div className="foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>
         </div>
       </div>
 
       {route.open && <RecordDrawer key={route.open.entity + route.open.id} entityName={route.open.entity} id={route.open.id} />}
-    </div>
-  )
-}
-
-// Each language named in itself, as language menus do.
-const LANG_NAMES: Record<Lang, string> = { zh: '中文', en: 'English' }
-
-// The language, behind the usual 文A icon: a mouse over it (or a tap, where
-// there is no hover) opens the choice of both.
-function LangMenu() {
-  const { lang, switchLang } = useApp()
-  // how it was opened: a hover closes when the mouse leaves; a click
-  // (including one on an icon the hover already opened) stays until another
-  // click, a choice, a click outside or Escape
-  const [open, setOpen] = useState<false | 'hover' | 'click'>(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const outside = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    document.addEventListener('pointerdown', outside)
-    document.addEventListener('keydown', esc)
-    return () => {
-      document.removeEventListener('pointerdown', outside)
-      document.removeEventListener('keydown', esc)
-    }
-  }, [open])
-  // touch has no hover: a tap is a click
-  const enter = (e: ReactPointerEvent) => e.pointerType === 'mouse' && setOpen((o) => o || 'hover')
-  const leave = (e: ReactPointerEvent) => e.pointerType === 'mouse' && setOpen(false)
-
-  return (
-    <div ref={ref} className="lang-menu" onPointerEnter={enter} onPointerLeave={leave}>
-      {open && (
-        <div className="lang-pop" role="menu" aria-label={t('语言')}>
-          <div className="box">
-            {(['zh', 'en'] as const).map((l) => (
-              <button key={l} type="button" role="menuitemradio" aria-checked={lang === l} lang={l === 'en' ? 'en' : 'zh-CN'}
-                className={'lang-opt' + (lang === l ? ' on' : '')} onClick={() => { switchLang(l); setOpen(false) }}>
-                {LANG_NAMES[l]}{lang === l && <Check size={15} />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      <button type="button" className={'icon-btn' + (open ? ' on' : '')} aria-label={t('语言')} title={t('语言')}
-        aria-haspopup="menu" aria-expanded={!!open} onClick={() => setOpen(open === 'click' ? false : 'click')}>
-        <Languages size={18} />
-      </button>
     </div>
   )
 }

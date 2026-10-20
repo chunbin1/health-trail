@@ -64,6 +64,15 @@ const EN = {
   '更多': 'More',
   '搜索': 'Search',
   '语言': 'Language',
+  '设置': 'Settings',
+  '正在切换…': 'Switching…',
+  'Claude 聊天': 'Claude chat',
+  '其他 AI': 'Other AI',
+  '你用的是哪个 AI？': 'Which AI do you use?',
+  'Claude 桌面 App 里的普通对话。在 Claude 的「设置 → 开发者 → 编辑配置」里，把下面的内容合并进 claude_desktop_config.json，然后用 ⌘Q 完全退出 Claude 再重新打开。':
+    'Ordinary chats in the Claude desktop app. In Claude, open Settings → Developer → Edit Config, merge the following into claude_desktop_config.json, then quit Claude completely with ⌘Q and open it again.',
+  '终端里的 claude 命令和 Claude 桌面 App 的「Code」页用的是同一份设置。在终端运行一次，对所有项目生效。':
+    'The claude command in a terminal and the Code tab of the Claude desktop app share one setting. Run this once in a terminal; it applies to all projects.',
   '时间': 'Time',
   '现在': 'Now',
   '备份': 'Backups',
@@ -224,11 +233,10 @@ const EN = {
   '让 Claude、Codex 等 AI 读写你的健康档案，帮你录入和分析': 'Let Claude, Codex or another AI read and write your health records, to log and analyze them for you',
   '接好以后可以直接对 AI 说：「把这张化验单录进去」（附上截图）、「今天吃过药了」、「我近两年的尿酸怎么变化的」。':
     'Once connected, just tell your AI: “Add this lab report” (with a screenshot), “I took my meds today”, “How has my uric acid changed over the last two years?”',
-  'Claude 桌面版输入框的 {plus} 菜单里还有分析模板：解读最近的化验单、整理就诊摘要、分析症状、健康状况总评、打卡复盘。':
-    'In Claude Desktop, the {plus} menu in the message box also has analysis templates: reading recent lab results, a visit summary, symptom analysis, an overall health review and a check-in review.',
+  'Claude 聊天输入框的 {plus} 菜单里还有分析模板：解读最近的化验单、整理就诊摘要、分析症状、健康状况总评、打卡复盘。':
+    'In Claude chat, the {plus} menu in the message box also has analysis templates: reading recent lab results, a visit summary, symptom analysis, an overall health review and a check-in review.',
   'AI 读取记录时，相关内容会发送给它的服务商处理（Claude 发给 Anthropic，Codex 发给 OpenAI）；数据本身只存在这台电脑上。AI 的分析不能代替医生诊断。':
     'When an AI reads your records, what it reads is sent to its provider for processing (Anthropic for Claude, OpenAI for Codex); the data itself stays on this computer. No AI’s analysis is a substitute for a doctor’s diagnosis.',
-  'Claude 桌面版': 'Claude Desktop',
   '在终端运行一次；Codex 命令行和编辑器插件共用这个设置。': 'Run once in a terminal; the Codex CLI and editor extension share this setting.',
   '或者手动加进 ~/.codex/config.toml：': 'Or add it to ~/.codex/config.toml by hand:',
   '其他支持 MCP 的 AI': 'Other AI apps that support MCP',
@@ -237,8 +245,6 @@ const EN = {
   '命令': 'Command',
   '参数': 'Arguments',
   'HTTP 地址': 'HTTP address',
-  '设置 → 开发者 → 编辑配置，把下面的内容合并进 claude_desktop_config.json，然后用 ⌘Q 完全退出 Claude 再重新打开。':
-    'Settings → Developer → Edit Config: merge the following into claude_desktop_config.json, then quit Claude completely with ⌘Q and open it again.',
   '在终端运行一次，对所有项目生效。': 'Run once in a terminal; it applies to all projects.',
   '或者在本 App 运行时，通过 HTTP 连接：': 'Or, while this app is running, connect over HTTP:',
   '手机访问': 'Phone access',
