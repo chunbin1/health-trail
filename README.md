@@ -76,3 +76,7 @@ claude mcp add health-vault -s user -- "/Applications/健康档案.app/Contents/
 - App 内直接问 Claude（Claude API）
 - Apple 健康数据导入
 - 数据加密、自动备份
+
+## 许可
+
+[MIT](LICENSE)
