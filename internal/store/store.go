@@ -205,6 +205,19 @@ func required(e *Entity, r Record) error {
 	return nil
 }
 
+// editable refuses a change to a check-in on any day but today: a check-in
+// records doing it that day, so a past one isn't rewritten afterwards (nor a
+// future one made ahead). Deleting the habit still takes its history.
+func editable(e *Entity, r Record) error {
+	if e.Name != "checkins" {
+		return nil
+	}
+	if d, _ := r["date"].(string); d != today() {
+		return invalid("打卡只能记在今天（%s），%s 的打卡不能再新增、修改或撤销", today(), d)
+	}
+	return nil
+}
+
 // prepare fills in what can be derived from the other fields.
 func prepare(e *Entity, r Record) {
 	switch e.Name {
@@ -271,6 +284,9 @@ func (s *Store) Create(entityName string, in Record) (Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := editable(e, r); err != nil {
+		return nil, err
+	}
 	id, err := insert(s.DB, e, r)
 	if err != nil {
 		return nil, err
@@ -331,6 +347,9 @@ func (s *Store) Update(entityName string, id int64, patch Record) (Record, error
 	if err != nil {
 		return nil, err
 	}
+	if err := editable(e, cur); err != nil {
+		return nil, err
+	}
 	p, err := s.clean(e, patch)
 	if err != nil {
 		return nil, err
@@ -367,6 +386,9 @@ func (s *Store) Update(entityName string, id int64, patch Record) (Record, error
 	if err := required(e, merged); err != nil {
 		return nil, err
 	}
+	if err := editable(e, merged); err != nil {
+		return nil, err
+	}
 	merged["updated_at"] = now()
 	keys := sortedKeys(merged)
 	sets := make([]string, len(keys))
@@ -386,6 +408,15 @@ func (s *Store) Delete(entityName string, id int64) error {
 	e, err := entity(entityName)
 	if err != nil {
 		return err
+	}
+	if e.Name == "checkins" {
+		cur, err := s.Get(e.Name, id)
+		if err != nil {
+			return err
+		}
+		if err := editable(e, cur); err != nil {
+			return err
+		}
 	}
 	// attachments only hang off records a person opens (reports, visits…),
 	// not off the rows a cascade removes, so the record's own are enough

@@ -184,6 +184,11 @@ func (s *Store) Checkin(habitID int64, date string, value *float64, notes string
 	if err != nil {
 		return nil, invalid("%v", err)
 	}
+	// before the metric below is touched
+	ce, _ := entity("checkins")
+	if err := editable(ce, Record{"date": d}); err != nil {
+		return nil, err
+	}
 	h, err := s.Get("habits", habitID)
 	if err != nil {
 		return nil, err

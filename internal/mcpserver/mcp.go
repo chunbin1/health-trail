@@ -333,7 +333,7 @@ func (t *tools) metricTrend(ctx context.Context, _ *mcp.CallToolRequest, in metr
 
 type checkinIn struct {
 	Habit           string   `json:"habit" jsonschema:"打卡项名称或 id，如 吃药、跑步"`
-	Date            string   `json:"date,omitempty" jsonschema:"日期，默认今天"`
+	Date            string   `json:"date,omitempty" jsonschema:"日期，只能是今天，可不填；过去的打卡不能补记、修改或撤销"`
 	Value           *float64 `json:"value,omitempty" jsonschema:"数量（打卡项有单位时），如 跑了 5 公里填 5。打卡项设了 metric_type（如 体重）时填测量值，会同时记一条身体数据"`
 	Notes           string   `json:"notes,omitempty"`
 	CreateIfMissing bool     `json:"create_if_missing,omitempty" jsonschema:"打卡项不存在时新建"`
@@ -376,7 +376,7 @@ func (t *tools) habitNames() string {
 
 type undoIn struct {
 	Habit string `json:"habit" jsonschema:"打卡项名称或 id"`
-	Date  string `json:"date,omitempty" jsonschema:"日期，默认今天"`
+	Date  string `json:"date,omitempty" jsonschema:"日期，只能是今天，可不填；过去的打卡不能补记、修改或撤销"`
 }
 
 func (t *tools) undoCheckin(ctx context.Context, _ *mcp.CallToolRequest, in undoIn) (*mcp.CallToolResult, any, error) {

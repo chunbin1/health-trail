@@ -205,6 +205,22 @@ func TestValidation(t *testing.T) {
 	}
 }
 
+// pastCheckin writes a check-in on another day straight into the table, past
+// the today-only rule, as the history a test builds on.
+func pastCheckin(t *testing.T, s *Store, habitID int64, date string, value float64) int64 {
+	t.Helper()
+	e, _ := entity("checkins")
+	r, err := s.build(e, Record{"habit_id": habitID, "date": date, "value": value})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := insert(s.DB, e, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func TestCheckinsAndStreak(t *testing.T) {
 	s := open(t)
 	h, err := s.Create("habits", Record{"name": "跑步", "unit": "公里"})
@@ -213,16 +229,9 @@ func TestCheckinsAndStreak(t *testing.T) {
 	}
 	id := h["id"].(int64)
 	day := func(n int) string { return time.Now().AddDate(0, 0, n).Format("2006-01-02") }
-	five := 5.0
-	for _, n := range []int{-1, -2, -3, -5} {
-		if _, err := s.Checkin(id, day(n), &five, ""); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// checking in twice on a day updates it
-	ten := 10.0
-	if _, err := s.Checkin(id, day(-1), &ten, "加量"); err != nil {
-		t.Fatal(err)
+	yesterday := pastCheckin(t, s, id, day(-1), 10)
+	for _, n := range []int{-2, -3, -5} {
+		pastCheckin(t, s, id, day(n), 5)
 	}
 	st, err := s.CheckinStats(day(-6), day(0), id)
 	if err != nil {
@@ -232,12 +241,45 @@ func TestCheckinsAndStreak(t *testing.T) {
 	if st[0].DaysDone != 4 || st[0].CurrentStreak != 3 || st[0].LongestStreak != 3 || *st[0].Total != 25 {
 		t.Errorf("stats = %+v", st[0])
 	}
-	if _, err := s.Checkin(id, day(0), nil, ""); err != nil {
+	five, ten := 5.0, 10.0
+	if _, err := s.Checkin(id, day(0), &five, ""); err != nil {
 		t.Fatal(err)
 	}
-	if st, _ := s.CheckinStats("", "", id); st[0].CurrentStreak != 4 {
-		t.Errorf("streak with today = %d, want 4", st[0].CurrentStreak)
+	// checking in twice on a day updates it
+	if c, err := s.Checkin(id, "today", &ten, "加量"); err != nil || c["value"] != 10.0 || c["notes"] != "加量" {
+		t.Fatalf("second check-in today = %v %v", c, err)
 	}
+	if st, _ := s.CheckinStats("", "", id); st[0].CurrentStreak != 4 || st[0].DaysDone != 5 {
+		t.Errorf("stats with today = %+v, want streak 4 over 5 days", st[0])
+	}
+
+	// only today's check-in can change: not a past day's, not a future one
+	var ve *ValidationError
+	if _, err := s.Checkin(id, day(-4), nil, ""); !errors.As(err, &ve) || !strings.Contains(err.Error(), "只能记在今天") {
+		t.Errorf("check-in on a past day = %v", err)
+	}
+	if _, err := s.Checkin(id, day(1), nil, ""); !errors.As(err, &ve) {
+		t.Errorf("check-in ahead = %v", err)
+	}
+	if ok, err := s.Uncheck(id, day(-1)); ok || !errors.As(err, &ve) {
+		t.Errorf("uncheck yesterday = %v %v", ok, err)
+	}
+	if _, err := s.Update("checkins", yesterday, Record{"value": 1}); !errors.As(err, &ve) {
+		t.Errorf("editing yesterday = %v", err)
+	}
+	if _, err := s.Update("checkins", yesterday, Record{"date": day(0)}); !errors.As(err, &ve) {
+		t.Errorf("moving yesterday to today = %v", err)
+	}
+	if err := s.Delete("checkins", yesterday); !errors.As(err, &ve) {
+		t.Errorf("deleting yesterday = %v", err)
+	}
+	if _, err := s.Create("checkins", Record{"habit_id": id, "date": day(-4)}); !errors.As(err, &ve) {
+		t.Errorf("creating a past check-in = %v", err)
+	}
+	if c, _ := s.Get("checkins", yesterday); c["value"] != 10.0 {
+		t.Errorf("yesterday changed: %v", c)
+	}
+
 	if ok, _ := s.Uncheck(id, day(0)); !ok {
 		t.Error("uncheck found nothing")
 	}
@@ -246,8 +288,6 @@ func TestCheckinsAndStreak(t *testing.T) {
 	}
 }
 
-// A habit with a metric_type logs its value as a metric record too: one per
-// day, updated on a second check-in, removed with the check-in.
 func TestCheckinLogsMetric(t *testing.T) {
 	s := open(t)
 	h, err := s.Create("habits", Record{"name": "晨起称体重", "metric_type": "体重"})
@@ -278,15 +318,30 @@ func TestCheckinLogsMetric(t *testing.T) {
 	if st, _ := s.CheckinStats("", "", id); st[0].Total != nil {
 		t.Errorf("readings were summed: %v", *st[0].Total)
 	}
-	// no value: a plain check-in, no metric
-	if c, err = s.Checkin(id, "2026-01-02", nil, ""); err != nil || c["metric_id"] != nil {
-		t.Errorf("check-in without value = %v %v", c, err)
-	}
 	if ok, err := s.Uncheck(id, "today"); !ok || err != nil {
 		t.Fatalf("uncheck = %v %v", ok, err)
 	}
 	if _, n, _ := s.List("metrics", ListQuery{}); n != 0 {
 		t.Errorf("metric left after uncheck: %d", n)
+	}
+	// no value: a plain check-in, no metric
+	if c, err = s.Checkin(id, "today", nil, ""); err != nil || c["metric_id"] != nil {
+		t.Errorf("check-in without value = %v %v", c, err)
+	}
+	// a refused past check-in leaves the metric of that day alone
+	past := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	pm, _ := s.Create("metrics", Record{"measured_at": past, "metric_type": "体重", "value": 66})
+	pc := pastCheckin(t, s, id, past, 66)
+	// link them the way a check-in with a reading would have
+	if _, err := s.DB.Exec(`UPDATE checkins SET metric_id = ? WHERE id = ?`, pm["id"], pc); err != nil {
+		t.Fatal(err)
+	}
+	w = 50
+	if _, err := s.Checkin(id, past, &w, ""); err == nil {
+		t.Error("past check-in with a reading accepted")
+	}
+	if m2, _ := s.Get("metrics", pm["id"].(int64)); m2["value"] != 66.0 {
+		t.Errorf("refused check-in changed the metric: %v", m2["value"])
 	}
 	if _, err := s.Create("habits", Record{"name": "量血压", "metric_type": "血压"}); err == nil {
 		t.Error("血压 needs two values and should not be a habit metric")
@@ -343,9 +398,7 @@ func TestHabitReminders(t *testing.T) {
 	}
 
 	// checked in today: tonight's reminder goes, tomorrow's stays
-	if _, err := s.Checkin(sleep["id"].(int64), "2026-10-19", nil, ""); err != nil {
-		t.Fatal(err)
-	}
+	pastCheckin(t, s, sleep["id"].(int64), "2026-10-19", 0)
 	rs, _ = s.Reminders(now, 3)
 	if len(rs) != 4 || rs[0].ID != want[1] {
 		t.Errorf("after check-in = %v", rs)
