@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { ClipboardPaste, Search, TestTube2 } from 'lucide-react'
 import { api, flagClass, fmtDate, fmtNum } from '../api'
 import { LabImport } from '../components/LabImport'
@@ -13,10 +13,21 @@ export function Reports() {
   // #/reports?tab=trends opens on the trends (from the overview's lab card)
   const [tab, setTab] = useState<'reports' | 'trends'>(() => (hashParam('tab') === 'trends' ? 'trends' : 'reports'))
   const [importing, setImporting] = useState(false)
+  // each tab comes back scrolled where it was left (the page scrolls, and a
+  // short tab would otherwise leave the long one at the top)
+  const scrolls = useRef({ reports: 0, trends: 0 })
+  const switchTo = (next: 'reports' | 'trends') => {
+    if (next === tab) return
+    scrolls.current[tab] = window.scrollY
+    setTab(next)
+  }
+  useLayoutEffect(() => {
+    window.scrollTo(0, scrolls.current[tab])
+  }, [tab])
   const switcher = (
     <div className="seg tab-switch">
-      <button className={tab === 'reports' ? 'on' : ''} onClick={() => setTab('reports')}>{t('报告|tab')}</button>
-      <button className={tab === 'trends' ? 'on' : ''} onClick={() => setTab('trends')}>{t('指标趋势')}</button>
+      <button className={tab === 'reports' ? 'on' : ''} onClick={() => switchTo('reports')}>{t('报告|tab')}</button>
+      <button className={tab === 'trends' ? 'on' : ''} onClick={() => switchTo('trends')}>{t('指标趋势')}</button>
     </div>
   )
   // The switcher is last in the head on both tabs, so it stays put; the
@@ -29,9 +40,11 @@ export function Reports() {
           extra={<button className="btn" onClick={() => setImporting(true)}><ClipboardPaste size={15} />{t('粘贴导入')}</button>} />
       </div>
       <div hidden={tab !== 'trends'}>
-        <div className="page-head">
-          <div className="titles"><h1>{t('指标趋势')}</h1><div className="sub">{t('每个检验项目的历次结果')}</div></div>
-          {switcher}
+        <div className="page-top drag">
+          <div className="page-head">
+            <div className="titles"><h1>{t('指标趋势')}</h1><div className="sub">{t('每个检验项目的历次结果')}</div></div>
+            {switcher}
+          </div>
         </div>
         <Trends />
       </div>

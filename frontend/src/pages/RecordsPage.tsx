@@ -29,6 +29,7 @@ export function RecordsPage({ entityName, extra, end }: { entityName: string; ex
 
   return (
     <>
+      <div className="page-top drag">
       <div className="page-head">
         <div className="titles">
           <h1>{tx(e.label)}</h1>
@@ -38,7 +39,7 @@ export function RecordsPage({ entityName, extra, end }: { entityName: string; ex
         <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} />{t('添加{label}', { label: noun(e) })}</button>
         {end}
       </div>
-      <div className="row" style={{ marginBottom: 16, gap: 12 }}>
+      <div className="row page-tools" style={{ gap: 12 }}>
         <div className="input-search">
           <Search size={15} />
           <input className="input" placeholder={t('搜索{label}', { label: plural(e) })} value={q} onChange={(ev) => setQ(ev.target.value)} />
@@ -50,6 +51,7 @@ export function RecordsPage({ entityName, extra, end }: { entityName: string; ex
             ))}
           </div>
         )}
+      </div>
       </div>
       {error && <div className="error">{error}</div>}
       {!loading && data?.rows.length === 0 ? (

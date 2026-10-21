@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { MoreHorizontal, Search as SearchIcon, Settings as SettingsIcon } from 'lucide-react'
 import { api, type Overview as OV } from './api'
 import { t, tx, type Key } from './i18n'
@@ -48,6 +48,11 @@ export function App() {
     api.overview().then((o) => setCounts(o.counts)).catch(() => {})
   }, [version])
   useEffect(() => setMore(false), [route.page])
+  // another page starts at its top, not where the last one was scrolled to
+  // (opening a record's drawer keeps the page, and its scroll)
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+  }, [route.page])
 
   const page = route.page
   let body

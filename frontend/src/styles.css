@@ -95,6 +95,10 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+/* keep the scrollbar's room whether a page is long enough to scroll or not,
+   so switching between a long and a short page doesn't shift everything */
+html { scrollbar-gutter: stable; }
+@supports not (scrollbar-gutter: stable) { html { overflow-y: scroll; } }
 body {
   margin: 0;
   background: var(--canvas);
@@ -173,6 +177,16 @@ html.mac-window .drag-strip { display: block; position: absolute; left: 0; right
 .main { padding: 32px 40px 72px; max-width: 1160px; margin: 0 auto; }
 html.mac-window .main { padding-top: 40px; }
 
+/* A list page's title, buttons and search stay at the top while the list
+   scrolls under them. The padding and negative margins cover the page's own
+   top and side padding, so nothing shows through around them. Not on a
+   phone, where they would take a quarter of the screen. */
+@media (min-width: 761px) {
+  .page-top { position: sticky; top: 0; z-index: 5; margin: -32px -40px 0; padding: 32px 40px 16px; background: var(--canvas); }
+  html.mac-window .page-top { margin-top: -40px; padding-top: 40px; }
+  .page-top > :last-child { margin-bottom: 0; }
+}
+.page-tools { margin-bottom: 16px; }
 .page-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
 .page-head .titles { margin-right: auto; }
 .page-head .sub { margin-top: 4px; }
