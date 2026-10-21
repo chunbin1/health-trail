@@ -189,7 +189,7 @@ var Entities = []*Entity{
 }
 
 // MetricTypes are the body metrics the app knows a default unit for.
-var MetricTypes = []string{"体重", "血压", "心率", "血糖", "体温", "血氧", "腰围", "睡眠时长", "步数", "其他"}
+var MetricTypes = []string{"体重", "血压", "心率", "血糖", "体温", "血氧", "腰围", "睡眠时长", "步数"}
 
 // HabitMetricTypes are the metrics a habit can log with its check-in: those
 // measured as a single number (not 血压, which needs two).

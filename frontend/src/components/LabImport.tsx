@@ -4,6 +4,7 @@ import { api, flagClass, today, type LabRow, type Rec } from '../api'
 import { t, tr, tx } from '../i18n'
 import { useApp } from '../state'
 import { IconButton, KindIcon } from '../ui'
+import { DateTimeInput } from './DateTimeInput'
 import { Modal } from './Modal'
 
 const FLAGS = ['', '正常', '偏高', '偏低', '异常']
@@ -74,7 +75,7 @@ export function LabImport({ report, onClose, onSaved }: { report?: Rec; onClose:
               </label>
               <label className="field">
                 <span className="lbl">{t('报告日期')}<span className="req">*</span></span>
-                <input className="input" type="date" value={meta.report_date} onChange={(e) => setMeta({ ...meta, report_date: e.target.value })} />
+                <DateTimeInput mode="date" required value={meta.report_date} onChange={(report_date) => setMeta({ ...meta, report_date })} />
               </label>
               <div className="field">
                 <span className="lbl">{t('类型')}</span>

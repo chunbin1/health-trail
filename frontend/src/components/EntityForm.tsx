@@ -15,7 +15,7 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
   onSaved: (r: Rec) => void
   onCancel: () => void
 }) {
-  const { changed } = useApp()
+  const { changed, schema } = useApp()
   const [values, setValues] = useState<Record<string, any>>(() => {
     if (record) return { ...record }
     const v: Record<string, any> = { ...defaults }
@@ -24,14 +24,27 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
       if (f.name === entity.dateKey && f.type === 'date') v[f.name] = today()
       if (f.name === entity.dateKey && f.type === 'datetime') v[f.name] = nowLocal()
       if (f.type === 'enum' && f.name === 'status' && f.options) v[f.name] = f.options[0]
+      // a required select shows its first option, so start with that value
+      if (f.type === 'enum' && f.required && f.options) v[f.name] = f.options[0]
     }
     return v
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: any) => setValues((s) => ({ ...s, [k]: v }))
-  // archiving is done from the record's page, not when creating it
-  const fields = entity.fields.filter((f) => !(f.type === 'bool' && !record))
+  // body data: the second value is only for blood pressure (systolic/diastolic),
+  // and the unit follows the metric (the unit field shows only for a metric without one)
+  const metric = entity.name === 'metrics'
+  const isBP = metric && values.metric_type === '血压'
+  const metricUnit = metric ? schema.metric_units[values.metric_type] || '' : ''
+  const label = (f: Field) =>
+    isBP && f.name === 'value' ? t('收缩压') : isBP && f.name === 'value2' ? t('舒张压') : tx(f.label)
+  const unitOf = (f: Field) => (metric && f.name.startsWith('value') ? tx(metricUnit) : tx(f.unit))
+  const hidden = (f: Field) =>
+    (f.type === 'bool' && !record) || // archiving is done from the record's page, not when creating it
+    (metric && f.name === 'value2' && !isBP) ||
+    (metric && f.name === 'unit' && !!metricUnit)
+  const fields = entity.fields.filter((f) => !hidden(f))
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -44,6 +57,9 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
         if (v !== record[f.name]) body[f.name] = v ?? ''
       } else if (v !== undefined && v !== '') body[f.name] = v
     }
+    // switched away from blood pressure: clear the hidden diastolic value
+    if (metric && !isBP && record?.value2 != null) body.value2 = ''
+    if (metricUnit && (!record || record.unit !== metricUnit)) body.unit = metricUnit
     try {
       const saved = record ? await api.update(entity.name, record.id, body) : await api.create(entity.name, body)
       changed()
@@ -71,10 +87,11 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
             return (
               <label key={f.name} className={'field' + (wide ? ' full' : '')}>
                 <span className="lbl">
-                  {paren(tx(f.label), tx(f.unit))}{f.required && <span className="req">*</span>}
+                  {paren(label(f), unitOf(f))}{f.required && <span className="req">*</span>}
                 </span>
                 <Input field={f} entity={entity} value={values[f.name]} onChange={(v) => set(f.name, v)} />
-                {f.hint && !(entity.name === 'habits' && f.name === 'icon') && <span className="hint">{tx(f.hint)}</span>}
+                {f.hint && !(entity.name === 'habits' && f.name === 'icon') && !(metric && f.name.startsWith('value')) &&
+                  <span className="hint">{tx(f.hint)}</span>}
               </label>
             )
           })}
@@ -100,7 +117,7 @@ function Input({ field: f, entity, value, onChange }: { field: Field; entity: En
     case 'real':
       return <input className="input num" inputMode="decimal" value={v} onChange={(e) => onChange(e.target.value)} />
     case 'date':
-      return <input className="input" type="date" value={v} onChange={(e) => onChange(e.target.value)} />
+      return <DateTimeInput mode="date" value={v} onChange={onChange} required={f.required} />
     case 'datetime':
       return (
         <DateTimeInput value={v} onChange={onChange} required={f.required} />
