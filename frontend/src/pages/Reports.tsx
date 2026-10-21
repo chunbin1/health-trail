@@ -14,24 +14,27 @@ export function Reports() {
   const [tab, setTab] = useState<'reports' | 'trends'>(() => (hashParam('tab') === 'trends' ? 'trends' : 'reports'))
   const [importing, setImporting] = useState(false)
   const switcher = (
-    <div className="seg">
+    <div className="seg tab-switch">
       <button className={tab === 'reports' ? 'on' : ''} onClick={() => setTab('reports')}>{t('报告|tab')}</button>
       <button className={tab === 'trends' ? 'on' : ''} onClick={() => setTab('trends')}>{t('指标趋势')}</button>
     </div>
   )
+  // The switcher is last in the head on both tabs, so it stays put; the
+  // reports' own buttons sit to its left. Both tabs stay mounted, so coming
+  // back keeps the picked item, the search and the scroll.
   return (
     <>
-      {tab === 'reports' ? (
-        <RecordsPage entityName="reports" extra={<>{switcher}<button className="btn" onClick={() => setImporting(true)}><ClipboardPaste size={15} />{t('粘贴导入')}</button></>} />
-      ) : (
-        <>
-          <div className="page-head">
-            <div className="titles"><h1>{t('指标趋势')}</h1><div className="sub">{t('每个检验项目的历次结果')}</div></div>
-            {switcher}
-          </div>
-          <Trends />
-        </>
-      )}
+      <div hidden={tab !== 'reports'}>
+        <RecordsPage entityName="reports" end={switcher}
+          extra={<button className="btn" onClick={() => setImporting(true)}><ClipboardPaste size={15} />{t('粘贴导入')}</button>} />
+      </div>
+      <div hidden={tab !== 'trends'}>
+        <div className="page-head">
+          <div className="titles"><h1>{t('指标趋势')}</h1><div className="sub">{t('每个检验项目的历次结果')}</div></div>
+          {switcher}
+        </div>
+        <Trends />
+      </div>
       {importing && <LabImport onClose={() => setImporting(false)} onSaved={(id) => { setImporting(false); openRecord('reports', id) }} />}
     </>
   )

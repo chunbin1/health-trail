@@ -15,8 +15,10 @@ const SUBTITLE: Record<string, Key> = {
   reports: '体检、化验、影像和病理报告',
 }
 
-// A list page for any record type: search, filter by status, add.
-export function RecordsPage({ entityName, extra }: { entityName: string; extra?: ReactNode }) {
+// A list page for any record type: search, filter by status, add. `extra`
+// goes before the add button; `end` after it, at the head's right edge (a tab
+// switcher that must not move when the buttons beside it change).
+export function RecordsPage({ entityName, extra, end }: { entityName: string; extra?: ReactNode; end?: ReactNode }) {
   const { entity, toast } = useApp()
   const e = entity(entityName)
   const [q, setQ] = useState('')
@@ -34,6 +36,7 @@ export function RecordsPage({ entityName, extra }: { entityName: string; extra?:
         </div>
         {extra}
         <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} />{t('添加{label}', { label: noun(e) })}</button>
+        {end}
       </div>
       <div className="row" style={{ marginBottom: 16, gap: 12 }}>
         <div className="input-search">

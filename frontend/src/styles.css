@@ -562,6 +562,10 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 
 /* ============ phone tightening ============ */
 @media (max-width: 560px) {
+  /* a tab switcher keeps one place on a phone whatever buttons the tab has:
+     the title on its own line, then the switcher first on the next */
+  .page-head:has(> .tab-switch) > .titles { flex-basis: 100%; order: -2; }
+  .page-head > .tab-switch { order: -1; }
   .card { padding: 16px; }
   .card .row-item { margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
   .card.flush .row-item { margin: 0; }
