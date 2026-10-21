@@ -11,6 +11,7 @@ export interface Field {
   type: FieldType
   required?: boolean
   options?: string[]
+  custom?: string // enum: the names of this entity's rows are choices too
   ref?: string
   unit?: string
   hint?: string

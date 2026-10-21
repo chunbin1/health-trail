@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, type Entity, type Rec, type Schema } from './api'
 import { t, tx, type Lang } from './i18n'
 
@@ -97,6 +97,23 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | u
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, version, tick])
   return { data, error, loading, reload: () => setTick((t) => t + 1) }
+}
+
+// The body metrics to choose from: the built-in ones, then the ones the user
+// added (metric_kinds), with each one's unit. `loaded` is false until the
+// added ones have arrived.
+export function useMetricKinds() {
+  const { schema } = useApp()
+  const { data } = useLoad(() => api.list('metric_kinds', { limit: 1000, asc: true }), [])
+  return useMemo(() => {
+    const kinds = data?.rows || []
+    return {
+      loaded: !!data,
+      kinds,
+      types: [...schema.metric_types, ...kinds.map((k) => k.name as string)],
+      units: { ...schema.metric_units, ...Object.fromEntries(kinds.map((k) => [k.name, k.unit || ''])) } as Record<string, string>,
+    }
+  }, [schema, data])
 }
 
 // Records a ref field may point at, for selects and for showing names.

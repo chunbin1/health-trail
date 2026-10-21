@@ -21,6 +21,11 @@ var English = map[string]string{
 	"打卡项":  "Check-in items",
 	"打卡记录": "Check-ins",
 
+	// custom metrics
+	"自定义指标":               "Custom metrics",
+	"如：尿酸、体脂率、视力":         "e.g. Uric acid, Body fat, Vision",
+	"如：μmol/L、%；没有单位可以不填": "e.g. μmol/L, %; leave blank if it has none",
+
 	// shared fields
 	"名称":     "Name",
 	"类别":     "Category",
@@ -170,14 +175,15 @@ var English = map[string]string{
 // EnglishNouns names one record of each entity in English, for "Add a …",
 // "Delete this …" and the like.
 var EnglishNouns = map[string]string{
-	"conditions":  "health issue",
-	"symptoms":    "symptom",
-	"visits":      "visit",
-	"medications": "medication",
-	"doses":       "dose",
-	"reports":     "report",
-	"lab_results": "lab result",
-	"metrics":     "body metric",
-	"habits":      "check-in item",
-	"checkins":    "check-in",
+	"conditions":   "health issue",
+	"symptoms":     "symptom",
+	"visits":       "visit",
+	"medications":  "medication",
+	"doses":        "dose",
+	"reports":      "report",
+	"lab_results":  "lab result",
+	"metrics":      "body metric",
+	"metric_kinds": "custom metric",
+	"habits":       "check-in item",
+	"checkins":     "check-in",
 }

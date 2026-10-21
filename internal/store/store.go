@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -173,7 +174,7 @@ func (s *Store) clean(e *Entity, in Record) (Record, error) {
 			}
 			return nil, invalid("%s 没有字段 %q，可用字段：%s", e.Label, k, strings.Join(names, ", "))
 		}
-		cv, err := convert(*f, v)
+		cv, err := s.convert(*f, v)
 		if err != nil {
 			return nil, invalid("%s「%s」：%v", e.Label, f.Label, err)
 		}
@@ -185,6 +186,59 @@ func (s *Store) clean(e *Entity, in Record) (Record, error) {
 		out[k] = cv
 	}
 	return out, nil
+}
+
+// convert is convert, plus the user's own values for an enum open to them.
+func (s *Store) convert(f Field, v any) (any, error) {
+	cv, err := convert(f, v)
+	if str, ok := v.(string); ok && err != nil && f.Custom != "" {
+		return s.customOption(f, str)
+	}
+	return cv, err
+}
+
+// customOption accepts the name of a row of f.Custom for an enum that is
+// open to the user's own values (a metric they added).
+func (s *Store) customOption(f Field, v string) (any, error) {
+	names, err := s.customNames(f.Custom)
+	if err != nil {
+		return nil, err
+	}
+	if slices.Contains(names, v) {
+		return v, nil
+	}
+	ce := EntityByName(f.Custom)
+	have := "还没有"
+	if len(names) > 0 {
+		have = strings.Join(names, "、")
+	}
+	return nil, fmt.Errorf("%q 不在可选值中：%s。%s（%s）：%s。要用新的，先新建一条 %s（填名称和单位）",
+		v, strings.Join(f.Options, "、"), ce.Label, ce.Name, have, ce.Name)
+}
+
+func (s *Store) customNames(entity string) ([]string, error) {
+	rows, err := s.query("SELECT name FROM " + entity + " ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(rows))
+	for i, r := range rows {
+		names[i], _ = r["name"].(string)
+	}
+	return names, nil
+}
+
+// metricUnit is the unit a metric is measured in: the app's default for a
+// built-in metric, or the one the user gave a metric they added.
+func (s *Store) metricUnit(metric string) any {
+	if u := MetricUnits[metric]; u != "" {
+		return u
+	}
+	var u sql.NullString
+	if s.DB.QueryRow("SELECT unit FROM metric_kinds WHERE name = ?", metric).Scan(&u) == nil && u.Valid && u.String != "" {
+		return u.String
+	}
+	return nil
 }
 
 func (s *Store) mustExist(table string, id int64) error {
@@ -219,28 +273,28 @@ func editable(e *Entity, r Record) error {
 }
 
 // prepare fills in what can be derived from the other fields.
-func prepare(e *Entity, r Record) {
+func (s *Store) prepare(e *Entity, r Record) {
 	switch e.Name {
 	case "lab_results":
 		prepareLab(r)
-	case "habits":
-		// a habit that logs a metric asks for it in the metric's unit
-		if r["unit"] == nil {
-			if t, ok := r["metric_type"].(string); ok && MetricUnits[t] != "" {
-				r["unit"] = MetricUnits[t]
-			}
-		}
 	case "doses":
 		if r["amount"] == nil {
 			r["amount"] = 1.0
 		}
-	case "metrics":
-		if r["unit"] == nil {
-			if t, ok := r["metric_type"].(string); ok && MetricUnits[t] != "" {
-				r["unit"] = MetricUnits[t]
-			}
+	case "metrics", "habits":
+		// a metric is in its unit; a habit that logs one asks for it in it
+		if t, ok := r["metric_type"].(string); ok && r["unit"] == nil {
+			r["unit"] = s.metricUnit(t)
 		}
 	}
+}
+
+// check refuses what the fields allow but the app doesn't.
+func check(e *Entity, r Record) error {
+	if name, _ := r["name"].(string); e.Name == "metric_kinds" && slices.Contains(MetricTypes, name) {
+		return invalid("「%s」已经是内置的指标，直接选它就行，不用新建", name)
+	}
+	return nil
 }
 
 func (s *Store) build(e *Entity, in Record) (Record, error) {
@@ -248,8 +302,11 @@ func (s *Store) build(e *Entity, in Record) (Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	prepare(e, r)
+	s.prepare(e, r)
 	if err := required(e, r); err != nil {
+		return nil, err
+	}
+	if err := check(e, r); err != nil {
 		return nil, err
 	}
 	ts := now()
@@ -382,8 +439,17 @@ func (s *Store) Update(entityName string, id int64, patch Record) (Record, error
 			}
 		}
 	}
-	prepare(e, merged)
+	if _, ok := p["metric_type"]; ok && p["metric_type"] != cur["metric_type"] {
+		// another metric is in its own unit, unless the patch gives one
+		if _, ok := p["unit"]; !ok {
+			merged["unit"] = nil
+		}
+	}
+	s.prepare(e, merged)
 	if err := required(e, merged); err != nil {
+		return nil, err
+	}
+	if err := check(e, merged); err != nil {
 		return nil, err
 	}
 	if err := editable(e, merged); err != nil {
@@ -398,10 +464,65 @@ func (s *Store) Update(entityName string, id int64, patch Record) (Record, error
 		vals = append(vals, merged[k])
 	}
 	vals = append(vals, id)
-	if _, err := s.DB.Exec(fmt.Sprintf("UPDATE %s SET %s WHERE id = ?", e.Name, strings.Join(sets, ", ")), vals...); err != nil {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(fmt.Sprintf("UPDATE %s SET %s WHERE id = ?", e.Name, strings.Join(sets, ", ")), vals...); err != nil {
 		return nil, dbErr(e, err)
 	}
+	if e.Name == "metric_kinds" {
+		if err := renameMetric(tx, cur, merged); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return s.Get(e.Name, id)
+}
+
+// renameMetric carries a changed name or unit of a metric the user added
+// over to the readings and habits that use it. A unit is only replaced
+// where it was the old one, not where a reading gave its own.
+func renameMetric(tx *sql.Tx, cur, next Record) error {
+	for _, t := range []string{"metrics", "habits"} {
+		if _, err := tx.Exec("UPDATE "+t+" SET unit = ? WHERE metric_type = ? AND unit IS ?",
+			next["unit"], cur["name"], cur["unit"]); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("UPDATE "+t+" SET metric_type = ? WHERE metric_type = ?", next["name"], cur["name"]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// inUse refuses to delete a metric the user added while records use it:
+// they would be left with a metric that is no longer one of the choices.
+func (s *Store) inUse(e *Entity, id int64) error {
+	if e.Name != "metric_kinds" {
+		return nil
+	}
+	cur, err := s.Get(e.Name, id)
+	if err != nil {
+		return err
+	}
+	var metrics, habits int
+	s.DB.QueryRow("SELECT COUNT(*) FROM metrics WHERE metric_type = ?", cur["name"]).Scan(&metrics)
+	s.DB.QueryRow("SELECT COUNT(*) FROM habits WHERE metric_type = ?", cur["name"]).Scan(&habits)
+	if metrics+habits == 0 {
+		return nil
+	}
+	var used []string
+	if metrics > 0 {
+		used = append(used, fmt.Sprintf(" %d 条身体数据", metrics))
+	}
+	if habits > 0 {
+		used = append(used, fmt.Sprintf(" %d 个打卡项", habits))
+	}
+	return invalid("「%s」还有%s在用，先删掉它们或改成别的指标，再删除这个指标", cur["name"], strings.Join(used, "和"))
 }
 
 func (s *Store) Delete(entityName string, id int64) error {
@@ -417,6 +538,9 @@ func (s *Store) Delete(entityName string, id int64) error {
 		if err := editable(e, cur); err != nil {
 			return err
 		}
+	}
+	if err := s.inUse(e, id); err != nil {
+		return err
 	}
 	// attachments only hang off records a person opens (reports, visits…),
 	// not off the rows a cascade removes, so the record's own are enough
@@ -513,7 +637,7 @@ func (s *Store) List(entityName string, q ListQuery) ([]Record, int, error) {
 		if f == nil {
 			return nil, 0, invalid("%s 没有字段 %q", e.Label, k)
 		}
-		cv, err := convert(*f, v)
+		cv, err := s.convert(*f, v)
 		if err != nil {
 			return nil, 0, invalid("%s：%v", f.Label, err)
 		}

@@ -20,6 +20,7 @@ type Overview struct {
 	RecentSymptoms   []Record                  `json:"recent_symptoms"`
 	AbnormalLabs     []Record                  `json:"abnormal_labs_latest"`
 	LatestMetrics    []Record                  `json:"latest_metrics"`
+	MetricKinds      []Record                  `json:"metric_kinds"` // metrics the user added, with their units
 	TodayCheckins    []HabitDay                `json:"today_checkins"`
 	Counts           map[string]int            `json:"counts"`
 }
@@ -57,6 +58,7 @@ func (s *Store) Overview() (*Overview, error) {
 		JOIN (SELECT metric_type, MAX(measured_at || printf('%010d', id)) AS k FROM metrics GROUP BY metric_type) m
 		  ON x.metric_type = m.metric_type AND x.measured_at || printf('%010d', x.id) = m.k
 		ORDER BY x.metric_type`)
+	q(&o.MetricKinds, `SELECT * FROM metric_kinds ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}

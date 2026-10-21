@@ -1,23 +1,39 @@
-import { useState, type FormEvent } from 'react'
-import { Plus } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Pencil, Plus } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, nowLocal, today } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
+import { EntityForm } from '../components/EntityForm'
 import { LineChart } from '../components/LineChart'
-import { paren, t, tx } from '../i18n'
-import { hashParam, openRecord, useApp, useLoad } from '../state'
-import { Empty } from '../ui'
+import { Modal } from '../components/Modal'
+import { noun, paren, t, tx } from '../i18n'
+import { hashParam, openRecord, useApp, useLoad, useMetricKinds } from '../state'
+import { Empty, IconButton, KindIcon } from '../ui'
 
 const RANGES = [30, 90, 365, 0]
 const rangeLabel = (d: number) => (d === 0 ? t('全部') : d === 365 ? t('1 年') : t('{n} 天', { n: d }))
 
 export function Metrics() {
-  const { schema, changed, toast } = useApp()
+  const { entity, changed, toast } = useApp()
+  const mk = useMetricKinds()
   const [type, setType] = useState(hashParam('type') || '体重')
   const [days, setDays] = useState<number>(90)
   const from = days ? addDays(today(), -days + 1) : undefined
   const { data: rows } = useLoad(() => api.metricSeries(type, from), [type, days])
-  const unit = tx(schema.metric_units[type]) || ''
+  const unit = tx(mk.units[type]) || ''
   const isBP = type === '血压'
+  const kind = mk.kinds.find((k) => k.name === type)
+  const kindId = useRef<number>()
+  if (kind) kindId.current = kind.id
+  const [addingKind, setAddingKind] = useState(false)
+  // the metric was renamed (follow it) or deleted (show the first one) from
+  // its drawer. Only when the list reloads: a metric just added is chosen
+  // before it's in it.
+  useEffect(() => {
+    if (!mk.loaded || mk.types.includes(type)) return
+    const renamed = mk.kinds.find((k) => k.id === kindId.current)
+    setType(renamed ? renamed.name : mk.types[0])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mk])
 
   const [v, setV] = useState('')
   const [v2, setV2] = useState('')
@@ -49,14 +65,17 @@ export function Metrics() {
         <div className="titles"><h1>{t('身体数据')}</h1><div className="sub">{t('体重、血压、血糖等日常测量')}</div></div>
       </div>
       <div className="pills" style={{ marginBottom: 18 }}>
-        {schema.metric_types.map((m) => (
+        {mk.types.map((m) => (
           <button key={m} className={'pill' + (m === type ? ' on' : '')} onClick={() => setType(m)}>{tx(m)}</button>
         ))}
+        <button className="pill" onClick={() => setAddingKind(true)}><Plus size={13} />{t('新指标')}</button>
       </div>
       <div className="stack">
         <section className="card">
           <div className="card-head">
-            <h2>{tx(type)}</h2>
+            <h2>{tx(type)}{kind && (
+              <IconButton small label={t('修改这个指标')} onClick={() => openRecord('metric_kinds', kind.id)}><Pencil size={14} /></IconButton>
+            )}</h2>
             <div className="seg">
               {RANGES.map((d) => <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{rangeLabel(d)}</button>)}
             </div>
@@ -116,6 +135,13 @@ export function Metrics() {
           </section>
         ) : rows && <div className="card"><Empty compact>{t('这段时间没有{type}的记录', { type: tx(type) })}</Empty></div>}
       </div>
+
+      {addingKind && (
+        <Modal title={t('添加{label}', { label: noun(entity('metric_kinds')) })} icon={<KindIcon kind="metric_kinds" />} onClose={() => setAddingKind(false)}>
+          <EntityForm entity={entity('metric_kinds')} onCancel={() => setAddingKind(false)}
+            onSaved={(r) => { setAddingKind(false); setType(r.name); toast(t('已添加')) }} />
+        </Modal>
+      )}
     </>
   )
 }

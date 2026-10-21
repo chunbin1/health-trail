@@ -25,6 +25,7 @@ type Field struct {
 	Type     FieldType `json:"type"`
 	Required bool      `json:"required,omitempty"`
 	Options  []string  `json:"options,omitempty"` // Enum values
+	Custom   string    `json:"custom,omitempty"`  // Enum: also accepts the name of a row in this entity
 	Ref      string    `json:"ref,omitempty"`     // Ref target entity
 	Cascade  bool      `json:"-"`                 // Ref: delete this row with its target (else set null)
 	Unit     string    `json:"unit,omitempty"`
@@ -33,11 +34,11 @@ type Field struct {
 }
 
 type Entity struct {
-	Name     string  `json:"name"`
-	Label    string  `json:"label"`
-	DateKey  string  `json:"dateKey"`  // field records are ordered and filtered by
-	TitleKey string  `json:"titleKey"` // field that names a record
-	Fields   []Field `json:"fields"`
+	Name     string   `json:"name"`
+	Label    string   `json:"label"`
+	DateKey  string   `json:"dateKey"`  // field records are ordered and filtered by
+	TitleKey string   `json:"titleKey"` // field that names a record
+	Fields   []Field  `json:"fields"`
 	Unique   []string `json:"-"`
 }
 
@@ -153,7 +154,7 @@ var Entities = []*Entity{
 		Name: "metrics", Label: "身体数据", DateKey: "measured_at", TitleKey: "metric_type",
 		Fields: []Field{
 			{Name: "measured_at", Label: "测量时间", Type: DateTime, Required: true, List: true},
-			{Name: "metric_type", Label: "指标", Type: Enum, Required: true, List: true, Options: MetricTypes},
+			{Name: "metric_type", Label: "指标", Type: Enum, Required: true, List: true, Options: MetricTypes, Custom: "metric_kinds"},
 			{Name: "value", Label: "数值", Type: Real, Required: true, List: true, Hint: "血压填收缩压"},
 			{Name: "value2", Label: "数值 2", Type: Real, List: true, Hint: "血压填舒张压"},
 			{Name: "unit", Label: "单位", Type: Text, List: true},
@@ -162,13 +163,23 @@ var Entities = []*Entity{
 		},
 	},
 	{
+		// metrics the user adds beyond MetricTypes, each with its unit
+		Name: "metric_kinds", Label: "自定义指标", DateKey: "", TitleKey: "name",
+		Fields: []Field{
+			{Name: "name", Label: "名称", Type: Text, Required: true, List: true, Hint: "如：尿酸、体脂率、视力"},
+			{Name: "unit", Label: "单位", Type: Text, List: true, Hint: "如：μmol/L、%；没有单位可以不填"},
+			{Name: "notes", Label: "备注", Type: Text},
+		},
+		Unique: []string{"name"},
+	},
+	{
 		Name: "habits", Label: "打卡项", DateKey: "", TitleKey: "name",
 		Fields: []Field{
 			{Name: "name", Label: "名称", Type: Text, Required: true, List: true, Hint: "如：吃药、运动、早睡"},
 			{Name: "icon", Label: "图标", Type: Text, List: true, Hint: "一个 emoji，如 💊"},
 			{Name: "unit", Label: "单位", Type: Text, List: true, Hint: "需要记数量时填，如：分钟、杯"},
 			{Name: "target", Label: "每日目标", Type: Real, List: true},
-			{Name: "metric_type", Label: "同时记入身体数据", Type: Enum, Options: HabitMetricTypes, Hint: "如 晨起称体重 选 体重：打卡时填数值，同时记一条身体数据"},
+			{Name: "metric_type", Label: "同时记入身体数据", Type: Enum, Options: HabitMetricTypes, Custom: "metric_kinds", Hint: "如 晨起称体重 选 体重：打卡时填数值，同时记一条身体数据"},
 			{Name: "remind_at", Label: "提醒时间", Type: Time, List: true, Hint: "如 23:00：每天到这个时间还没打卡，桌面 App 会发系统通知"},
 			{Name: "archived", Label: "已归档", Type: Bool},
 			{Name: "notes", Label: "备注", Type: Text},

@@ -18,6 +18,7 @@ export const KIND: Record<string, { icon: LucideIcon; color: string }> = {
   reports: { icon: FileText, color: 'var(--c-reports)' },
   lab_results: { icon: TestTube2, color: 'var(--c-lab_results)' },
   metrics: { icon: LineIcon, color: 'var(--c-metrics)' },
+  metric_kinds: { icon: LineIcon, color: 'var(--c-metrics)' },
   connect: { icon: Plug, color: 'var(--c-connect)' },
   search: { icon: Search, color: 'var(--ink-2)' },
   stethoscope: { icon: Stethoscope, color: 'var(--accent)' },

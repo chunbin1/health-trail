@@ -1,9 +1,13 @@
-import { useState, type FormEvent } from 'react'
+import { Fragment, useState, type FormEvent } from 'react'
 import { api, nowLocal, today, type Entity, type Field, type Rec } from '../api'
 import { paren, t, tx } from '../i18n'
-import { recTitle, useApp, useRefOptions } from '../state'
+import { recTitle, useApp, useMetricKinds, useRefOptions } from '../state'
 import { EmojiPicker, Switch } from '../ui'
 import { DateTimeInput } from './DateTimeInput'
+
+// The choice in a metric select that adds a new metric (metric_kinds) as the
+// record is saved.
+const NEW = '__new__'
 
 // A form for any record type, drawn from the schema. `defaults` pre-fills
 // a new record (e.g. the condition a symptom belongs to). Rendered inside a
@@ -15,7 +19,9 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
   onSaved: (r: Rec) => void
   onCancel: () => void
 }) {
-  const { changed, schema } = useApp()
+  const { changed } = useApp()
+  const mk = useMetricKinds()
+  const [kind, setKind] = useState({ name: '', unit: '' })
   const [values, setValues] = useState<Record<string, any>>(() => {
     if (record) return { ...record }
     const v: Record<string, any> = { ...defaults }
@@ -33,17 +39,18 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: any) => setValues((s) => ({ ...s, [k]: v }))
   // body data: the second value is only for blood pressure (systolic/diastolic),
-  // and the unit follows the metric (the unit field shows only for a metric without one)
+  // and the unit follows the metric, so it isn't typed in
   const metric = entity.name === 'metrics'
+  const isNew = values.metric_type === NEW
   const isBP = metric && values.metric_type === '血压'
-  const metricUnit = metric ? schema.metric_units[values.metric_type] || '' : ''
+  const metricUnit = !metric ? '' : isNew ? kind.unit.trim() : mk.units[values.metric_type] || ''
   const label = (f: Field) =>
     isBP && f.name === 'value' ? t('收缩压') : isBP && f.name === 'value2' ? t('舒张压') : tx(f.label)
   const unitOf = (f: Field) => (metric && f.name.startsWith('value') ? tx(metricUnit) : tx(f.unit))
   const hidden = (f: Field) =>
     (f.type === 'bool' && !record) || // archiving is done from the record's page, not when creating it
     (metric && f.name === 'value2' && !isBP) ||
-    (metric && f.name === 'unit' && !!metricUnit)
+    (metric && f.name === 'unit')
   const fields = entity.fields.filter((f) => !hidden(f))
 
   async function submit(e: FormEvent) {
@@ -59,12 +66,18 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
     }
     // switched away from blood pressure: clear the hidden diastolic value
     if (metric && !isBP && record?.value2 != null) body.value2 = ''
-    if (metricUnit && (!record || record.unit !== metricUnit)) body.unit = metricUnit
+    let added: Rec | undefined
     try {
+      if (isNew) {
+        added = await api.create('metric_kinds', { name: kind.name.trim(), unit: kind.unit.trim() })
+        body.metric_type = added.name
+      }
       const saved = record ? await api.update(entity.name, record.id, body) : await api.create(entity.name, body)
       changed()
       onSaved(saved)
     } catch (err: any) {
+      // the new metric goes with the record it was made for
+      if (added) await api.remove('metric_kinds', added.id).catch(() => {})
       setError(err.message)
     } finally {
       setSaving(false)
@@ -84,15 +97,41 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
                 </div>
               )
             const wide = f.type === 'longtext' || (entity.name === 'habits' && f.name === 'icon')
+            const v = values[f.name]
             return (
-              <label key={f.name} className={'field' + (wide ? ' full' : '')}>
-                <span className="lbl">
-                  {paren(label(f), unitOf(f))}{f.required && <span className="req">*</span>}
-                </span>
-                <Input field={f} entity={entity} value={values[f.name]} onChange={(v) => set(f.name, v)} />
-                {f.hint && !(entity.name === 'habits' && f.name === 'icon') && !(metric && f.name.startsWith('value')) &&
-                  <span className="hint">{tx(f.hint)}</span>}
-              </label>
+              <Fragment key={f.name}>
+                <label className={'field' + (wide ? ' full' : '')}>
+                  <span className="lbl">
+                    {paren(label(f), unitOf(f))}{f.required && <span className="req">*</span>}
+                  </span>
+                  {f.custom ? (
+                    <select className="input" value={v ?? ''} onChange={(e) => set(f.name, e.target.value)}>
+                      {!f.required && <option value="">{t('未选择')}</option>}
+                      {[...f.options!, ...mk.kinds.map((k) => k.name as string)].concat(
+                        // a value no longer among the choices still shows as itself
+                        v && v !== NEW && mk.loaded && !f.options!.includes(v) && !mk.kinds.some((k) => k.name === v) ? [v] : [],
+                      ).map((o) => <option key={o} value={o}>{tx(o)}</option>)}
+                      <option value={NEW}>{t('＋ 新指标…')}</option>
+                    </select>
+                  ) : (
+                    <Input field={f} entity={entity} value={v} onChange={(v) => set(f.name, v)} />
+                  )}
+                  {f.hint && !(entity.name === 'habits' && f.name === 'icon') && !(metric && f.name.startsWith('value')) &&
+                    <span className="hint">{tx(f.hint)}</span>}
+                </label>
+                {f.custom && v === NEW && (
+                  <div className="field full">
+                    <span className="lbl">{t('新指标')}<span className="req">*</span></span>
+                    <div className="new-kind">
+                      <input className="input" autoFocus required aria-label={t('新指标的名称')} placeholder={t('名称，如：尿酸')}
+                        value={kind.name} onChange={(e) => setKind({ ...kind, name: e.target.value })} />
+                      <input className="input" aria-label={t('单位')} placeholder={t('单位')}
+                        value={kind.unit} onChange={(e) => setKind({ ...kind, unit: e.target.value })} />
+                    </div>
+                    <span className="hint">{t('以后记这个指标会自动带上单位，也可以在身体数据页修改')}</span>
+                  </div>
+                )}
+              </Fragment>
             )
           })}
         </div>

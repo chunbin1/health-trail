@@ -348,6 +348,73 @@ func TestCheckinLogsMetric(t *testing.T) {
 	}
 }
 
+func TestCustomMetric(t *testing.T) {
+	s := open(t)
+	if _, err := s.Create("metrics", Record{"measured_at": "today", "metric_type": "尿酸", "value": 420}); err == nil ||
+		!strings.Contains(err.Error(), "metric_kinds") {
+		t.Fatalf("unknown metric: err = %v, want one pointing to metric_kinds", err)
+	}
+	if _, err := s.Create("metric_kinds", Record{"name": "体重", "unit": "斤"}); err == nil {
+		t.Error("a custom metric named like a built-in one was accepted")
+	}
+	k, err := s.Create("metric_kinds", Record{"name": "尿酸", "unit": "μmol/L"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kid := k["id"].(int64)
+	m, err := s.Create("metrics", Record{"measured_at": "today", "metric_type": "尿酸", "value": 420})
+	if err != nil || m["unit"] != "μmol/L" {
+		t.Fatalf("custom metric = %v %v, want its unit", m, err)
+	}
+	mid := m["id"].(int64)
+	if pts, err := s.MetricSeries("尿酸", "", ""); err != nil || len(pts) != 1 {
+		t.Fatalf("series of a custom metric = %v %v", pts, err)
+	}
+	// a reading that gave its own unit keeps it when the metric's changes
+	own, _ := s.Create("metrics", Record{"measured_at": "today", "metric_type": "尿酸", "value": 7, "unit": "mg/dL"})
+	h, err := s.Create("habits", Record{"name": "测尿酸", "metric_type": "尿酸"})
+	if err != nil || h["unit"] != "μmol/L" {
+		t.Fatalf("habit = %v %v", h, err)
+	}
+
+	// another metric is in its own unit
+	if m, err = s.Update("metrics", mid, Record{"metric_type": "体重"}); err != nil || m["unit"] != "kg" {
+		t.Fatalf("switched to 体重 = %v %v", m, err)
+	}
+	if m, err = s.Update("metrics", mid, Record{"metric_type": "尿酸"}); err != nil || m["unit"] != "μmol/L" {
+		t.Fatalf("switched back = %v %v", m, err)
+	}
+
+	// renaming or re-uniting it carries over to what uses it
+	if _, err := s.Update("metric_kinds", kid, Record{"name": "血尿酸", "unit": "umol/L"}); err != nil {
+		t.Fatal(err)
+	}
+	if m, _ = s.Get("metrics", mid); m["metric_type"] != "血尿酸" || m["unit"] != "umol/L" {
+		t.Errorf("reading after rename = %v %v", m["metric_type"], m["unit"])
+	}
+	if o, _ := s.Get("metrics", own["id"].(int64)); o["metric_type"] != "血尿酸" || o["unit"] != "mg/dL" {
+		t.Errorf("reading with its own unit after rename = %v %v", o["metric_type"], o["unit"])
+	}
+	if h, _ = s.Get("habits", h["id"].(int64)); h["metric_type"] != "血尿酸" || h["unit"] != "umol/L" {
+		t.Errorf("habit after rename = %v %v", h["metric_type"], h["unit"])
+	}
+
+	// not deleted while in use
+	if err := s.Delete("metric_kinds", kid); err == nil || !strings.Contains(err.Error(), "还有 2 条身体数据和 1 个打卡项在用") {
+		t.Fatalf("delete in use: err = %v", err)
+	}
+	s.Delete("metrics", mid)
+	s.Delete("metrics", own["id"].(int64))
+	s.Delete("habits", h["id"].(int64))
+	if err := s.Delete("metric_kinds", kid); err != nil {
+		t.Fatalf("delete unused: %v", err)
+	}
+	o, err := s.Overview()
+	if err != nil || len(o.MetricKinds) != 0 || o.Counts["metric_kinds"] != 0 {
+		t.Errorf("overview metric_kinds = %v %v", o.MetricKinds, err)
+	}
+}
+
 func TestHabitReminders(t *testing.T) {
 	s := open(t)
 	for in, want := range map[string]string{"23:00": "23:00", "23：00": "23:00", " 9:5 ": "09:05", "23": "23:00", "23点": "23:00", "23点30分": "23:30", "11点半": "11:30"} {

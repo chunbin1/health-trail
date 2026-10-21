@@ -36,7 +36,7 @@ func New(st *store.Store, version string) *mcp.Server {
 	yes := true
 
 	mcp.AddTool(s, &mcp.Tool{Name: "health_overview", Annotations: ro,
-		Description: "健康现状总览：进行中的健康问题、在用药物、最近就诊和待复诊、近 30 天症状、各指标最近一次结果中的异常项、各身体数据最新值、今天的打卡情况、各类记录数量。回答任何健康问题前先调用。"},
+		Description: "健康现状总览：进行中的健康问题、在用药物、最近就诊和待复诊、近 30 天症状、各指标最近一次结果中的异常项、各身体数据最新值、用户自定义的身体数据指标、今天的打卡情况、各类记录数量。回答任何健康问题前先调用。"},
 		t.overview)
 	mcp.AddTool(s, &mcp.Tool{Name: "search_records", Annotations: ro,
 		Description: "在所有记录（健康问题、症状、就诊、用药、报告、检验指标、身体数据、打卡项）中搜索文字。"},
@@ -71,7 +71,7 @@ func New(st *store.Store, version string) *mcp.Server {
 		Description: "某个检验项目的历次结果（从旧到新），含参考范围和标记。项目名先精确匹配，没有再模糊匹配（如 \"反应蛋白\"、\"白细胞\"）。"},
 		t.labTrend)
 	mcp.AddTool(s, &mcp.Tool{Name: "get_metric_trend", Annotations: ro,
-		Description: "某项身体数据在一段时间内的全部读数（从旧到新）。metric_type 可选：" + strings.Join(store.MetricTypes, "、") + "。血压的 value 是收缩压、value2 是舒张压。"},
+		Description: "某项身体数据在一段时间内的全部读数（从旧到新）。metric_type 可选：" + strings.Join(store.MetricTypes, "、") + "，以及用户自定义的指标（health_overview 的 metric_kinds）。血压的 value 是收缩压、value2 是舒张压。"},
 		t.metricTrend)
 	mcp.AddTool(s, &mcp.Tool{Name: "checkin",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &no, IdempotentHint: true},
@@ -119,6 +119,9 @@ func typesDoc() string {
 				extra = append(extra, f.Ref+" 的 id")
 			case store.Enum:
 				extra = append(extra, strings.Join(f.Options, "/"))
+				if f.Custom != "" {
+					extra = append(extra, "或 "+f.Custom+" 里的名称")
+				}
 			}
 			if len(extra) > 0 {
 				p += "（" + strings.Join(extra, "，") + "）"
@@ -205,7 +208,7 @@ func (t *tools) get(ctx context.Context, _ *mcp.CallToolRequest, in refIn) (*mcp
 }
 
 type addIn struct {
-	Type   string         `json:"type" jsonschema:"记录类型：conditions、symptoms、visits、medications、reports、metrics、habits"`
+	Type   string         `json:"type" jsonschema:"记录类型：conditions、symptoms、visits、medications、reports、metrics、metric_kinds、habits"`
 	Fields map[string]any `json:"fields" jsonschema:"字段名到值"`
 }
 
