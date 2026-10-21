@@ -4,7 +4,7 @@
 
 - **数据只在本机**：一个 SQLite 文件，加上一个附件目录。
 - **Mac 窗口**：Wails v3（系统 WebView）+ React。
-- **手机**：同一 Wi-Fi 或 Tailscale 下用浏览器打开（需要访问令牌），可以「添加到主屏幕」。
+- **手机**：用手机浏览器访问的功能暂时关闭，改好后再开放。
 - **AI**：14 个 MCP 工具，加 5 个分析模板，Claude、Codex 以及其他支持 MCP 的 AI 都能接。截图发给 AI 就能录入化验单，也可以直接问它「我的 CRP 怎么变化的」。
 
 ## 构建
@@ -26,7 +26,6 @@ make test     # 测试
 ```bash
 ./health-vault              # 打开窗口（同时在 127.0.0.1:8721 提供本地服务）
 ./health-vault serve        # 不开窗口，只运行服务（比如放在常开的 Mac mini 上）
-./health-vault serve -lan   # 允许手机访问
 ./health-vault mcp          # MCP stdio 模式，给 Claude、Codex 等 AI 用
 ./health-vault info         # 显示数据目录和连接 AI 的配置
 ```

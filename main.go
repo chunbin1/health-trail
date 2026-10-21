@@ -129,6 +129,9 @@ func newApp(dataDir, port string) *app {
 		log.Fatalf("读取访问令牌失败：%v", err)
 	}
 	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir)}
+	// phone access is hidden until it's reworked: a choice saved earlier no
+	// longer opens the app to the network (serve -lan still does, on purpose)
+	a.settings.LAN = false
 	mcpSrv := mcpserver.New(st, version)
 	a.srv = &server.Server{
 		Store: st,
@@ -164,6 +167,10 @@ func (a *app) handler() http.Handler {
 			if err := a.settings.save(); err != nil {
 				log.Printf("保存设置失败：%v", err)
 			}
+		}
+		if in.LAN != nil && *in.LAN {
+			http.Error(w, `{"error":"手机访问暂时关闭"}`, http.StatusBadRequest)
+			return
 		}
 		if in.LAN != nil && *in.LAN != a.settings.LAN {
 			a.settings.LAN = *in.LAN

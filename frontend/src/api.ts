@@ -169,7 +169,6 @@ const qs = (p: Record<string, string | number | boolean | undefined | null>) => 
 export const api = {
   schema: () => req<Schema>('GET', '/api/schema'),
   info: () => req<Info>('GET', '/api/info'),
-  setLAN: (lan: boolean) => req<Info>('PUT', '/api/settings', { lan }),
   setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),
   backup: () => req<BackupState>('GET', '/api/backup'),
   saveBackup: (c: BackupConfig) => req<BackupConfig>('PUT', '/api/backup', c),
