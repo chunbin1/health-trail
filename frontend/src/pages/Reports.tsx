@@ -51,7 +51,7 @@ function Trends() {
 
   return (
     <div className="split">
-      <section className="card" style={{ padding: '12px 0 6px' }}>
+      <section className="card flush" style={{ padding: '12px 0 6px' }}>
         <div className="input-search" style={{ maxWidth: 'none', margin: '0 12px 6px' }}>
           <Search size={15} />
           <input className="input" placeholder={t('找指标，如 白细胞')} value={q} onChange={(e) => setQ(e.target.value)} />

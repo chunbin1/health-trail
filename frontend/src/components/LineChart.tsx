@@ -53,7 +53,19 @@ export function LineChart({ points, low, high, unit, height = 240, names }: {
   const ticks = niceTicks(y0, y1, 4)
   const path = (key: 'v' | 'v2') =>
     points.filter((p) => p[key] != null).map((p, i) => `${i ? 'L' : 'M'}${x(ms(p.date)).toFixed(1)},${y(p[key] as number).toFixed(1)}`).join('')
-  const xLabels = [0, Math.floor((points.length - 1) / 2), points.length - 1].filter((v, i, a) => a.indexOf(v) === i)
+  // first, middle and last date, leaving out any that would overlap one kept
+  // (readings close in time sit close together)
+  const xLabels: number[] = []
+  const spans: [number, number][] = []
+  for (const i of [points.length - 1, 0, Math.floor((points.length - 1) / 2)]) {
+    if (xLabels.includes(i)) continue
+    const w = labelWidth(fmtDate(points[i].date.slice(0, 10)))
+    const at = x(ts[i])
+    const span: [number, number] = i === 0 ? [at, at + w] : i === points.length - 1 ? [at - w, at] : [at - w / 2, at + w / 2]
+    if (spans.some(([a, b]) => span[0] < b + 8 && span[1] > a - 8)) continue
+    xLabels.push(i)
+    spans.push(span)
+  }
   const h = hover != null ? points[hover] : null
   const last = points[points.length - 1]
 
@@ -128,4 +140,12 @@ function niceTicks(lo: number, hi: number, n: number) {
   const out: number[] = []
   for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(Math.round(v * 1e6) / 1e6)
   return out
+}
+
+// labelWidth estimates an 11px axis label's width: CJK characters are a full
+// em, digits and Latin letters a little over half.
+function labelWidth(s: string) {
+  let w = 0
+  for (const c of s) w += /[\u3000-\u9fff\uff00-\uffef]/.test(c) ? 11 : 6.5
+  return w
 }
