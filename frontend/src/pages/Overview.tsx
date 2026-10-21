@@ -83,7 +83,7 @@ export function Overview() {
       <div className="stats">
         <Stat kind="conditions" href="#/conditions" n={o.active_conditions.length} label={t('进行中的健康问题')} />
         <Stat kind="medications" href="#/medications" n={o.current_medications.length} label={t('在用药物')} />
-        <Stat kind="lab_results" href="#/reports" n={o.abnormal_labs_latest.length} label={t('异常指标')} warn={o.abnormal_labs_latest.length > 0} />
+        <Stat kind="lab_results" href="#/reports?tab=trends" n={o.abnormal_labs_latest.length} label={t('异常指标')} warn={o.abnormal_labs_latest.length > 0} />
         <a className="stat" href="#/checkins" style={kindStyle('checkins')}>
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <KindIcon kind="checkins" />
@@ -103,7 +103,7 @@ export function Overview() {
           <section className="card">
             <div className="card-head">
               <h2>{t('需要留意的指标')}</h2>
-              <a href="#/reports" className="card-link">{t('趋势')}<ChevronRight size={14} /></a>
+              <a href="#/reports?tab=trends" className="card-link">{t('趋势')}<ChevronRight size={14} /></a>
             </div>
             {o.abnormal_labs_latest.length === 0
               ? <Empty compact>{t('各项指标最近一次的结果都在参考范围内')}</Empty>
@@ -120,7 +120,7 @@ export function Overview() {
                   </tbody>
                 </table>
               )}
-            {o.abnormal_labs_latest.length > 7 && <div className="muted small" style={{ marginTop: 8 }}>{t('还有 {n} 项', { n: o.abnormal_labs_latest.length - 7 })}</div>}
+            {o.abnormal_labs_latest.length > 7 && <a href="#/reports?tab=trends" className="muted small" style={{ display: 'inline-block', marginTop: 8 }}>{t('还有 {n} 项', { n: o.abnormal_labs_latest.length - 7 })}</a>}
           </section>
 
           <div className="stack" style={{ gap: 16 }}>

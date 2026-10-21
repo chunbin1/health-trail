@@ -5,12 +5,13 @@ import { LabImport } from '../components/LabImport'
 import { LineChart } from '../components/LineChart'
 import { LabValue } from '../components/RecordDrawer'
 import { t, tr } from '../i18n'
-import { openRecord, useLoad } from '../state'
+import { hashParam, openRecord, useLoad } from '../state'
 import { Empty, KindIcon, RangeBar } from '../ui'
 import { RecordsPage } from './RecordsPage'
 
 export function Reports() {
-  const [tab, setTab] = useState<'reports' | 'trends'>('reports')
+  // #/reports?tab=trends opens on the trends (from the overview's lab card)
+  const [tab, setTab] = useState<'reports' | 'trends'>(() => (hashParam('tab') === 'trends' ? 'trends' : 'reports'))
   const [importing, setImporting] = useState(false)
   const switcher = (
     <div className="seg">
