@@ -37,8 +37,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/search", s.search)
 	mux.HandleFunc("GET /api/labs/items", s.labItems)
 	mux.HandleFunc("GET /api/labs/trend", s.labTrend)
-	mux.HandleFunc("POST /api/labs/parse", s.labParse)
-	mux.HandleFunc("POST /api/labs/import", s.labImport)
 	mux.HandleFunc("GET /api/metrics/series", s.metricSeries)
 	mux.HandleFunc("GET /api/checkins/day", s.checkinDay)
 	mux.HandleFunc("GET /api/checkins/stats", s.checkinStats)
@@ -194,84 +192,6 @@ func (s *Server) labTrend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, rows)
-}
-
-func (s *Server) labParse(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Text string `json:"text"`
-	}
-	if err := decode(r, &in); err != nil {
-		fail(w, err)
-		return
-	}
-	writeJSON(w, store.ParseLabText(in.Text))
-}
-
-// labImport saves a set of lab results under a report: an existing one
-// (report_id), or a new one made from `report`.
-func (s *Server) labImport(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		ReportID json.Number    `json:"report_id"`
-		Report   store.Record   `json:"report"`
-		Panel    string         `json:"panel"`
-		Rows     []store.Record `json:"rows"`
-	}
-	if err := decode(r, &in); err != nil {
-		fail(w, err)
-		return
-	}
-	res, err := ImportLabs(s.Store, in.ReportID.String(), in.Report, in.Panel, in.Rows)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	writeJSON(w, res)
-}
-
-// ImportLabs is shared by the API and the MCP tool. A report it creates is
-// removed again if the results can't be saved, so a failed import leaves
-// nothing behind.
-func ImportLabs(st *store.Store, reportID string, report store.Record, panel string, rows []store.Record) (store.Record, error) {
-	if len(rows) == 0 {
-		return nil, &store.ValidationError{Msg: "没有要保存的指标"}
-	}
-	var rep store.Record
-	var err error
-	created := false
-	if reportID != "" {
-		id, perr := strconv.ParseInt(reportID, 10, 64)
-		if perr != nil {
-			return nil, &store.ValidationError{Msg: "无效的 report_id"}
-		}
-		if rep, err = st.Get("reports", id); err != nil {
-			return nil, err
-		}
-	} else {
-		if report == nil {
-			return nil, &store.ValidationError{Msg: "需要 report_id，或用 report 新建一份报告"}
-		}
-		if rep, err = st.Create("reports", report); err != nil {
-			return nil, err
-		}
-		created = true
-	}
-	for _, row := range rows {
-		row["report_id"] = rep["id"]
-		if row["test_date"] == nil || row["test_date"] == "" {
-			row["test_date"] = rep["report_date"]
-		}
-		if panel != "" && (row["panel"] == nil || row["panel"] == "") {
-			row["panel"] = panel
-		}
-	}
-	results, err := st.CreateMany("lab_results", rows)
-	if err != nil {
-		if created {
-			st.Delete("reports", rep["id"].(int64))
-		}
-		return nil, err
-	}
-	return store.Record{"report": rep, "lab_results": results}, nil
 }
 
 func (s *Server) metricSeries(w http.ResponseWriter, r *http.Request) {

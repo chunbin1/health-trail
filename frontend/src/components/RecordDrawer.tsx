@@ -5,7 +5,6 @@ import { noun, t, tx, type Key } from '../i18n'
 import { closeRecord, openRecord, recTitle, useApp, useLoad, useRefOptions } from '../state'
 import { Empty, IconButton, KindIcon, RangeBar } from '../ui'
 import { EntityForm } from './EntityForm'
-import { LabImport } from './LabImport'
 import { Drawer, Modal } from './Modal'
 
 const CHILD_LABELS: Record<string, Key> = {
@@ -19,7 +18,6 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   const { data, error } = useLoad(() => api.get(entityName, id), [entityName, id])
   const [editing, setEditing] = useState(false)
   const [adding, setAdding] = useState<string | null>(null)
-  const [importing, setImporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   if (!e) return null
@@ -90,7 +88,6 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
             <section className="card">
               <div className="card-head">
                 <h2>{t('检验指标')}</h2>
-                <button className="btn sm" onClick={() => setImporting(true)}>{t('粘贴导入')}</button>
                 <IconButton label={t('添加一项')} small onClick={() => setAdding('lab_results')}><Plus size={16} /></IconButton>
               </div>
               <LabTable rows={data.lab_results || []} />
@@ -146,7 +143,6 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
             onCancel={() => setAdding(null)} onSaved={() => { setAdding(null); toast(t('已添加')) }} />
         </Modal>
       )}
-      {importing && r && <LabImport report={r} onClose={() => setImporting(false)} onSaved={() => setImporting(false)} />}
     </Drawer>
   )
 }
@@ -237,7 +233,7 @@ export function LabValue({ r }: { r: Rec }) {
 }
 
 export function LabTable({ rows, onPick }: { rows: Rec[]; onPick?: (name: string) => void }) {
-  if (rows.length === 0) return <Empty compact>{t('还没有指标。可以粘贴导入，或把报告截图发给 AI 录入。')}</Empty>
+  if (rows.length === 0) return <Empty compact>{t('还没有指标。把报告截图发给 AI 录入，或手动添加。')}</Empty>
   const groups = new Map<string, Rec[]>()
   for (const r of rows) {
     const k = r.panel || ''

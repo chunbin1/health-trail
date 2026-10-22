@@ -107,18 +107,6 @@ func TestAPI(t *testing.T) {
 		t.Errorf("filter: %s", w.Body)
 	}
 
-	// paste → parse → import
-	w = do(h, "POST", "/api/labs/parse", local, host, `{"text":"超敏C-反应蛋白\t111.87↑\tmg/L\t0-6\n白细胞\t17.62↑\t10^9/L\t3.5-9.5"}`, nil)
-	var rows []map[string]any
-	json.Unmarshal(w.Body.Bytes(), &rows)
-	if len(rows) != 2 {
-		t.Fatalf("parse: %s", w.Body)
-	}
-	body, _ := json.Marshal(map[string]any{"report": map[string]any{"report_date": "2026-10-15", "title": "血常规"}, "panel": "血常规", "rows": rows})
-	if w := do(h, "POST", "/api/labs/import", local, host, string(body), nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"flag":"偏高"`) {
-		t.Errorf("import: %d %s", w.Code, w.Body)
-	}
-
 	// attachments: stored, served inline when safe, as a download otherwise
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)

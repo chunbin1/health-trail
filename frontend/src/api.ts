@@ -72,15 +72,6 @@ export interface LabItem {
   panel: string | null
 }
 
-export interface LabRow {
-  item_name: string
-  value_num: number | null
-  value_text?: string
-  flag?: string
-  unit?: string
-  ref_range?: string
-}
-
 export interface HabitStats {
   habit: Rec
   days_done: number
@@ -185,9 +176,6 @@ export const api = {
   remove: (entity: string, id: number) => req<unknown>('DELETE', `/api/r/${entity}/${id}`),
   labItems: () => req<LabItem[]>('GET', '/api/labs/items'),
   labTrend: (name: string) => req<Rec[]>('GET', '/api/labs/trend' + qs({ name })),
-  labParse: (text: string) => req<LabRow[]>('POST', '/api/labs/parse', { text }),
-  labImport: (body: { report_id?: number; report?: Record<string, any>; panel?: string; rows: Record<string, any>[] }) =>
-    req<{ report: Rec; lab_results: Rec[] }>('POST', '/api/labs/import', body),
   metricSeries: (type: string, from?: string, to?: string) => req<Rec[]>('GET', '/api/metrics/series' + qs({ type, from, to })),
   checkinDay: (date?: string) => req<{ date: string; habits: HabitDay[] }>('GET', '/api/checkins/day' + qs({ date })),
   checkinStats: (from?: string, to?: string, habit_id?: number) => req<HabitStats[]>('GET', '/api/checkins/stats' + qs({ from, to, habit_id })),
@@ -259,7 +247,7 @@ export function flagArrow(flag?: string | null) {
   return ''
 }
 
-export function labValue(r: Rec | LabRow) {
+export function labValue(r: Rec) {
   return r.value_text || fmtNum(r.value_num)
 }
 

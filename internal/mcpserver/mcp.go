@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/lee/health-vault/internal/server"
 	"github.com/lee/health-vault/internal/store"
 )
 
@@ -271,7 +271,7 @@ func (t *tools) addLabReport(ctx context.Context, _ *mcp.CallToolRequest, in lab
 	if in.ReportID > 0 {
 		id = fmt.Sprint(in.ReportID)
 	}
-	res, err := server.ImportLabs(t.st, id, in.Report, in.Panel, rows)
+	res, err := importLabs(t.st, id, in.Report, in.Panel, rows)
 	if err != nil {
 		return failed(err)
 	}
@@ -413,4 +413,51 @@ func (t *tools) checkinStats(ctx context.Context, _ *mcp.CallToolRequest, in sta
 		id = h["id"].(int64)
 	}
 	return reply(t.st.CheckinStats(in.From, in.To, id))
+}
+
+// importLabs saves a set of lab results under a report: an existing one
+// (reportID), or a new one made from `report`. A report it creates is
+// removed again if the results can't be saved, so a failed import leaves
+// nothing behind.
+func importLabs(st *store.Store, reportID string, report store.Record, panel string, rows []store.Record) (store.Record, error) {
+	if len(rows) == 0 {
+		return nil, &store.ValidationError{Msg: "没有要保存的指标"}
+	}
+	var rep store.Record
+	var err error
+	created := false
+	if reportID != "" {
+		id, perr := strconv.ParseInt(reportID, 10, 64)
+		if perr != nil {
+			return nil, &store.ValidationError{Msg: "无效的 report_id"}
+		}
+		if rep, err = st.Get("reports", id); err != nil {
+			return nil, err
+		}
+	} else {
+		if report == nil {
+			return nil, &store.ValidationError{Msg: "需要 report_id，或用 report 新建一份报告"}
+		}
+		if rep, err = st.Create("reports", report); err != nil {
+			return nil, err
+		}
+		created = true
+	}
+	for _, row := range rows {
+		row["report_id"] = rep["id"]
+		if row["test_date"] == nil || row["test_date"] == "" {
+			row["test_date"] = rep["report_date"]
+		}
+		if panel != "" && (row["panel"] == nil || row["panel"] == "") {
+			row["panel"] = panel
+		}
+	}
+	results, err := st.CreateMany("lab_results", rows)
+	if err != nil {
+		if created {
+			st.Delete("reports", rep["id"].(int64))
+		}
+		return nil, err
+	}
+	return store.Record{"report": rep, "lab_results": results}, nil
 }

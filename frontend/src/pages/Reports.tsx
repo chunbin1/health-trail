@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { ClipboardPaste, Search, TestTube2 } from 'lucide-react'
+import { Search, TestTube2 } from 'lucide-react'
 import { api, flagClass, fmtDate, fmtNum } from '../api'
-import { LabImport } from '../components/LabImport'
 import { LineChart } from '../components/LineChart'
 import { LabValue } from '../components/RecordDrawer'
 import { t, tr } from '../i18n'
@@ -12,7 +11,6 @@ import { RecordsPage } from './RecordsPage'
 export function Reports() {
   // #/reports?tab=trends opens on the trends (from the overview's lab card)
   const [tab, setTab] = useState<'reports' | 'trends'>(() => (hashParam('tab') === 'trends' ? 'trends' : 'reports'))
-  const [importing, setImporting] = useState(false)
   // each tab comes back scrolled where it was left (the page scrolls, and a
   // short tab would otherwise leave the long one at the top)
   const scrolls = useRef({ reports: 0, trends: 0 })
@@ -31,13 +29,12 @@ export function Reports() {
     </div>
   )
   // The switcher is last in the head on both tabs, so it stays put; the
-  // reports' own buttons sit to its left. Both tabs stay mounted, so coming
+  // reports' add button sits to its left. Both tabs stay mounted, so coming
   // back keeps the picked item, the search and the scroll.
   return (
     <>
       <div hidden={tab !== 'reports'}>
-        <RecordsPage entityName="reports" end={switcher}
-          extra={<button className="btn" onClick={() => setImporting(true)}><ClipboardPaste size={15} />{t('粘贴导入')}</button>} />
+        <RecordsPage entityName="reports" end={switcher} />
       </div>
       <div hidden={tab !== 'trends'}>
         <div className="page-top drag">
@@ -48,7 +45,6 @@ export function Reports() {
         </div>
         <Trends />
       </div>
-      {importing && <LabImport onClose={() => setImporting(false)} onSaved={(id) => { setImporting(false); openRecord('reports', id) }} />}
     </>
   )
 }

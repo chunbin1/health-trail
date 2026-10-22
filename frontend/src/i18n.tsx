@@ -163,7 +163,6 @@ const EN = {
   '删除这个附件？': 'Delete this attachment?',
   '删除附件': 'Delete attachment',
   '参考 {range}': 'Ref. {range}',
-  '粘贴导入': 'Paste results',
   '添加一项': 'Add a result',
   '附件': 'Attachments',
   '上传': 'Upload',
@@ -172,34 +171,8 @@ const EN = {
   '已记录：{name} {amount} · {time}': 'Logged: {name}, {amount} · {time}',
   '吃了': 'Took it',
   '共 {n} 颗': ['{n} pill in all', '{n} pills in all'],
-  '还没有指标。可以粘贴导入，或把报告截图发给 AI 录入。': 'No results yet. Paste them in, or send your AI a screenshot of the report.',
+  '还没有指标。把报告截图发给 AI 录入，或手动添加。': 'No results yet. Send your AI a screenshot of the report, or add them by hand.',
   '服用 {name} {amount}': 'Took {name}, {amount}',
-
-  // lab import
-  '没有识别出指标。每行应包含：项目名、结果、单位（可省略）、参考范围（可省略）。':
-    'No results recognized. Each line should have the test name, the result, and optionally the unit and reference range.',
-  '已保存 {n} 项指标': ['Saved {n} result', 'Saved {n} results'],
-  '导入指标到「{title}」': 'Import results into “{title}”',
-  '粘贴导入化验单': 'Paste a lab report',
-  '标题': 'Title',
-  '报告日期': 'Report date',
-  '类型': 'Type',
-  '机构': 'Institution',
-  '如：血常规+CRP': 'e.g. CBC + CRP',
-  '医院或体检中心': 'Hospital or checkup center',
-  '分组（可选）': 'Panel (optional)',
-  '如：血常规、肝功能': 'e.g. CBC, liver function',
-  '把化验单的表格文字粘贴到这里，例如：\n\n超敏C-反应蛋白\t111.87↑\tmg/L\t0-6\n白细胞\t17.62↑\t10^9/L\t3.5-9.5\n\n从手机复制的「一格一行」格式也可以。':
-    'Paste the table text of a lab report here, e.g.:\n\nhs-CRP\t111.87↑\tmg/L\t0-6\nWBC\t17.62↑\t10^9/L\t3.5-9.5\n\nText copied on a phone, one cell per line, works too.',
-  '只有截图或 PDF？直接发给 AI，说「帮我把这份化验单录进健康档案」。':
-    'Only have a screenshot or PDF? Send it to your AI and say “Add this lab report to my health vault.”',
-  '识别出 {n} 项，其中 {abnormal} 项异常。请对照原报告核对，可以直接修改。':
-    'Recognized {n}, {abnormal} out of range. Check them against the original report; you can edit them here.',
-  '自动': 'Auto',
-  '删除这一行': 'Remove this row',
-  '返回修改': 'Back to the text',
-  '识别': 'Recognize',
-  '保存 {n} 项': ['Save {n} result', 'Save {n} results'],
 
   // chart
   '还没有数据': 'No data yet',
