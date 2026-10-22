@@ -5,18 +5,22 @@ import { t } from '../i18n'
 import { useLoad } from '../state'
 
 // Shown in the Mac app's window while macOS doesn't allow its notifications:
-// no reminder would come. It checks again when the window comes back to the
-// front and every half minute, so it goes away once they're turned on.
+// no reminder would come. It asks again (the app checks with macOS on each
+// ask) when the window comes back to the front and every few seconds, so it
+// goes away as soon as they're turned on in System Settings.
 export function NotifyWarning() {
   const { data, reload } = useLoad(() => api.notifications().catch(() => ({ allowed: null })), [])
   const off = data?.allowed === false
   useEffect(() => {
     if (!off) return
-    const id = setInterval(reload, 30_000)
+    const id = setInterval(reload, 5_000)
+    const back = () => document.visibilityState === 'visible' && reload()
     window.addEventListener('focus', reload)
+    document.addEventListener('visibilitychange', back)
     return () => {
       clearInterval(id)
       window.removeEventListener('focus', reload)
+      document.removeEventListener('visibilitychange', back)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [off])

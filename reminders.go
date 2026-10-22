@@ -29,14 +29,30 @@ type reminders struct {
 	ns        *notifications.NotificationService
 	lang      func() string // the UI's language, which notifications follow
 	scheduled map[string]bool
-	allowed   atomic.Int32 // notifications allowed in System Settings: 1 yes, 0 no, -1 not known yet
+	allowed   atomic.Int32  // notifications allowed in System Settings: 1 yes, 0 no, -1 not known yet
+	kick      chan struct{} // a round now, instead of at the next tick
 }
 
-// Allowed reports whether macOS lets the app show notifications; ok is
-// false while that isn't known yet (or reminders didn't start).
+// Allowed asks macOS now whether the app may show notifications, so the
+// window's warning goes as soon as they're turned on; ok is false when it
+// can't be known (reminders didn't start). Newly allowed, the reminders are
+// scheduled right away.
 func (r *reminders) Allowed() (allowed, ok bool) {
-	v := r.allowed.Load()
-	return v == 1, v >= 0
+	if r.allowed.Load() < 0 {
+		return false, false
+	}
+	allowed, err := r.ns.CheckNotificationAuthorization()
+	if err != nil {
+		v := r.allowed.Load()
+		return v == 1, v >= 0
+	}
+	if allowed && r.allowed.Load() != 1 {
+		select {
+		case r.kick <- struct{}{}:
+		default:
+		}
+	}
+	return allowed, true
 }
 
 func (r *reminders) ServiceName() string { return "health-trail/reminders" }
@@ -46,6 +62,7 @@ func (r *reminders) ServiceName() string { return "health-trail/reminders" }
 // reminders off instead of stopping the app.
 func (r *reminders) ServiceStartup(ctx context.Context, opts application.ServiceOptions) error {
 	r.allowed.Store(-1)
+	r.kick = make(chan struct{}, 1)
 	if err := r.ns.ServiceStartup(ctx, opts); err != nil {
 		log.Printf("提醒不可用（需要从 健康足迹.app 启动）：%v", err)
 		return nil
@@ -85,6 +102,7 @@ func (r *reminders) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+		case <-r.kick:
 		}
 	}
 }
