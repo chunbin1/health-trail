@@ -122,6 +122,11 @@ SVG 用固定 viewBox 加 `width:100%` 时，容器一窄，文字就跟着缩�
 - 证据：2026-10-21，为了不碰正在运行的 `make dev-real`，在临时 worktree 里开发，链接了 node_modules；`make test` 触发 `npm ci`，主目录的 node_modules 变成空目录。马上在主目录 `npm ci` 按 lockfile 装回，检查了 esbuild、类型检查和 5173 上的 Vite 都正常。
 - 出现：1
 
+### 22. 改了 .gitignore 里的名字，提交前先看一眼 `git status`，不要直接 `git add -A`
+构建产物（`.app`、二进制）改名后，旧名字的产物还躺在目录里，但 .gitignore 只忽略新名字了，`git add -A` 会把旧产物整个加进提交。改名或改 .gitignore 后，提交前看一遍要提交的文件列表，只 add 自己改的路径。
+- 证据：2026-10-22，改名 Health Trail 时 .gitignore 从 `/健康档案.app/` 换成 `/健康足迹.app/`，`git add -A` 把旧的 健康档案.app（含 20MB 二进制）提交了进去；在推送前用 `git rm --cached` + `--amend` 拿掉。
+- 出现：1
+
 ---
 
 ## 已移入 CLAUDE.md 的规则
