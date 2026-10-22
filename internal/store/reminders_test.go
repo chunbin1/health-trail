@@ -82,6 +82,11 @@ func TestMedReminders(t *testing.T) {
 		t.Errorf("after both doses = %s", reminderIDs(rs))
 	}
 
+	times, err := s.MedTimes(now, 2)
+	if err != nil || len(times) != 4 || times[0].Dose == nil || times[2].Dose != nil || !times[3].At.Equal(time.Date(2026, 10, 23, 20, 0, 0, 0, loc)) {
+		t.Errorf("med times = %+v %v", times, err)
+	}
+
 	days, err := s.MedsToday(now)
 	if err != nil || len(days) != 1 || len(days[0].Slots) != 2 {
 		t.Fatalf("today = %+v %v", days, err)

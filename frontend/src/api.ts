@@ -70,6 +70,18 @@ export interface MedDay {
   slots: { time: string; dose: Rec | null }[]
 }
 
+// Appointments written to Calendar and medicines to Reminders (Mac app only).
+export interface CalSync {
+  events: boolean
+  reminders: boolean
+  title: string
+  source: string
+  events_access: 'not_asked' | 'full' | 'denied' | 'write_only'
+  reminders_access: 'not_asked' | 'full' | 'denied' | 'write_only'
+  last_at: string
+  last_error: string
+}
+
 export interface LabItem {
   item_name: string
   count: number
@@ -171,6 +183,9 @@ export const api = {
   // only in the Mac app's window
   autostart: () => req<{ enabled: boolean }>('GET', '/api/autostart'),
   notifications: () => req<{ allowed: boolean | null }>('GET', '/api/notifications'),
+  calsync: () => req<CalSync>('GET', '/api/calsync'),
+  setCalsync: (body: { events?: boolean; reminders?: boolean }) => req<CalSync>('PUT', '/api/calsync', body),
+  openCalPrivacy: (reminders: boolean) => req<{ ok: boolean }>('POST', '/api/calsync/privacy' + (reminders ? '?reminders=1' : '')),
   openNotificationSettings: () => req<{ ok: boolean }>('POST', '/api/notifications/settings'),
   setAutostart: (enabled: boolean) => req<{ enabled: boolean }>('PUT', '/api/autostart', { enabled }),
   setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),

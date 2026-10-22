@@ -642,3 +642,10 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 .slot { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums; background: var(--surface-3); color: var(--ink-2); }
 .slot.done { background: color-mix(in srgb, var(--c-medications) 14%, transparent); color: var(--c-medications); }
 .slot.late { box-shadow: inset 0 0 0 1px var(--high); color: var(--ink); }
+button.slot { border: none; font: inherit; font-size: 12px; cursor: pointer; }
+button.slot:hover { background: color-mix(in srgb, var(--c-medications) 14%, transparent); color: var(--c-medications); }
+button.slot:disabled { opacity: .6; cursor: default; }
+
+/* settings: a switch with its label and hint */
+.sync-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.sync-row:first-of-type { border-top: none; }

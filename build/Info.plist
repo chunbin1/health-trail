@@ -13,6 +13,10 @@
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>个人健康档案 · 数据保存在本机</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>把预约写进「日历」里的「健康足迹」日历，同步到 iPhone 和手表上提醒。</string>
+  <key>NSCalendarsUsageDescription</key><string>把预约写进「日历」里的「健康足迹」日历，同步到 iPhone 和手表上提醒。</string>
+  <key>NSRemindersFullAccessUsageDescription</key><string>把吃药时间写进「提醒事项」里的「健康足迹」列表；在 iPhone 上勾掉就记一次吃药。</string>
+  <key>NSRemindersUsageDescription</key><string>把吃药时间写进「提醒事项」里的「健康足迹」列表；在 iPhone 上勾掉就记一次吃药。</string>
   <key>NSLocalNetworkUsageDescription</key><string>开启「手机访问」后，同一网络中的手机可以连接健康足迹。</string>
 </dict>
 </plist>

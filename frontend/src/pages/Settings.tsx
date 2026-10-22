@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Database, Languages, Power } from 'lucide-react'
-import { api } from '../api'
+import { useEffect, useState } from 'react'
+import { Database, Languages, Power, Smartphone } from 'lucide-react'
+import { api, fmtDate, type CalSync } from '../api'
 import { t, type Lang } from '../i18n'
 import { useApp, useLoad } from '../state'
 import { Switch } from '../ui'
@@ -10,6 +10,78 @@ import { Section } from './Connect'
 
 // Each language named in itself, as language pickers do.
 const LANGS: { id: Lang; name: string }[] = [{ id: 'zh', name: '中文' }, { id: 'en', name: 'English' }]
+
+// Appointments into Calendar and medicines into Reminders, which iCloud takes
+// to the iPhone and the watch. Mac app only, like AtLogin. Turning one on
+// may wait on the system's permission prompt, so the switch says so.
+function PhoneSync() {
+  const { data, error, reload } = useLoad(() => api.calsync(), [])
+  const [cur, setCur] = useState<CalSync | null>(null)
+  const [busy, setBusy] = useState<'events' | 'reminders' | null>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    // the last sync and its errors, as they come
+    const id = setInterval(reload, 15_000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const s = cur && !busy ? { ...data!, ...cur, last_at: data!.last_at, last_error: data!.last_error } : cur || data
+  if (error || !s || !s.title) return null
+
+  async function change(kind: 'events' | 'reminders', on: boolean) {
+    if (busy) return
+    setBusy(kind)
+    setErr('')
+    setCur({ ...s!, [kind]: on })
+    try {
+      setCur(await api.setCalsync({ [kind]: on }))
+      reload()
+    } catch (e: any) {
+      setCur({ ...s!, [kind]: !on })
+      setErr(e.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const row = (kind: 'events' | 'reminders', label: string, hint: string) => {
+    // on without full access: ask again, or, once refused, the way to the settings
+    const acc = s[kind === 'events' ? 'events_access' : 'reminders_access']
+    const denied = acc === 'denied'
+    const ask = s[kind] && !denied && acc !== 'full'
+    return (
+      <div className="sync-row">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div>{label}</div>
+          <div className="small muted">{busy === kind && s[kind] ? t('请在系统弹窗里点「允许」…') : hint}</div>
+          {denied && (
+            <button className="btn sm" style={{ marginTop: 6 }} onClick={() => api.openCalPrivacy(kind === 'reminders')}>
+              {t('打开隐私设置')}
+            </button>
+          )}
+          {ask && busy !== kind && (
+            <button className="btn sm" style={{ marginTop: 6 }} onClick={() => change(kind, true)}>{t('允许访问')}</button>
+          )}
+        </div>
+        <Switch checked={!!s[kind]} onChange={(v) => change(kind, v)} label={label} />
+      </div>
+    )
+  }
+
+  return (
+    <Section icon={<Smartphone size={20} />} title={t('同步到 iPhone')}
+      sub={t('写进 Mac 的「日历」和「提醒事项」里叫「{title}」的日历和列表，iCloud 会同步到 iPhone 和手表，在那边也会提醒。', { title: s.title })}>
+      {row('events', t('预约写进「日历」'), t('前一天晚上 8 点和开始前提醒'))}
+      {row('reminders', t('吃药写进「提醒事项」'), t('在 iPhone 上勾掉，这里就记一次吃药；这里记了，那边也会勾掉'))}
+      {(s.events || s.reminders) && s.last_at && (
+        <div className="small muted" style={{ marginTop: 10 }}>
+          {t('上次同步 {time}', { time: fmtDate(s.last_at.slice(0, 16)) })}{s.source ? ' · ' + s.source : ''}
+        </div>
+      )}
+      {(err || s.last_error) && <div className="error" style={{ marginTop: 10 }}>{err || s.last_error}</div>}
+    </Section>
+  )
+}
 
 // Opening at login, in the Mac app only (elsewhere the API isn't there and
 // the section isn't shown). The switch moves at once; the login item is
@@ -64,6 +136,8 @@ export function Settings() {
           } />
 
         <AtLogin />
+
+        <PhoneSync />
 
         <BackupSettings />
 

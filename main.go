@@ -126,6 +126,7 @@ type app struct {
 	backups  *backups
 	shell    *shell     // the window and menu bar icon, in the app only
 	remind   *reminders // in the app only
+	cal      *calSync   // in the app only
 	token    string
 	port     string
 }
@@ -232,6 +233,40 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 	})
 	mux.HandleFunc("POST /api/notifications/settings", func(w http.ResponseWriter, r *http.Request) {
 		wapp().Browser.OpenURL("x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=" + bundleID)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// writing appointments to Calendar and medicines to Reminders
+	mux.HandleFunc("GET /api/calsync", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, a.calStatus())
+	})
+	mux.HandleFunc("PUT /api/calsync", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Events    *bool `json:"events"`
+			Reminders *bool `json:"reminders"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || a.cal == nil {
+			writeError(w, "无效的请求")
+			return
+		}
+		var err error
+		if in.Events != nil {
+			err = a.cal.set(false, *in.Events)
+		}
+		if in.Reminders != nil && err == nil {
+			err = a.cal.set(true, *in.Reminders)
+		}
+		if err != nil {
+			writeError(w, err.Error())
+			return
+		}
+		writeJSON(w, a.calStatus())
+	})
+	mux.HandleFunc("POST /api/calsync/privacy", func(w http.ResponseWriter, r *http.Request) {
+		pane := "Privacy_Calendars"
+		if r.URL.Query().Get("reminders") == "1" {
+			pane = "Privacy_Reminders"
+		}
+		wapp().Browser.OpenURL("x-apple.systempreferences:com.apple.preference.security?" + pane)
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	// opening at login is the window's to change, like the folder dialog
@@ -369,13 +404,21 @@ func runApp(dataDir, port string) {
 	var wapp *application.App
 	ctx, stopBackups := context.WithCancel(context.Background())
 	go a.backups.loop(ctx)
-	a.remind = &reminders{st: a.st, ns: notifications.New(), lang: a.settings.lang}
+	// a test copy on other data writes to calendars of its own
+	calTitle := "健康足迹"
+	if dataDir != defaultDataDir() {
+		calTitle = "健康足迹（测试）"
+	}
+	a.cal = newCalSync(a.st, &eventKit{}, dataDir, calTitle)
+	go a.cal.loop(ctx)
+	a.remind = &reminders{st: a.st, ns: notifications.New(), lang: a.settings.lang, synced: a.cal.syncing}
+	a.remind.allowed.Store(-1) // not known until the service starts
 	wapp = application.New(application.Options{
 		Name:        "健康足迹",
 		Description: "个人健康档案",
 		Assets:      application.AssetOptions{Handler: a.windowHandler(func() *application.App { return wapp })},
 		OnShutdown:  func() { stopBackups(); a.backups.quit() },
-		Services:    []application.Service{application.NewService(a.remind)},
+		Services:    services(a.remind, dataDir),
 		// closing the window leaves the app in the menu bar (see shell)
 		Mac: application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: false},
 		// one window per data directory: a second launch on the same data
@@ -417,6 +460,33 @@ func runApp(dataDir, port string) {
 	})
 	if err := wapp.Run(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// services are the app's background services: the reminders, except for a
+// test copy on other data. Notifications belong to the bundle id, which a
+// test copy shares with the real app: its start would clear the real app's
+// scheduled reminders and put test ones on the person's Mac.
+func services(r *reminders, dataDir string) []application.Service {
+	if dataDir != defaultDataDir() {
+		log.Printf("测试数据目录：不发系统通知")
+		return nil
+	}
+	return []application.Service{application.NewService(r)}
+}
+
+// calStatus is what the settings page shows of the Calendar and Reminders
+// sync: what is on, whether macOS allows it, the account, how it last went.
+func (a *app) calStatus() map[string]any {
+	if a.cal == nil {
+		return map[string]any{}
+	}
+	s := a.cal.load()
+	names := []string{"not_asked", "full", "denied", "write_only"}
+	return map[string]any{
+		"events": s.Events, "reminders": s.Reminders, "source": s.Source, "title": a.cal.title,
+		"events_access": names[a.cal.api.Access(false)], "reminders_access": names[a.cal.api.Access(true)],
+		"last_at": s.LastAt, "last_error": s.LastError,
 	}
 }
 

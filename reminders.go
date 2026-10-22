@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -31,6 +32,9 @@ type reminders struct {
 	scheduled map[string]bool
 	allowed   atomic.Int32  // notifications allowed in System Settings: 1 yes, 0 no, -1 not known yet
 	kick      chan struct{} // a round now, instead of at the next tick
+	// synced reports what goes to Calendar (appointments) and Reminders
+	// (medicines): those remind there, on the Mac too, so not here as well
+	synced func() (appointments, medicines bool)
 }
 
 // Allowed asks macOS now whether the app may show notifications, so the
@@ -124,8 +128,15 @@ func (r *reminders) sync(now time.Time) {
 	// the text is part of the id, so a renamed medicine, a new place or a
 	// switch of language replaces what was scheduled
 	en := r.lang() == "en"
+	appts, meds := false, false
+	if r.synced != nil {
+		appts, meds = r.synced()
+	}
 	want := map[string]store.Reminder{}
 	for _, p := range plan {
+		if appts && strings.HasPrefix(p.ID, "appt-") || meds && strings.HasPrefix(p.ID, "med-") {
+			continue
+		}
 		if en {
 			p.Title, p.Body = p.TitleEN, p.BodyEN
 		}

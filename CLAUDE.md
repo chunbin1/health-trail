@@ -21,6 +21,7 @@ internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
 backups.go, reminders.go App 里的后台任务：备份触发和接口、提醒（打卡、用药、预约）
 shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
+calsync.go               预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
 frontend/                React + TS + Vite，构建结果嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
 ```
@@ -49,5 +50,5 @@ make app         # 打包 健康足迹.app
 - 改了 store/server/mcpserver：`make test` 必须全绿。
 - 改了 MCP 工具：用逐条发送的 stdio 驱动做一次端到端测试（见 LESSONS #1），不要一次性把请求全部塞进 stdin。
 - 改了界面：用一个临时数据目录启动 `./health-trail serve -data <临时目录> -port 8731`，在浏览器里检查桌面宽度和 375px 手机宽度（不能横向溢出）。先确认数据加载完再判断（LESSONS #4），重新构建后强制刷新（LESSONS #5）。弹窗、抽屉、日期选择器都有动画：测量位置或截图前先 `document.getAnimations().forEach(a => a.finish())` 并稍等一下；截图里「没有出现」时，先用 `getBoundingClientRect` 和再截一张确认，再判断是 bug。需要容器宽度才能绘制的组件用 `useLayoutEffect` 在第一次绘制前量好。
-- 改了桌面窗口：`./health-trail -data <临时目录> -port 8732` 启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。
+- 改了桌面窗口：`./health-trail -data <临时目录> -port 8732` 启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。要测日历、提醒事项这类系统权限，改用 `open -n 健康足迹.app --stderr <日志> --args -data <临时目录> -port 8734`（LESSONS #25）。不在默认数据目录的测试窗口不发系统通知（会清掉真实 App 排好的提醒），日历和提醒事项写进「健康足迹（测试）」。
 - **永远不要用默认数据目录做测试**，那里是用户真实的健康数据：`~/Library/Application Support/HealthVault`。`make dev-real` 读写的就是这个目录，只给用户自己用，编码助手不要运行它；要测 `dev.sh --real` 这条路径，就把 `HEALTH_TRAIL_DATA` 设成临时目录。

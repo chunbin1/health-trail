@@ -209,31 +209,57 @@ function When({ at }: { at: string }) {
   return null
 }
 
-// Today's medicines with reminder times: each time, taken (with when) or
-// not, and a button that logs a pill now.
+// Today's medicines with reminder times: each time taken (with when) or
+// not. A time not taken yet is a button that logs that dose: at this moment
+// if it is the time nearest now, else at the time itself, so a dose made up
+// late lands on its own time and not on the next one.
 function MedsToday({ days }: { days: MedDay[] }) {
-  const now = nowLocal().slice(11)
+  const { changed, toast } = useApp()
+  const [busy, setBusy] = useState('')
+  const now = nowLocal()
+  const minutes = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
+
+  async function take(m: Rec, times: string[], time: string) {
+    const nearest = times.reduce((a, b) => (Math.abs(minutes(b) - minutes(now.slice(11))) < Math.abs(minutes(a) - minutes(now.slice(11))) ? b : a))
+    const at = nearest === time ? 'now' : `${today()} ${time}`
+    setBusy(m.id + time)
+    try {
+      await api.create('doses', { medication_id: m.id, taken_at: at })
+      changed()
+      toast(t('已记录：{name} {time} 这一次', { name: m.name, time }))
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
   return (
     <section className="card" style={{ paddingBottom: 8 }}>
       <div className="card-head" style={{ marginBottom: 4 }}>
         <h2><KindIcon kind="medications" size="sm" />{t('今天的用药')}</h2>
         <a href="#/medications" className="card-link">{t('全部')}<ChevronRight size={14} /></a>
       </div>
+      <div className="small muted">{t('吃了哪一顿，就点哪个时间')}</div>
       <div className="list">
         {days.map(({ medication: m, slots }) => (
           <div key={m.id} className="row-item no-ico" onClick={() => openRecord('medications', m.id)}>
             <div className="body">
               <div className="title">{[m.name, m.dosage].filter(Boolean).join(' ')}</div>
               <div className="slots">
-                {slots.map((sl) => (
-                  <span key={sl.time} className={'slot' + (sl.dose ? ' done' : sl.time < now ? ' late' : '')}
-                    title={sl.dose ? t('{time} 吃的', { time: String(sl.dose.taken_at).slice(11) }) : undefined}>
-                    {sl.dose && <Check size={12} strokeWidth={3} />}{sl.time}
+                {slots.map((sl) => sl.dose ? (
+                  <span key={sl.time} className="slot done" title={t('{time} 吃的', { time: String(sl.dose.taken_at).slice(11) })}>
+                    <Check size={12} strokeWidth={3} />{sl.time}
                   </span>
+                ) : (
+                  <button key={sl.time} type="button" className={'slot' + (sl.time < now.slice(11) ? ' late' : '')}
+                    disabled={busy === m.id + sl.time} title={t('记 {time} 这一次吃药', { time: sl.time })}
+                    onClick={(e) => { e.stopPropagation(); take(m, slots.map((x) => x.time), sl.time) }}>
+                    {sl.time}
+                  </button>
                 ))}
               </div>
             </div>
-            <TakeDose med={m} />
           </div>
         ))}
       </div>

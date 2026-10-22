@@ -223,6 +223,57 @@ func (s *Store) MedsToday(now time.Time) ([]MedDay, error) {
 	return out, nil
 }
 
+// MedTime is one time a medicine is due, with the dose that covers it.
+type MedTime struct {
+	Medication Record
+	At         time.Time
+	Dose       Record // nil if not taken
+}
+
+// MedTimes lists each time a medicine in use is due, from the start of
+// from's day for days days, each with the dose that covers it.
+func (s *Store) MedTimes(from time.Time, days int) ([]MedTime, error) {
+	start := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, from.Location())
+	doses, err := s.dosesSince(start.AddDate(0, 0, -1))
+	if err != nil {
+		return nil, err
+	}
+	var out []MedTime
+	for d := 0; d < days; d++ {
+		day := start.AddDate(0, 0, d)
+		meds, err := s.medsDue(day.Format("2006-01-02"))
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range meds {
+			times, _ := m["remind_times"].(string)
+			for _, slot := range doseSlots(day, ParseTimes(times), doses[m["id"]]) {
+				out = append(out, MedTime{Medication: m, At: slot.At, Dose: slot.Dose})
+			}
+		}
+	}
+	return out, nil
+}
+
+// DoseTimeFor is when to log a dose taken for a medicine's due time at: at
+// itself if it counts for that time (see doseSlots), else the due time, so
+// a late tick doesn't land on the next time instead.
+func DoseTimeFor(med Record, due, at time.Time) time.Time {
+	times, _ := med["remind_times"].(string)
+	day := time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, due.Location())
+	for _, sl := range doseSlots(day, ParseTimes(times), []Record{{"taken_at": at.Format(clockFormat)}}) {
+		if sl.At.Equal(due) && sl.Dose != nil {
+			return at
+		}
+	}
+	return due
+}
+
+// AppointmentsSince lists the appointments from t on, whatever their status.
+func (s *Store) AppointmentsSince(t time.Time) ([]Record, error) {
+	return s.query(`SELECT * FROM appointments WHERE scheduled_at >= ? ORDER BY scheduled_at`, t.Format(clockFormat))
+}
+
 var remindOffsets = map[string]time.Duration{
 	"15 分钟": 15 * time.Minute, "30 分钟": 30 * time.Minute, "1 小时": time.Hour,
 	"2 小时": 2 * time.Hour, "1 天": 24 * time.Hour,
