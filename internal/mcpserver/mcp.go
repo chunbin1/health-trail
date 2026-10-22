@@ -21,6 +21,9 @@ const instructions = `这是用户本人的个人健康档案（单人）。所�
 - 写入前先查重：新增健康问题、就诊、报告之前，用 search_records 或 list_records 看看是否已经有了，有就用 update_record 补充。
 - 新的症状、就诊、用药如果属于已有的健康问题，填上 condition_id 关联起来。
 - 用户说吃了某个药，用 add_record 记一条 doses：medication_id 填那个药的 id，taken_at 填服用时间（没说就是现在），amount 填颗数（默认 1）。health_overview 里的在用药物带有 last_taken（上次服用）和 taken_total（累计颗数）。
+- 要按时吃的药，把每天吃的时刻填进 medications 的 remind_times（如 "08:00, 20:00"）：到点还没记吃药，用户的电脑会提醒。只说了"一天两次"没说几点时，问用户平时几点吃，不要自己定。health_overview 的 meds_today 是今天每个时刻吃了没有。
+- 用户说要去做检查、复诊、体检等（以后的安排），用 add_record 记一条 appointments：scheduled_at 填日期和时刻；只说了"下午""明早"时问清几点，不要猜。地点填 place，空腹、带资料等要求填 preparation。会在前一天晚上 8 点和开始前（remind_before，默认 1 小时）提醒。health_overview 的 upcoming_appointments 是还没去的预约。
+- 预约过后用户讲了就诊或检查结果：照常新建 visits 或 reports（报告用 add_lab_report），再用 update_record 把那条预约的 status 改成"已完成"，visit_id 或 report_id 填新记录的 id。取消了就把 status 改成"已取消"。
 - 化验/体检报告（包括用户发来的截图或 PDF）用 add_lab_report 一次写入：每个指标一行，结果原样填（如 "111.87↑"），参考范围原样填（如 "0-6"），偏高偏低会自动判断。写入后把识别出的条目复述给用户核对。
 - 不要编造数据；看不清的数值问用户，不要猜。
 - 你可以帮助整理、对比、发现趋势、准备就医问题，但不能替代医生诊断；涉及用药调整或明显异常时，建议用户咨询医生。
@@ -36,16 +39,16 @@ func New(st *store.Store, version string) *mcp.Server {
 	yes := true
 
 	mcp.AddTool(s, &mcp.Tool{Name: "health_overview", Annotations: ro,
-		Description: "健康现状总览：进行中的健康问题、在用药物、最近就诊和待复诊、近 30 天症状、各指标最近一次结果中的异常项、各身体数据最新值、用户自定义的身体数据指标、今天的打卡情况、各类记录数量。回答任何健康问题前先调用。"},
+		Description: "健康现状总览：进行中的健康问题、在用药物、今天各时刻的吃药情况、还没去的预约、最近就诊和待复诊、近 30 天症状、各指标最近一次结果中的异常项、各身体数据最新值、用户自定义的身体数据指标、今天的打卡情况、各类记录数量。回答任何健康问题前先调用。"},
 		t.overview)
 	mcp.AddTool(s, &mcp.Tool{Name: "search_records", Annotations: ro,
-		Description: "在所有记录（健康问题、症状、就诊、用药、报告、检验指标、身体数据、打卡项）中搜索文字。"},
+		Description: "在所有记录（健康问题、症状、就诊、用药、预约、报告、检验指标、身体数据、打卡项）中搜索文字。"},
 		t.search)
 	mcp.AddTool(s, &mcp.Tool{Name: "list_records", Annotations: ro,
 		Description: "按类型列出记录，可按日期范围、关键字、字段值筛选，默认按日期从新到旧。\n\n" + typesDoc()},
 		t.list)
 	mcp.AddTool(s, &mcp.Tool{Name: "get_record", Annotations: ro,
-		Description: "读取一条记录及其关联内容：健康问题会带上相关症状/就诊/用药；就诊带上开的药和报告；报告带上全部检验指标；打卡项带上打卡记录。附件列表也会一起返回。"},
+		Description: "读取一条记录及其关联内容：健康问题会带上相关症状/就诊/用药/预约；就诊带上开的药和报告；报告带上全部检验指标；打卡项带上打卡记录。附件列表也会一起返回。"},
 		t.get)
 	mcp.AddTool(s, &mcp.Tool{Name: "add_record",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &no},
@@ -111,6 +114,8 @@ func typesDoc() string {
 				extra = append(extra, "时间")
 			case store.Time:
 				extra = append(extra, "每天的时刻 HH:MM")
+			case store.Times:
+				extra = append(extra, "每天的时刻，逗号分开，如 08:00, 20:00")
 			case store.Int, store.Real:
 				extra = append(extra, "数字")
 			case store.Bool:
@@ -208,7 +213,7 @@ func (t *tools) get(ctx context.Context, _ *mcp.CallToolRequest, in refIn) (*mcp
 }
 
 type addIn struct {
-	Type   string         `json:"type" jsonschema:"记录类型：conditions、symptoms、visits、medications、reports、metrics、metric_kinds、habits"`
+	Type   string         `json:"type" jsonschema:"记录类型：conditions、symptoms、visits、medications、doses、appointments、reports、metrics、metric_kinds、habits"`
 	Fields map[string]any `json:"fields" jsonschema:"字段名到值"`
 }
 

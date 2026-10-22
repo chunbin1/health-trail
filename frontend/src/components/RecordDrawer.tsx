@@ -8,7 +8,7 @@ import { EntityForm } from './EntityForm'
 import { Drawer, Modal } from './Modal'
 
 const CHILD_LABELS: Record<string, Key> = {
-  symptoms: '症状记录', visits: '就诊记录', medications: '用药', reports: '检查报告', lab_results: '检验指标', checkins: '打卡记录', doses: '服药记录',
+  symptoms: '症状记录', visits: '就诊记录', medications: '用药', reports: '检查报告', lab_results: '检验指标', checkins: '打卡记录', doses: '服药记录', appointments: '预约',
 }
 
 // The detail of one record: its fields, what hangs off it, its files.
@@ -84,6 +84,8 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
             ))}
           </dl>
 
+          {entityName === 'appointments' && (!r.status || r.status === '待去') && <AppointmentDone appt={r} />}
+
           {entityName === 'reports' && (
             <section className="card">
               <div className="card-head">
@@ -144,6 +146,52 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
         </Modal>
       )}
     </Drawer>
+  )
+}
+
+const VISIT_TYPES: Record<string, string> = { 复诊: '复诊', 门诊: '门诊', 体检: '体检' }
+
+// Once an appointment has happened, what came of it is recorded as a visit
+// or a report, prefilled from it; the appointment is then marked done and
+// linked to that record.
+function AppointmentDone({ appt: a }: { appt: Rec }) {
+  const { entity, changed, toast } = useApp()
+  const [making, setMaking] = useState<'visits' | 'reports' | null>(null)
+  const date = String(a.scheduled_at).slice(0, 10)
+  const defaults = making === 'visits'
+    ? { visit_date: date, hospital: a.place, visit_type: VISIT_TYPES[a.appt_type], chief_complaint: a.title, condition_id: a.condition_id }
+    : { report_date: date, title: a.title, institution: a.place, report_type: a.appt_type === '体检' ? '体检' : undefined }
+
+  async function saved(rec: Rec) {
+    setMaking(null)
+    await api.update('appointments', a.id, { status: '已完成', [making === 'visits' ? 'visit_id' : 'report_id']: rec.id })
+    changed()
+    toast(t('已记录，预约标记为已完成'))
+    openRecord(making!, rec.id)
+  }
+
+  async function cancel() {
+    await api.update('appointments', a.id, { status: '已取消' })
+    changed()
+    toast(t('预约已取消，不会再提醒'))
+  }
+
+  return (
+    <section className="card">
+      <div className="card-head"><h2>{t('去过之后')}</h2></div>
+      <div className="small muted" style={{ marginBottom: 10 }}>{t('把结果记下来，这条预约会标记为已完成')}</div>
+      <div className="row">
+        <button className="btn sm" onClick={() => setMaking('visits')}><KindIcon kind="visits" size="sm" />{t('记为就诊')}</button>
+        <button className="btn sm" onClick={() => setMaking('reports')}><KindIcon kind="reports" size="sm" />{t('记为检查报告')}</button>
+        <span className="spacer" />
+        <button className="btn sm ghost" onClick={cancel}>{t('取消预约')}</button>
+      </div>
+      {making && (
+        <Modal title={t('添加{label}', { label: noun(entity(making)) })} icon={<KindIcon kind={making} />} onClose={() => setMaking(null)}>
+          <EntityForm entity={entity(making)} defaults={defaults} onCancel={() => setMaking(null)} onSaved={saved} />
+        </Modal>
+      )}
+    </section>
   )
 }
 

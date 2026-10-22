@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Plus, Search } from 'lucide-react'
-import { api, fmtDate, fmtMonth, fmtNum, flagClass, metricValue, type Entity, type Rec } from '../api'
+import { api, fmtDate, fmtMonth, fmtNum, flagClass, metricValue, today, type Entity, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { Modal } from '../components/Modal'
 import { isEN, noun, t, tr, tx, type Key } from '../i18n'
@@ -13,6 +13,7 @@ const SUBTITLE: Record<string, Key> = {
   visits: '门诊、复诊、急诊、住院和线上问诊',
   medications: '正在吃的、吃过的药，剂量和效果',
   reports: '体检、化验、影像和病理报告',
+  appointments: '约好的检查、复诊和体检，到时间前会提醒',
 }
 
 // A list page for any record type: search, filter by status, add. `end`
@@ -60,7 +61,8 @@ export function RecordsPage({ entityName, end }: { entityName: string; end?: Rea
           </Empty>
         </div>
       ) : (
-        <div className="card flush"><RecordList entity={e} rows={data?.rows || []} grouped /></div>
+        entityName === 'appointments' ? <AppointmentLists entity={e} rows={data?.rows || []} />
+          : <div className="card flush"><RecordList entity={e} rows={data?.rows || []} grouped /></div>
       )}
       {adding && (
         <Modal title={t('添加{label}', { label: noun(e) })} icon={<KindIcon kind={entityName} />} onClose={() => setAdding(false)}>
@@ -68,6 +70,21 @@ export function RecordsPage({ entityName, end }: { entityName: string; end?: Rea
         </Modal>
       )}
     </>
+  )
+}
+
+// Appointments still to go to come first, soonest at the top; the rest
+// (past, done, cancelled) after, latest first.
+function AppointmentLists({ entity, rows }: { entity: Entity; rows: Rec[] }) {
+  const day = today()
+  const isAhead = (r: Rec) => String(r.scheduled_at) >= day && (!r.status || r.status === '待去')
+  const ahead = rows.filter(isAhead).reverse()
+  const rest = rows.filter((r) => !isAhead(r))
+  return (
+    <div className="stack">
+      {ahead.length > 0 && <div className="card flush"><div className="group-label">{t('接下来')}</div><RecordList entity={entity} rows={ahead} /></div>}
+      {rest.length > 0 && <div className="card flush"><div className="group-label">{t('以往')}</div><RecordList entity={entity} rows={rest} /></div>}
+    </div>
   )
 }
 
@@ -92,6 +109,8 @@ export function RecordList({ entity: e, rows, grouped }: { entity: Entity; rows:
         const head = grouped && e.dateKey && month !== lastMonth ? <div className="group-label">{month}</div> : null
         lastMonth = month
         const enums = listFields.filter((f) => f.type === 'enum' && r[f.name] && f.name !== 'metric_type')
+        // an appointment's date and time go under its title, leaving the title room beside its tags
+        const when = e.name === 'appointments' && date ? fmtDate(date) : ''
         const meta = listFields.filter((f) => r[f.name] != null && r[f.name] !== '' && f.type !== 'enum' && f.type !== 'bool')
         return (
           <div key={r.id}>
@@ -101,8 +120,9 @@ export function RecordList({ entity: e, rows, grouped }: { entity: Entity; rows:
               <div className="body">
                 <div className="title">{e.name === 'metrics' ? `${tx(r.metric_type)} ${metricValue(r)} ${tx(r.unit) || ''}` : recTitle(e, r)}</div>
                 <div className="meta">
+                  {when}
                   {meta.map((f, i) => (
-                    <span key={f.name}>{i > 0 && ' · '}{f.type === 'ref' ? <RefName entity={f.ref!} id={r[f.name]} /> : f.name === 'severity' ? t('程度 {n}/10', { n: r[f.name] }) : `${fmtNum(r[f.name])}${tx(f.unit) || ''}`}</span>
+                    <span key={f.name}>{(i > 0 || when) && ' · '}{f.type === 'ref' ? <RefName entity={f.ref!} id={r[f.name]} /> : f.name === 'severity' ? t('程度 {n}/10', { n: r[f.name] }) : `${fmtNum(r[f.name])}${tx(f.unit) || ''}`}</span>
                   ))}
                 </div>
               </div>
@@ -110,7 +130,7 @@ export function RecordList({ entity: e, rows, grouped }: { entity: Entity; rows:
                 {enums.map((f) => (
                   <span key={f.name} className={'tag ' + (f.name === 'flag' ? flagClass(r[f.name]) : 'k')} style={f.name === 'flag' ? undefined : kindStyle(e.name)}>{tx(r[f.name])}</span>
                 ))}
-                {date && <span className="nowrap num" style={{ minWidth: 64, textAlign: 'right' }}>{fmtDate(date.slice(0, 10))}</span>}
+                {date && !when && <span className="nowrap num" style={{ minWidth: 64, textAlign: 'right' }}>{fmtDate(date.slice(0, 10))}</span>}
               </span>
             </div>
           </div>

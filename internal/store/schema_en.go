@@ -170,6 +170,31 @@ var English = map[string]string{
 
 	// checkins
 	"身体数据记录": "Body metric record",
+
+	// medications' reminders
+	"每天几点吃：到点还没记吃药，会发提醒": "When to take it each day: if no dose is logged by then, a reminder comes",
+
+	// appointments
+	"预约":           "Appointments",
+	"时间":           "Time",
+	"事项":           "What",
+	"如：胃镜检查、消化科复诊": "e.g. Gastroscopy, GI follow-up",
+	"检查":           "Exam",
+	"地点":           "Place",
+	"医院、科室":        "Hospital, department",
+	"待去":           "Upcoming",
+	"已完成":          "Done",
+	"已取消":          "Cancelled",
+	"提前提醒":         "Remind me",
+	"不选是提前 1 小时；另外前一天晚上 8 点也会提醒": "1 hour before if not set; there is also a reminder at 8 pm the evening before",
+	"15 分钟": "15 minutes before",
+	"30 分钟": "30 minutes before",
+	"1 小时":  "1 hour before",
+	"2 小时":  "2 hours before",
+	"1 天":   "1 day before",
+	"不提醒":   "No reminder",
+	"注意事项":  "Preparation",
+	"如：空腹 8 小时、带上次的片子": "e.g. Fast for 8 hours, bring the last scans",
 }
 
 // EnglishNouns names one record of each entity in English, for "Add a …",
@@ -186,4 +211,5 @@ var EnglishNouns = map[string]string{
 	"metric_kinds": "custom metric",
 	"habits":       "check-in item",
 	"checkins":     "check-in",
+	"appointments": "appointment",
 }

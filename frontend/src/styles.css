@@ -32,6 +32,7 @@
   --c-symptoms: #e08a00;
   --c-visits: #2f74e0;
   --c-medications: #8257e5;
+  --c-appointments: #c0368f;
   --c-reports: #0e9a96;
   --c-lab_results: #0e9a96;
   --c-metrics: #ea6a1f;
@@ -79,6 +80,7 @@
     --c-symptoms: #f0a530;
     --c-visits: #5b93f0;
     --c-medications: #a07ef0;
+    --c-appointments: #e866b4;
     --c-reports: #2bbab5;
     --c-lab_results: #2bbab5;
     --c-metrics: #f58a4c;
@@ -598,6 +600,9 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 /* ============ date & time picker (react-datepicker, restyled) ============ */
 .dt-wrap { display: block; width: 100%; }
 .dt-wrap.time { max-width: 160px; }
+.times-input { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.time-chip { display: inline-flex; align-items: center; gap: 2px; }
+.time-chip .dt-wrap.time { width: 96px; }
 .dt-wrap .react-datepicker__input-container { display: block; }
 .dt-wrap .react-datepicker__close-icon { padding-right: 10px; }
 .dt-wrap .react-datepicker__close-icon::after { background: var(--ink-3); font-size: 11px; height: 15px; width: 15px; padding: 0; line-height: 15px; }
@@ -629,3 +634,9 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 .dt-popper .react-datepicker__header--time--only { border-radius: var(--r) var(--r) 0 0; }
 .dt-popper .react-datepicker__children-container { clear: both; width: auto; margin: 0; padding: 0 10px 10px; }
 .dt-foot { display: flex; justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 10px; }
+
+/* today's medicine times: taken, still to come, or past without a dose */
+.slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.slot { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums; background: var(--surface-3); color: var(--ink-2); }
+.slot.done { background: color-mix(in srgb, var(--c-medications) 14%, transparent); color: var(--c-medications); }
+.slot.late { box-shadow: inset 0 0 0 1px var(--high); color: var(--ink); }

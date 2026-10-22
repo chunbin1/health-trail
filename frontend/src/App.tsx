@@ -22,6 +22,7 @@ const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string 
       { page: 'symptoms', label: '症状日志', count: 'symptoms' },
       { page: 'visits', label: '就诊', count: 'visits' },
       { page: 'medications', label: '用药', count: 'medications' },
+      { page: 'appointments', label: '预约', count: 'appointments' },
     ],
   },
   {
@@ -63,7 +64,7 @@ export function App() {
     case 'connect': body = <Connect />; break
     case 'settings': case 'backup': body = <Settings />; break
     case 'search': body = <Search q={q} setQ={setQ} />; break
-    case 'conditions': case 'symptoms': case 'visits': case 'medications':
+    case 'conditions': case 'symptoms': case 'visits': case 'medications': case 'appointments':
       body = <RecordsPage key={page} entityName={page} />; break
     default: body = <Overview />
   }
@@ -120,7 +121,7 @@ export function App() {
       </nav>
       <div className={'more-sheet' + (more ? ' open' : '')} onClick={() => setMore(false)}>
         <div className="panel" onClick={(e) => e.stopPropagation()}>
-          {['conditions', 'symptoms', 'visits', 'medications', 'search'].map((p) =>
+          {['conditions', 'symptoms', 'visits', 'medications', 'appointments', 'search'].map((p) =>
             navItem(p, LABEL[p], NAV.flatMap((g) => g.items).find((i) => i.page === p)?.count))}
           <div className="foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>
         </div>

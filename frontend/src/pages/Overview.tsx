@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronRight, Plus, Sparkles } from 'lucide-react'
-import { api, fmtDate, fmtNum, metricValue, MONTHS, type Rec } from '../api'
+import { Check, ChevronRight, Plus, Sparkles } from 'lucide-react'
+import { addDays, api, fmtDate, fmtNum, metricValue, MONTHS, nowLocal, today, type MedDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { Modal } from '../components/Modal'
 import { LabValue, TakeDose } from '../components/RecordDrawer'
@@ -12,7 +12,7 @@ import { HabitGrid } from './Checkins'
 const WEEK = ['日', '一', '二', '三', '四', '五', '六']
 const WEEK_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const QUICK: [string, Key][] = [
-  ['symptoms', '症状|quick'], ['visits', '就诊|quick'], ['medications', '用药|quick'], ['metrics', '身体数据|quick'], ['conditions', '健康问题|quick'],
+  ['symptoms', '症状|quick'], ['visits', '就诊|quick'], ['medications', '用药|quick'], ['appointments', '预约|quick'], ['metrics', '身体数据|quick'], ['conditions', '健康问题|quick'],
 ]
 
 function greeting() {
@@ -99,6 +99,19 @@ export function Overview() {
           <HabitGrid days={o.today_checkins} date={o.today} />
         </section>
 
+        <div className={o.meds_today.length ? 'grid-2' : 'stack'}>
+          {o.meds_today.length > 0 && <MedsToday days={o.meds_today} />}
+          <Panel title={t('接下来的预约')} rows={o.upcoming_appointments} kind="appointments" more="#/appointments"
+            empty={t('没有待去的预约。跟 AI 说「下周三下午 3 点做胃镜」就能记下，到时间前会提醒')}
+            render={(r) => <>
+              <div className="body">
+                <div className="title">{r.title}</div>
+                <div className="meta">{[fmtDate(r.scheduled_at), r.place].filter(Boolean).join(' · ')}</div>
+              </div>
+              <When at={r.scheduled_at} />
+            </>} />
+        </div>
+
         <div className="grid-2">
           <section className="card">
             <div className="card-head">
@@ -180,6 +193,48 @@ export function Overview() {
         </Modal>
       )}
     </>
+  )
+}
+
+// How soon an appointment is: today, tomorrow, or already past (still to be
+// recorded).
+function When({ at }: { at: string }) {
+  const day = at.slice(0, 10)
+  if (at < nowLocal()) return <span className="tag">{t('已过')}</span>
+  if (day === today()) return <span className="tag k" style={kindStyle('appointments')}>{t('今天')}</span>
+  if (day === addDays(today(), 1)) return <span className="tag k" style={kindStyle('appointments')}>{t('明天')}</span>
+  return null
+}
+
+// Today's medicines with reminder times: each time, taken (with when) or
+// not, and a button that logs a pill now.
+function MedsToday({ days }: { days: MedDay[] }) {
+  const now = nowLocal().slice(11)
+  return (
+    <section className="card" style={{ paddingBottom: 8 }}>
+      <div className="card-head" style={{ marginBottom: 4 }}>
+        <h2><KindIcon kind="medications" size="sm" />{t('今天的用药')}</h2>
+        <a href="#/medications" className="card-link">{t('全部')}<ChevronRight size={14} /></a>
+      </div>
+      <div className="list">
+        {days.map(({ medication: m, slots }) => (
+          <div key={m.id} className="row-item no-ico" onClick={() => openRecord('medications', m.id)}>
+            <div className="body">
+              <div className="title">{[m.name, m.dosage].filter(Boolean).join(' ')}</div>
+              <div className="slots">
+                {slots.map((sl) => (
+                  <span key={sl.time} className={'slot' + (sl.dose ? ' done' : sl.time < now ? ' late' : '')}
+                    title={sl.dose ? t('{time} 吃的', { time: String(sl.dose.taken_at).slice(11) }) : undefined}>
+                    {sl.dose && <Check size={12} strokeWidth={3} />}{sl.time}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <TakeDose med={m} />
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

@@ -3,7 +3,7 @@ import { isEN, t } from './i18n'
 // The schema comes from the server (internal/store/schema.go): the forms
 // and lists here are drawn from it rather than declared twice.
 
-export type FieldType = 'text' | 'longtext' | 'int' | 'real' | 'date' | 'datetime' | 'time' | 'enum' | 'ref' | 'bool'
+export type FieldType = 'text' | 'longtext' | 'int' | 'real' | 'date' | 'datetime' | 'time' | 'times' | 'enum' | 'ref' | 'bool'
 
 export interface Field {
   name: string
@@ -55,11 +55,19 @@ export interface Overview {
   current_medications: Rec[]
   recent_visits: Rec[]
   upcoming_follow_ups: Rec[]
+  upcoming_appointments: Rec[]
+  meds_today: MedDay[]
   recent_symptoms: Rec[]
   abnormal_labs_latest: Rec[]
   latest_metrics: Rec[]
   today_checkins: HabitDay[]
   counts: Record<string, number>
+}
+
+// A medicine with reminder times, and whether each of today's times is taken.
+export interface MedDay {
+  medication: Rec
+  slots: { time: string; dose: Rec | null }[]
 }
 
 export interface LabItem {

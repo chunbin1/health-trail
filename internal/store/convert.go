@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -113,6 +114,18 @@ func convert(f Field, v any) (any, error) {
 			return nil, fmt.Errorf("需要时间（HH:MM，如 23:00），收到 %v", v)
 		}
 		return normalizeTime(s)
+	case Times:
+		switch x := v.(type) {
+		case string:
+			return normalizeTimes(x)
+		case []any:
+			parts := make([]string, len(x))
+			for i, p := range x {
+				parts[i] = fmt.Sprint(p)
+			}
+			return normalizeTimes(strings.Join(parts, ","))
+		}
+		return nil, fmt.Errorf("需要每天的时刻，用逗号分开（如 08:00, 20:00），收到 %v", v)
 	case Enum:
 		s, ok := v.(string)
 		if !ok {
@@ -123,9 +136,11 @@ func convert(f Field, v any) (any, error) {
 				return fl, nil
 			}
 		}
+		// "1小时" is "1 小时"
+		bare := strings.ReplaceAll(s, " ", "")
 		for _, o := range f.Options {
-			if o == s {
-				return s, nil
+			if o == s || strings.ReplaceAll(o, " ", "") == bare {
+				return o, nil
 			}
 		}
 		return nil, fmt.Errorf("%q 不在可选值中：%s", s, strings.Join(f.Options, "、"))
@@ -134,9 +149,9 @@ func convert(f Field, v any) (any, error) {
 }
 
 var (
-	dateRe = regexp.MustCompile(`^(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?`)
+	dateRe        = regexp.MustCompile(`^(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?`)
 	compactDateRe = regexp.MustCompile(`^(\d{4})(\d{2})(\d{2})`)
-	timeRe = regexp.MustCompile(`(\d{1,2})\s*[:：时]\s*(\d{1,2})`)
+	timeRe        = regexp.MustCompile(`(\d{1,2})\s*[:：时]\s*(\d{1,2})`)
 )
 
 // normalizeDate accepts 2026-3-5, 2026/03/05, 2026.3.5, 20260305,
@@ -217,6 +232,48 @@ func normalizeTime(s string) (string, error) {
 		return "", fmt.Errorf("时间 %q 不存在", s)
 	}
 	return fmt.Sprintf("%02d:%02d", h, mi), nil
+}
+
+var timesSepRe = regexp.MustCompile(`[,，、;；/]+|\s+和\s*|\s{2,}`)
+
+// normalizeTimes reads the times of day a medicine is taken: "8:00, 20:00",
+// "8点、20点", "08:00 20:00". They come back sorted, without repeats, as
+// "08:00, 20:00".
+func normalizeTimes(s string) (any, error) {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range timesSepRe.Split(strings.TrimSpace(s), -1) {
+		parts := []string{p} // "8 点" is one time
+		if !clockRe.MatchString(strings.TrimSpace(p)) {
+			parts = strings.Fields(p) // "08:00 20:00" is two
+		}
+		for _, q := range parts {
+			t, err := normalizeTime(q)
+			if err != nil {
+				return nil, fmt.Errorf("需要每天的时刻，用逗号分开（如 08:00, 20:00）：%q 不是时刻", q)
+			}
+			if !seen[t] {
+				seen[t] = true
+				out = append(out, t)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	sort.Strings(out)
+	return strings.Join(out, ", "), nil
+}
+
+// ParseTimes splits a stored remind_times value into its "HH:MM" times.
+func ParseTimes(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); clockRe.MatchString(p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func normalizeFlag(s string) string {

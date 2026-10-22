@@ -1,8 +1,9 @@
 import { Fragment, useState, type FormEvent } from 'react'
-import { api, nowLocal, today, type Entity, type Field, type Rec } from '../api'
+import { Plus, X } from 'lucide-react'
+import { addDays, api, nowLocal, today, type Entity, type Field, type Rec } from '../api'
 import { paren, t, tx } from '../i18n'
 import { recTitle, useApp, useMetricKinds, useRefOptions } from '../state'
-import { EmojiPicker, Switch } from '../ui'
+import { EmojiPicker, IconButton, Switch } from '../ui'
 import { DateTimeInput } from './DateTimeInput'
 
 // The choice in a metric select that adds a new metric (metric_kinds) as the
@@ -28,7 +29,8 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
     for (const f of entity.fields) {
       if (v[f.name] !== undefined) continue
       if (f.name === entity.dateKey && f.type === 'date') v[f.name] = today()
-      if (f.name === entity.dateKey && f.type === 'datetime') v[f.name] = nowLocal()
+      // an appointment is ahead: tomorrow morning is a better start than now
+      if (f.name === entity.dateKey && f.type === 'datetime') v[f.name] = entity.name === 'appointments' ? addDays(today(), 1) + ' 09:00' : nowLocal()
       if (f.type === 'enum' && f.name === 'status' && f.options) v[f.name] = f.options[0]
       // a required select shows its first option, so start with that value
       if (f.type === 'enum' && f.required && f.options) v[f.name] = f.options[0]
@@ -96,11 +98,13 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
                   <Switch checked={!!values[f.name]} onChange={(v) => set(f.name, v)} label={tx(f.label)} />
                 </div>
               )
-            const wide = f.type === 'longtext' || (entity.name === 'habits' && f.name === 'icon')
+            const wide = f.type === 'longtext' || f.type === 'times' || (entity.name === 'habits' && f.name === 'icon')
             const v = values[f.name]
+            // several controls in one field: a <label> would hand every click to the first
+            const Wrap = f.type === 'times' ? 'div' : 'label'
             return (
               <Fragment key={f.name}>
-                <label className={'field' + (wide ? ' full' : '')}>
+                <Wrap className={'field' + (wide ? ' full' : '')}>
                   <span className="lbl">
                     {paren(label(f), unitOf(f))}{f.required && <span className="req">*</span>}
                   </span>
@@ -118,7 +122,7 @@ export function EntityForm({ entity, record, defaults, onSaved, onCancel }: {
                   )}
                   {f.hint && !(entity.name === 'habits' && f.name === 'icon') && !(metric && f.name.startsWith('value')) &&
                     <span className="hint">{tx(f.hint)}</span>}
-                </label>
+                </Wrap>
                 {f.custom && v === NEW && (
                   <div className="field full">
                     <span className="lbl">{t('新指标')}<span className="req">*</span></span>
@@ -163,6 +167,8 @@ function Input({ field: f, entity, value, onChange }: { field: Field; entity: En
       )
     case 'time':
       return <DateTimeInput mode="time" value={v} onChange={onChange} required={f.required} />
+    case 'times':
+      return <TimesInput value={v} onChange={onChange} />
     case 'enum':
       if (f.options!.length <= 4)
         return (
@@ -183,6 +189,28 @@ function Input({ field: f, entity, value, onChange }: { field: Field; entity: En
     default:
       return <input className="input" value={v} onChange={(e) => onChange(e.target.value)} />
   }
+}
+
+// Times of day, "08:00, 20:00": each picked from the time list, one more
+// added with the button.
+const SUGGESTED = ['08:00', '12:00', '18:00', '21:00', '07:00', '20:00']
+
+function TimesInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const times = value ? value.split(',').map((s) => s.trim()).filter(Boolean) : []
+  const save = (ts: string[]) => onChange([...new Set(ts.filter(Boolean))].sort().join(', '))
+  return (
+    <div className="times-input">
+      {times.map((tm, i) => (
+        <span key={i} className="time-chip">
+          <DateTimeInput mode="time" required value={tm} onChange={(v) => save(times.map((x, j) => (j === i ? v : x)))} />
+          <IconButton small label={t('删除这个时间')} onClick={() => save(times.filter((_, j) => j !== i))}><X size={14} /></IconButton>
+        </span>
+      ))}
+      <button type="button" className="btn sm" onClick={() => save([...times, SUGGESTED.find((s) => !times.includes(s)) || '12:00'])}>
+        <Plus size={14} />{t('添加时间')}
+      </button>
+    </div>
+  )
 }
 
 function RefSelect({ field, value, onChange }: { field: Field; value: any; onChange: (v: any) => void }) {

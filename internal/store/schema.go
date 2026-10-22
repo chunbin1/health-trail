@@ -14,6 +14,7 @@ const (
 	Date     FieldType = "date"     // YYYY-MM-DD
 	DateTime FieldType = "datetime" // YYYY-MM-DD HH:MM
 	Time     FieldType = "time"     // HH:MM, a time of day
+	Times    FieldType = "times"    // times of day, "08:00, 20:00"
 	Enum     FieldType = "enum"
 	Ref      FieldType = "ref" // id of a row in another entity
 	Bool     FieldType = "bool"
@@ -101,6 +102,7 @@ var Entities = []*Entity{
 			{Name: "name", Label: "药名", Type: Text, Required: true, List: true},
 			{Name: "dosage", Label: "剂量", Type: Text, List: true, Hint: "如：20mg"},
 			{Name: "frequency", Label: "频次", Type: Text, List: true, Hint: "如：每日 2 次，饭前"},
+			{Name: "remind_times", Label: "提醒时间", Type: Times, List: true, Hint: "每天几点吃：到点还没记吃药，会发提醒"},
 			{Name: "status", Label: "状态", Type: Enum, Options: []string{"在用", "按需", "计划中", "已停用"}, List: true},
 			{Name: "start_date", Label: "开始日期", Type: Date, List: true},
 			{Name: "end_date", Label: "结束日期", Type: Date},
@@ -118,6 +120,25 @@ var Entities = []*Entity{
 			{Name: "taken_at", Label: "服用时间", Type: DateTime, Required: true, List: true},
 			{Name: "amount", Label: "数量", Type: Real, Unit: "颗", List: true, Hint: "不填按 1 颗算"},
 			{Name: "notes", Label: "备注", Type: Text},
+		},
+	},
+	{
+		// what is booked ahead: a check, a follow-up, a checkup. Reminded the
+		// evening before and shortly before; once done it can become a visit
+		// or a report (visit_id / report_id).
+		Name: "appointments", Label: "预约", DateKey: "scheduled_at", TitleKey: "title",
+		Fields: []Field{
+			{Name: "scheduled_at", Label: "时间", Type: DateTime, Required: true, List: true},
+			{Name: "title", Label: "事项", Type: Text, Required: true, List: true, Hint: "如：胃镜检查、消化科复诊"},
+			{Name: "appt_type", Label: "类型", Type: Enum, Options: AppointmentTypes, List: true},
+			{Name: "place", Label: "地点", Type: Text, List: true, Hint: "医院、科室"},
+			{Name: "status", Label: "状态", Type: Enum, Options: []string{"待去", "已完成", "已取消"}, List: true},
+			{Name: "remind_before", Label: "提前提醒", Type: Enum, Options: RemindBefore, Hint: "不选是提前 1 小时；另外前一天晚上 8 点也会提醒"},
+			{Name: "preparation", Label: "注意事项", Type: LongText, Hint: "如：空腹 8 小时、带上次的片子"},
+			conditionRef,
+			{Name: "visit_id", Label: "就诊记录", Type: Ref, Ref: "visits"},
+			{Name: "report_id", Label: "检查报告", Type: Ref, Ref: "reports"},
+			{Name: "notes", Label: "备注", Type: LongText},
 		},
 	},
 	{
@@ -198,6 +219,12 @@ var Entities = []*Entity{
 		Unique: []string{"habit_id", "date"},
 	},
 }
+
+// AppointmentTypes are what an appointment is for.
+var AppointmentTypes = []string{"检查", "复诊", "门诊", "体检", "其他"}
+
+// RemindBefore are how long before an appointment its reminder comes.
+var RemindBefore = []string{"15 分钟", "30 分钟", "1 小时", "2 小时", "1 天", "不提醒"}
 
 // MetricTypes are the body metrics the app knows a default unit for.
 var MetricTypes = []string{"体重", "血压", "心率", "血糖", "体温", "血氧", "腰围", "睡眠时长", "步数"}

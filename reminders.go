@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"time"
 
@@ -15,7 +17,8 @@ import (
 // week ahead keeps reminders coming as long as the app is opened weekly.
 const reminderDays = 7
 
-// reminders turns the habits' remind_at into macOS notifications. It brings
+// reminders turns what is due (store.Reminders: habits, medicines,
+// appointments) into macOS notifications. It brings
 // the scheduled ones in line with the data at start and every 30 seconds:
 // a check-in, a new time or an archived habit may come from MCP in another
 // process, so there is nothing to listen to.
@@ -68,15 +71,16 @@ func (r *reminders) sync(now time.Time) {
 		log.Printf("读取提醒失败：%v", err)
 		return
 	}
-	// the language is part of the id, so switching it replaces the
-	// scheduled notifications with ones in the new language
+	// the text is part of the id, so a renamed medicine, a new place or a
+	// switch of language replaces what was scheduled
 	en := r.lang() == "en"
 	want := map[string]store.Reminder{}
 	for _, p := range plan {
 		if en {
-			p.ID += "-en"
-			p.Body = "Time's up, and it isn't checked off today"
+			p.Title, p.Body = p.TitleEN, p.BodyEN
 		}
+		sum := sha256.Sum256([]byte(p.Title + "\n" + p.Body))
+		p.ID += "-" + hex.EncodeToString(sum[:4])
 		want[p.ID] = p
 	}
 	for id := range r.scheduled {

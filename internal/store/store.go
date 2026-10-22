@@ -281,6 +281,10 @@ func (s *Store) prepare(e *Entity, r Record) {
 		if r["amount"] == nil {
 			r["amount"] = 1.0
 		}
+	case "appointments":
+		if r["status"] == nil {
+			r["status"] = "待去"
+		}
 	case "metrics", "habits":
 		// a metric is in its unit; a habit that logs one asks for it in it
 		if t, ok := r["metric_type"].(string); ok && r["unit"] == nil {

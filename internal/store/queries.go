@@ -2,7 +2,6 @@ package store
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 )
@@ -17,6 +16,8 @@ type Overview struct {
 	CurrentMeds      []Record                  `json:"current_medications"`
 	RecentVisits     []Record                  `json:"recent_visits"`
 	UpcomingFollowUp []Record                  `json:"upcoming_follow_ups"`
+	Appointments     []Record                  `json:"upcoming_appointments"` // not done yet, from a week ago on
+	MedsToday        []MedDay                  `json:"meds_today"`            // medicines with remind_times, and which times are taken
 	RecentSymptoms   []Record                  `json:"recent_symptoms"`
 	AbnormalLabs     []Record                  `json:"abnormal_labs_latest"`
 	LatestMetrics    []Record                  `json:"latest_metrics"`
@@ -66,6 +67,12 @@ func (s *Store) Overview() (*Overview, error) {
 	if err != nil {
 		return nil, err
 	}
+	if o.Appointments, err = s.UpcomingAppointments(time.Now()); err != nil {
+		return nil, err
+	}
+	if o.MedsToday, err = s.MedsToday(time.Now()); err != nil {
+		return nil, err
+	}
 	for _, e := range Entities {
 		var n int
 		s.DB.QueryRow("SELECT COUNT(*) FROM " + e.Name).Scan(&n)
@@ -91,66 +98,6 @@ func (s *Store) HabitDays(date string) ([]HabitDay, error) {
 			hd.Checkin = cs[0]
 		}
 		out = append(out, hd)
-	}
-	return out, nil
-}
-
-// Reminder is one notification a habit's remind_at asks for.
-type Reminder struct {
-	ID    string
-	At    time.Time
-	Title string
-	Body  string
-}
-
-// MaxReminders keeps under macOS's limit of 64 pending notifications per app.
-const MaxReminders = 60
-
-// Reminders lists the notifications due after now within the next days days:
-// one per active habit with a remind_at, on each day it isn't checked in yet,
-// at that time. The ID carries the time, so a changed time is a new
-// notification. Soonest first, at most MaxReminders.
-func (s *Store) Reminders(now time.Time, days int) ([]Reminder, error) {
-	habits, err := s.query(`SELECT * FROM habits WHERE remind_at IS NOT NULL AND (archived IS NULL OR archived = 0) ORDER BY id`)
-	if err != nil {
-		return nil, err
-	}
-	cs, err := s.query(`SELECT habit_id, date FROM checkins WHERE date >= ?`, now.Format("2006-01-02"))
-	if err != nil {
-		return nil, err
-	}
-	done := map[string]bool{}
-	for _, c := range cs {
-		done[fmt.Sprint(c["habit_id"], " ", c["date"])] = true
-	}
-	out := []Reminder{}
-	for _, h := range habits {
-		at, _ := h["remind_at"].(string)
-		clock, err := time.Parse("15:04", at)
-		if err != nil {
-			continue
-		}
-		title := strings.TrimSpace(fmt.Sprint(h["name"]))
-		if icon, _ := h["icon"].(string); icon != "" {
-			title = icon + " " + title
-		}
-		for d := 0; d < days; d++ {
-			t := time.Date(now.Year(), now.Month(), now.Day()+d, clock.Hour(), clock.Minute(), 0, 0, now.Location())
-			date := t.Format("2006-01-02")
-			if !t.After(now) || done[fmt.Sprint(h["id"], " ", date)] {
-				continue
-			}
-			out = append(out, Reminder{
-				ID:    fmt.Sprintf("habit-%v-%s-%s", h["id"], date, at),
-				At:    t,
-				Title: title,
-				Body:  "到点了，今天还没打卡",
-			})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
-	if len(out) > MaxReminders {
-		out = out[:MaxReminders]
 	}
 	return out, nil
 }
@@ -467,7 +414,7 @@ func (s *Store) Related(entityName string, id int64) (Record, error) {
 	}
 	out := Record{"record": r}
 	children := map[string][][2]string{
-		"conditions": {{"symptoms", "condition_id"}, {"visits", "condition_id"}, {"medications", "condition_id"}},
+		"conditions": {{"symptoms", "condition_id"}, {"visits", "condition_id"}, {"medications", "condition_id"}, {"appointments", "condition_id"}},
 		"visits":     {{"medications", "visit_id"}, {"reports", "visit_id"}},
 		"reports":    {{"lab_results", "report_id"}},
 		"habits":     {{"checkins", "habit_id"}},
@@ -488,14 +435,15 @@ func (s *Store) Related(entityName string, id int64) (Record, error) {
 	return out, nil
 }
 
-// Timeline lists recent records of every kind, newest first, as one stream.
+// Timeline lists recent records of every kind, newest first, as one stream:
+// what happened, so not appointments (ahead, or done as a visit or report).
 func (s *Store) Timeline(limit int) ([]Record, error) {
 	if limit <= 0 {
 		limit = 30
 	}
 	var parts []string
 	for _, e := range Entities {
-		if e.DateKey == "" || e.Name == "checkins" || e.Name == "lab_results" {
+		if e.DateKey == "" || e.Name == "checkins" || e.Name == "lab_results" || e.Name == "appointments" {
 			continue
 		}
 		title := e.TitleKey
