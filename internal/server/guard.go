@@ -75,9 +75,9 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>健康档案</title>
+	w.Write([]byte(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>健康足迹</title>
 <body style="font:16px -apple-system,sans-serif;padding:2em;max-width:30em;margin:auto">
-<h2>需要访问令牌</h2><p>请在电脑上打开健康档案 →「连接」页面，用手机扫码或打开里面的访问链接。</p></body>`))
+<h2>需要访问令牌</h2><p>请在电脑上打开健康足迹 →「连接」页面，用手机扫码或打开里面的访问链接。</p></body>`))
 }
 
 func (g *Guard) valid(t string) bool {

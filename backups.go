@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lee/health-vault/internal/backup"
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/backup"
+	"github.com/lee/health-trail/internal/store"
 )
 
 // backups runs the backups the person set up: when they're due, when the
@@ -246,7 +246,7 @@ func suggestedBackupDir() string {
 	}
 	icloud := filepath.Join(home, "Library", "Mobile Documents", "com~apple~CloudDocs")
 	if info, err := os.Stat(icloud); err == nil && info.IsDir() {
-		return filepath.Join(icloud, "HealthVaultBackups")
+		return filepath.Join(icloud, "HealthTrailBackups")
 	}
 	return ""
 }

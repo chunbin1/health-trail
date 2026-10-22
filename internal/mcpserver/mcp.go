@@ -10,7 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/store"
 )
 
 const instructions = `这是用户本人的个人健康档案（单人）。所有数据存在用户自己的电脑上。
@@ -28,7 +28,7 @@ const instructions = `这是用户本人的个人健康档案（单人）。所�
 
 // New builds the MCP server over st.
 func New(st *store.Store, version string) *mcp.Server {
-	s := mcp.NewServer(&mcp.Implementation{Name: "health-vault", Title: "健康档案", Version: version},
+	s := mcp.NewServer(&mcp.Implementation{Name: "health-trail", Title: "健康足迹", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
 	t := &tools{st}
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true}

@@ -1,4 +1,4 @@
-module github.com/lee/health-vault
+module github.com/lee/health-trail
 
 go 1.27.2
 

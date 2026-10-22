@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/store"
 )
 
 func open(t *testing.T) *store.Store {
@@ -51,7 +51,7 @@ func TestBackupAndRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if name != "health-vault-2026-10-20-230005.zip" {
+	if name != "health-trail-2026-10-20-230005.zip" {
 		t.Errorf("name = %q", name)
 	}
 
@@ -164,16 +164,22 @@ func TestDirAndPrune(t *testing.T) {
 		t.Error("prune removed a file that isn't a backup")
 	}
 
-	// the first backups had Chinese names; they still list, by their time
+	// earlier backups had other names (Chinese, then from before the app was
+	// called Health Trail); they still list, by their time, and prune
+	vault := filepath.Join(dir, "health-vault-2026-10-01-210000.zip")
 	old := filepath.Join(dir, "健康档案-2026-09-30-210000-恢复前.zip")
+	os.WriteFile(vault, []byte("x"), 0o600)
 	os.WriteFile(old, []byte("x"), 0o600)
 	es, _ = List(dir)
-	if len(es) != 4 || es[3].Name != filepath.Base(old) || es[3].Time != "2026-09-30 21:00:00" {
-		t.Errorf("with an old backup = %+v", es)
+	if len(es) != 5 || es[3].Name != filepath.Base(vault) || es[3].Time != "2026-10-01 21:00:00" ||
+		es[4].Name != filepath.Base(old) || es[4].Time != "2026-09-30 21:00:00" {
+		t.Errorf("with old backups = %+v", es)
 	}
 	Prune(dir, 3)
-	if _, err := os.Stat(old); err == nil {
-		t.Error("an old backup beyond the count was kept")
+	for _, f := range []string{vault, old} {
+		if _, err := os.Stat(f); err == nil {
+			t.Errorf("an old backup beyond the count was kept: %s", filepath.Base(f))
+		}
 	}
 }
 

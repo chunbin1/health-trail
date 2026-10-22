@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/store"
 )
 
 const token = "0123456789abcdef0123456789abcdef0123456789abcdef"

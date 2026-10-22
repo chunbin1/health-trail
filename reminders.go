@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/store"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
@@ -26,14 +26,14 @@ type reminders struct {
 	scheduled map[string]bool
 }
 
-func (r *reminders) ServiceName() string { return "health-vault/reminders" }
+func (r *reminders) ServiceName() string { return "health-trail/reminders" }
 
 // ServiceStartup starts the notification service itself, so that its failing
 // (a binary run outside the .app has no bundle identifier) only turns
 // reminders off instead of stopping the app.
 func (r *reminders) ServiceStartup(ctx context.Context, opts application.ServiceOptions) error {
 	if err := r.ns.ServiceStartup(ctx, opts); err != nil {
-		log.Printf("提醒不可用（需要从 健康档案.app 启动）：%v", err)
+		log.Printf("提醒不可用（需要从 健康足迹.app 启动）：%v", err)
 		return nil
 	}
 	go r.run(ctx)
@@ -42,7 +42,7 @@ func (r *reminders) ServiceStartup(ctx context.Context, opts application.Service
 
 func (r *reminders) run(ctx context.Context) {
 	if ok, err := r.ns.RequestNotificationAuthorization(); !ok {
-		log.Printf("没有通知权限，提醒不会弹出（系统设置 → 通知 → 健康档案）：%v", err)
+		log.Printf("没有通知权限，提醒不会弹出（系统设置 → 通知 → 健康足迹）：%v", err)
 		return
 	}
 	// what an earlier run scheduled is unknown here: start clean

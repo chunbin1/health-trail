@@ -86,7 +86,7 @@ export function App() {
   return (
     <div className="app">
       <nav className="sidebar drag">
-        <div className="brand"><img src="/icon.svg" alt="" />{t('健康档案')}</div>
+        <div className="brand"><img src="/icon.svg" alt="" />{t('健康足迹')}</div>
         <div className="side-search">
           <SearchIcon size={14} />
           <input placeholder={t('搜索')} value={q}

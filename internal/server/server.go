@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/store"
 )
 
 type Server struct {

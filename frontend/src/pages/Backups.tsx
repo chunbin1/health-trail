@@ -88,7 +88,7 @@ export function BackupSettings() {
           <div className="card-head"><h2>{t('备份位置')}</h2></div>
           <div className="small muted" style={{ marginBottom: 10 }}>{t('把数据库和附件打包成一个 zip 文件，存到你选的文件夹')}</div>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
-            <input className="input" style={{ flex: 1, minWidth: 0 }} value={dir} placeholder={t('选择或填写一个文件夹，如 /Users/你/Documents/HealthVaultBackups')}
+            <input className="input" style={{ flex: 1, minWidth: 0 }} value={dir} placeholder={t('选择或填写一个文件夹，如 /Users/你/Documents/HealthTrailBackups')}
               onChange={(e) => setDir(e.target.value)} onBlur={() => saveDir(dir)} onKeyDown={(e) => e.key === 'Enter' && saveDir(dir)} />
             {data.can_choose_dir && <button className="btn" onClick={choose}><FolderOpen size={15} />{t('选择…')}</button>}
           </div>

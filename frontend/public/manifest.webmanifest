@@ -1,6 +1,6 @@
 {
-  "name": "健康档案",
-  "short_name": "健康档案",
+  "name": "健康足迹",
+  "short_name": "健康足迹",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f7f6f3",

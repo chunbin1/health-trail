@@ -45,11 +45,12 @@ const AIS = [
   { id: 'other', label: '其他 AI' },
 ] as const
 type AI = (typeof AIS)[number]['id']
-const AI_KEY = 'health-vault.ai'
+const AI_KEY = 'health-trail.ai'
+const OLD_AI_KEY = 'health-vault.ai' // before the app was called Health Trail
 
 function storedAI(): AI {
   try {
-    const v = localStorage.getItem(AI_KEY)
+    const v = localStorage.getItem(AI_KEY) ?? localStorage.getItem(OLD_AI_KEY)
     if (AIS.some((a) => a.id === v)) return v as AI
   } catch {}
   return 'claude-chat'

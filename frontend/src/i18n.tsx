@@ -17,7 +17,8 @@ export type Lang = 'zh' | 'en'
 let lang: Lang = 'zh'
 let schemaEN: Schema['en'] = { text: {}, nouns: {} }
 
-const STORE_KEY = 'health-vault.lang'
+const STORE_KEY = 'health-trail.lang'
+const OLD_STORE_KEY = 'health-vault.lang' // before the app was called Health Trail
 
 export const getLang = () => lang
 export const isEN = () => lang === 'en'
@@ -26,7 +27,7 @@ export const isEN = () => lang === 'en'
 // and when it can't be reached.
 export function storedLang(): Lang {
   try {
-    return localStorage.getItem(STORE_KEY) === 'en' ? 'en' : 'zh'
+    return (localStorage.getItem(STORE_KEY) ?? localStorage.getItem(OLD_STORE_KEY)) === 'en' ? 'en' : 'zh'
   } catch {
     return 'zh'
   }
@@ -41,14 +42,14 @@ export function setLang(l: Lang, schema?: Schema) {
     // private mode: the server's setting still keeps it
   }
   document.documentElement.lang = l === 'en' ? 'en' : 'zh-CN'
-  document.title = t('健康档案')
+  document.title = t('健康足迹')
 }
 
 type Plural = readonly [one: string, other: string]
 
 const EN = {
   // app shell
-  '健康档案': 'Health Vault',
+  '健康足迹': 'Health Trail',
   '今天': 'Today',
   '打卡': 'Check-ins',
   '打卡|button': 'Check off',
@@ -78,7 +79,7 @@ const EN = {
   '备份': 'Backups',
   '把数据库和附件打包成一个 zip 文件，存到你选的文件夹': 'The database and attachments, packed into one zip file in a folder you choose',
   '备份位置': 'Backup location',
-  '选择或填写一个文件夹，如 /Users/你/Documents/HealthVaultBackups': 'Choose or type a folder, e.g. /Users/you/Documents/HealthVaultBackups',
+  '选择或填写一个文件夹，如 /Users/你/Documents/HealthTrailBackups': 'Choose or type a folder, e.g. /Users/you/Documents/HealthTrailBackups',
   '选择…': 'Choose…',
   '用 iCloud 云盘': 'Use iCloud Drive',
   '建议放在 iCloud 云盘、移动硬盘或网盘的同步文件夹里，别和数据放在同一块硬盘上。': 'Best kept in iCloud Drive, on an external drive or in a synced cloud folder, not on the same disk as the data.',
@@ -113,7 +114,7 @@ const EN = {
   '上次备份：{time} · {file}': 'Last backup: {time} · {file}',
   '搜索所有记录，如 胃、头孢、协和': 'Search all records, e.g. stomach, cefalexin, a hospital',
   '没有找到「{q}」': 'Nothing found for “{q}”',
-  '无法连接到健康档案服务：{error}': 'Can’t reach the Health Vault service: {error}',
+  '无法连接到健康足迹服务：{error}': 'Can’t reach the Health Trail service: {error}',
   '服务器返回了无法解析的内容（{status}）': 'The server sent a response that couldn’t be read ({status})',
   '请求失败（{status}）': 'Request failed ({status})',
 

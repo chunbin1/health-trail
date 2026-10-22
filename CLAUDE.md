@@ -30,7 +30,7 @@ frontend/                React + TS + Vite，构建结果嵌进 Go 程序
 
 - **安全**：所有经过网络端口的请求都要经过 `server.Guard`。只有桌面窗口进程内的资源服务器可以直接用 `Server.Handler()`。不要放宽 Guard 的规则：本机请求只认回环地址形式的 Host（防 DNS 重绑定，`*.localhost` 也不行）；其他设备必须带令牌；Origin 不是本站的一律拒绝。改 guard.go 必须同时更新 `server_test.go` 里的 `TestGuard`。
 - **附件**：只有图片、PDF、纯文本可以直接在页面里打开，其他类型一律作为下载返回，并带 `Content-Security-Policy: sandbox`。不能让上传的 HTML 或 SVG 以本站身份运行。
-- **stdout 归 MCP 协议**：`health-vault mcp` 模式下，任何日志只能写 stderr。
+- **stdout 归 MCP 协议**：`health-trail mcp` 模式下，任何日志只能写 stderr。
 - **错误要让 Claude 看得懂**：业务错误返回 `store.ValidationError`，消息里写明哪个字段、允许哪些值，MCP 层通过 `failed()` 作为工具结果返回（IsError），而不是协议错误。
 - **一份报告要么全部写入，要么一条不写**：批量写入用 `CreateMany`（事务）；`add_lab_report`（mcpserver 的 `importLabs`）失败时要删掉它新建的报告。
 - **界面统一**：颜色和图标用 `ui.tsx` 的 `KIND`（每类记录一个图标 + `--c-<kind>` 颜色）和 `styles.css` 里的 token，不要在组件里写死颜色。图表系列颜色要先用 dataviz 的 `validate_palette.js` 校验浅色和深色两套。
@@ -42,11 +42,11 @@ frontend/                React + TS + Vite，构建结果嵌进 Go 程序
 ```bash
 make test        # go vet + go test + 前端类型检查
 make bin         # 构建 UI 和二进制
-make app         # 打包 健康档案.app
+make app         # 打包 健康足迹.app
 ```
 
 - 改了 store/server/mcpserver：`make test` 必须全绿。
 - 改了 MCP 工具：用逐条发送的 stdio 驱动做一次端到端测试（见 LESSONS #1），不要一次性把请求全部塞进 stdin。
-- 改了界面：用一个临时数据目录启动 `./health-vault serve -data <临时目录> -port 8731`，在浏览器里检查桌面宽度和 375px 手机宽度（不能横向溢出）。先确认数据加载完再判断（LESSONS #4），重新构建后强制刷新（LESSONS #5）。弹窗、抽屉、日期选择器都有动画：测量位置或截图前先 `document.getAnimations().forEach(a => a.finish())` 并稍等一下；截图里「没有出现」时，先用 `getBoundingClientRect` 和再截一张确认，再判断是 bug。需要容器宽度才能绘制的组件用 `useLayoutEffect` 在第一次绘制前量好。
-- 改了桌面窗口：`./health-vault -data <临时目录> -port 8732` 启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。
-- **永远不要用默认数据目录做测试**，那里是用户真实的健康数据：`~/Library/Application Support/HealthVault`。`make dev-real` 读写的就是这个目录，只给用户自己用，编码助手不要运行它；要测 `dev.sh --real` 这条路径，就把 `HEALTH_VAULT_DATA` 设成临时目录。
+- 改了界面：用一个临时数据目录启动 `./health-trail serve -data <临时目录> -port 8731`，在浏览器里检查桌面宽度和 375px 手机宽度（不能横向溢出）。先确认数据加载完再判断（LESSONS #4），重新构建后强制刷新（LESSONS #5）。弹窗、抽屉、日期选择器都有动画：测量位置或截图前先 `document.getAnimations().forEach(a => a.finish())` 并稍等一下；截图里「没有出现」时，先用 `getBoundingClientRect` 和再截一张确认，再判断是 bug。需要容器宽度才能绘制的组件用 `useLayoutEffect` 在第一次绘制前量好。
+- 改了桌面窗口：`./health-trail -data <临时目录> -port 8732` 启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。
+- **永远不要用默认数据目录做测试**，那里是用户真实的健康数据：`~/Library/Application Support/HealthVault`。`make dev-real` 读写的就是这个目录，只给用户自己用，编码助手不要运行它；要测 `dev.sh --real` 这条路径，就把 `HEALTH_TRAIL_DATA` 设成临时目录。

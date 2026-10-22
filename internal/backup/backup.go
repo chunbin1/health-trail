@@ -17,20 +17,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/store"
 )
 
 // Prefix starts every backup's file name; only files with it are listed,
 // pruned or restored, so other files in the folder are left alone. Names are
 // plain ASCII: cloud drives, Windows and terminals all take them as they are.
-const Prefix = "health-vault-"
+const Prefix = "health-trail-"
 
 // BeforeRestore marks the backup made of the current data before a restore.
 const BeforeRestore = "-before-restore"
 
-// legacyPrefix is what the first backups were called; they still list and
-// restore.
-const legacyPrefix = "健康档案-"
+// legacyPrefixes are what earlier backups were called: first in Chinese, then
+// before the app was renamed Health Trail. They still list, prune and restore.
+var legacyPrefixes = []string{"health-vault-", "健康档案-"}
 
 const dbName = "health.db"
 
@@ -57,7 +57,7 @@ func CheckDir(st *store.Store, dir string) error {
 	return nil
 }
 
-// Create writes a backup of st into dir as health-vault-<time><suffix>.zip and
+// Create writes a backup of st into dir as health-trail-<time><suffix>.zip and
 // returns its name. The database is copied with VACUUM INTO, a consistent
 // snapshot even while the app or Claude is writing.
 func Create(st *store.Store, dir, suffix string, now time.Time) (string, error) {
@@ -67,7 +67,7 @@ func Create(st *store.Store, dir, suffix string, now time.Time) (string, error) 
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("无法创建备份文件夹：%w", err)
 	}
-	tmp, err := os.MkdirTemp("", "health-vault-backup-")
+	tmp, err := os.MkdirTemp("", "health-trail-backup-")
 	if err != nil {
 		return "", err
 	}
@@ -152,8 +152,10 @@ func List(dir string) ([]Entry, error) {
 	for _, d := range des {
 		n := d.Name()
 		prefix := Prefix
-		if strings.HasPrefix(n, legacyPrefix) {
-			prefix = legacyPrefix
+		for _, p := range legacyPrefixes {
+			if strings.HasPrefix(n, p) {
+				prefix = p
+			}
 		}
 		if d.IsDir() || !strings.HasPrefix(n, prefix) || !strings.HasSuffix(n, ".zip") {
 			continue
@@ -209,7 +211,7 @@ func Restore(st *store.Store, path string) error {
 		return fmt.Errorf("打不开这个备份：%w", err)
 	}
 	defer zr.Close()
-	tmp, err := os.MkdirTemp("", "health-vault-restore-")
+	tmp, err := os.MkdirTemp("", "health-trail-restore-")
 	if err != nil {
 		return err
 	}
@@ -229,7 +231,7 @@ func Restore(st *store.Store, path string) error {
 		}
 	}
 	if db == nil {
-		return errors.New("这不是健康档案的备份：里面没有 health.db")
+		return errors.New("这不是健康足迹的备份：里面没有 health.db")
 	}
 	snap := filepath.Join(tmp, dbName)
 	if err := extract(db, snap); err != nil {

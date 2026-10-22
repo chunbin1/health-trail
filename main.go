@@ -1,10 +1,10 @@
-// health-vault: a personal health record that lives on your own computer,
+// health-trail: a personal health record that lives on your own computer,
 // with a Mac window, a web UI a phone can open, and MCP tools for Claude.
 //
-//	health-vault             the desktop app (window + local server)
-//	health-vault serve       the server only (no window), e.g. on a mini PC
-//	health-vault mcp         MCP over stdio, for Claude Desktop / Claude Code
-//	health-vault info        where the data is, how to connect
+//	health-trail             the desktop app (window + local server)
+//	health-trail serve       the server only (no window), e.g. on a mini PC
+//	health-trail mcp         MCP over stdio, for Claude Desktop / Claude Code
+//	health-trail info        where the data is, how to connect
 package main
 
 import (
@@ -28,9 +28,9 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
-	"github.com/lee/health-vault/internal/mcpserver"
-	"github.com/lee/health-vault/internal/server"
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/mcpserver"
+	"github.com/lee/health-trail/internal/server"
+	"github.com/lee/health-trail/internal/store"
 )
 
 //go:embed all:frontend/dist
@@ -41,13 +41,18 @@ var version = "0.1.0"
 const defaultPort = "8721"
 
 func defaultDataDir() string {
-	if d := os.Getenv("HEALTH_VAULT_DATA"); d != "" {
-		return d
+	// HEALTH_VAULT_DATA is the name from before the app was called Health Trail
+	for _, k := range []string{"HEALTH_TRAIL_DATA", "HEALTH_VAULT_DATA"} {
+		if d := os.Getenv(k); d != "" {
+			return d
+		}
 	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		base = "."
 	}
+	// still the name from before the app was called Health Trail: the data
+	// moves once, into the App Store sandbox, rather than twice
 	return filepath.Join(base, "HealthVault")
 }
 
@@ -61,7 +66,7 @@ func main() {
 		args = nil
 	}
 	fl := flag.NewFlagSet(cmd, flag.ExitOnError)
-	dataDir := fl.String("data", defaultDataDir(), "数据目录（也可用环境变量 HEALTH_VAULT_DATA）")
+	dataDir := fl.String("data", defaultDataDir(), "数据目录（也可用环境变量 HEALTH_TRAIL_DATA）")
 	port := fl.String("port", defaultPort, "本地服务端口")
 	lan := fl.Bool("lan", false, "serve：允许局域网/Tailscale 中的设备（手机）访问，需令牌")
 	fl.Parse(args)
@@ -78,7 +83,7 @@ func main() {
 	case "version":
 		fmt.Println(version)
 	default:
-		fmt.Fprintf(os.Stderr, "用法：health-vault [app|serve|mcp|info|version] [-data 目录] [-port 端口] [-lan]\n")
+		fmt.Fprintf(os.Stderr, "用法：health-trail [app|serve|mcp|info|version] [-data 目录] [-port 端口] [-lan]\n")
 		os.Exit(2)
 	}
 }
@@ -234,7 +239,7 @@ func (a *app) info(r *http.Request) map[string]any {
 	if a.st.Dir != defaultDataDir() {
 		args = append(args, "-data", a.st.Dir)
 	}
-	desktop := map[string]any{"mcpServers": map[string]any{"health-vault": map[string]any{"command": exe, "args": args}}}
+	desktop := map[string]any{"mcpServers": map[string]any{"health-trail": map[string]any{"command": exe, "args": args}}}
 	desktopJSON, _ := json.MarshalIndent(desktop, "", "  ")
 	httpURL := "http://127.0.0.1:" + a.port + "/mcp"
 	// Codex keeps MCP servers in ~/.codex/config.toml, shared by its CLI and
@@ -243,7 +248,7 @@ func (a *app) info(r *http.Request) map[string]any {
 	for i, s := range args {
 		tomlArgs[i] = tomlString(s)
 	}
-	codexConfig := fmt.Sprintf("[mcp_servers.health-vault]\ncommand = %s\nargs = [%s]", tomlString(exe), strings.Join(tomlArgs, ", "))
+	codexConfig := fmt.Sprintf("[mcp_servers.health-trail]\ncommand = %s\nargs = [%s]", tomlString(exe), strings.Join(tomlArgs, ", "))
 	var phone []string
 	if a.settings.LAN {
 		for _, ip := range server.LANAddrs() {
@@ -259,12 +264,12 @@ func (a *app) info(r *http.Request) map[string]any {
 		"phone_urls":            phone,
 		"mcp_stdio_command":     exe,
 		"claude_desktop_config": string(desktopJSON),
-		"claude_code_command":   "claude mcp add health-vault -s user -- " + shellJoin(exe, args),
+		"claude_code_command":   "claude mcp add health-trail -s user -- " + shellJoin(exe, args),
 		"mcp_http_url":          httpURL,
-		"claude_code_http":      "claude mcp add --transport http health-vault -s user " + httpURL,
-		"codex_command":         "codex mcp add health-vault -- " + shellJoin(exe, args),
+		"claude_code_http":      "claude mcp add --transport http health-trail -s user " + httpURL,
+		"codex_command":         "codex mcp add health-trail -- " + shellJoin(exe, args),
 		"codex_config":          codexConfig,
-		"codex_http":            "codex mcp add health-vault --url " + httpURL,
+		"codex_http":            "codex mcp add health-trail --url " + httpURL,
 		"mcp_args":              strings.Join(args, " "),
 	}
 }
@@ -297,7 +302,7 @@ func runServe(dataDir, port string, lanFlag bool) {
 	if err := a.listener.listen(a.addr()); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("健康档案已启动：http://127.0.0.1:%s  数据目录：%s", port, dataDir)
+	log.Printf("健康足迹已启动：http://127.0.0.1:%s  数据目录：%s", port, dataDir)
 	if a.settings.LAN {
 		for _, u := range a.info(nil)["phone_urls"].([]string) {
 			log.Printf("手机访问：%s", u)
@@ -327,7 +332,7 @@ func runApp(dataDir, port string) {
 	ctx, stopBackups := context.WithCancel(context.Background())
 	go a.backups.loop(ctx)
 	wapp = application.New(application.Options{
-		Name:        "健康档案",
+		Name:        "健康足迹",
 		Description: "个人健康档案",
 		Assets:      application.AssetOptions{Handler: a.windowHandler(func() *application.App { return wapp })},
 		OnShutdown:  func() { stopBackups(); a.backups.quit() },
@@ -346,7 +351,7 @@ func runApp(dataDir, port string) {
 		},
 	})
 	win = wapp.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "健康档案",
+		Title:            "健康足迹",
 		Width:            1240,
 		Height:           820,
 		MinWidth:         380,
@@ -368,7 +373,7 @@ func instanceID(dataDir string) string {
 		dataDir = abs
 	}
 	sum := sha256.Sum256([]byte(dataDir))
-	return "com.health-vault.app." + hex.EncodeToString(sum[:6])
+	return "com.chunbin1.healthtrail." + hex.EncodeToString(sum[:6])
 }
 
 func runInfo(dataDir, port string) {

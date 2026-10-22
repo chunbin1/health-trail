@@ -12,8 +12,8 @@
 set -u
 cd "$(dirname "$0")/.."
 
-export HEALTH_VAULT_DEV_PORT=${HEALTH_VAULT_DEV_PORT:-8722}
-PORT=$HEALTH_VAULT_DEV_PORT
+export HEALTH_TRAIL_DEV_PORT=${HEALTH_TRAIL_DEV_PORT:-8722}
+PORT=$HEALTH_TRAIL_DEV_PORT
 # A second dev run would leave its API unbound while its Vite proxies to the
 # first one, showing the other run's data. Refuse to start instead.
 if busy=$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | tail -n +2) && [ -n "$busy" ]; then
@@ -21,9 +21,9 @@ if busy=$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | tail -n +2) && [ -n 
   echo "$busy"
   exit 1
 fi
-BIN=$(mktemp -d)/health-vault
+BIN=$(mktemp -d)/health-trail
 if [ "${1:-}" = --real ]; then
-  DATA=${HEALTH_VAULT_DATA:-$HOME/Library/Application Support/HealthVault}
+  DATA=${HEALTH_TRAIL_DATA:-${HEALTH_VAULT_DATA:-$HOME/Library/Application Support/HealthVault}}
   if [ -f "$DATA/health.db" ]; then
     backups="$DATA-dev-backups"
     dest="$backups/$(date +%Y%m%d-%H%M%S)"
@@ -37,7 +37,7 @@ if [ "${1:-}" = --real ]; then
   fi
   echo "[dev] 使用真实数据：$DATA"
 else
-  DATA=${HEALTH_VAULT_DEV_DATA:-/tmp/health-vault-dev}
+  DATA=${HEALTH_TRAIL_DEV_DATA:-/tmp/health-trail-dev}
 fi
 api=
 vite=

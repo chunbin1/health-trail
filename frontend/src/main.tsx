@@ -35,7 +35,7 @@ function Root() {
       })
       .catch((e) => setError(e.message))
   }, [])
-  if (error) return <div className="main"><div className="error">{t('无法连接到健康档案服务：{error}', { error })}</div></div>
+  if (error) return <div className="main"><div className="error">{t('无法连接到健康足迹服务：{error}', { error })}</div></div>
   if (!schema) return null
   function switchLang(l: Lang) {
     setLang(l, schema)

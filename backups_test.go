@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lee/health-vault/internal/backup"
-	"github.com/lee/health-vault/internal/store"
+	"github.com/lee/health-trail/internal/backup"
+	"github.com/lee/health-trail/internal/store"
 )
 
 // With the default of keeping one backup, restoring must still work: the
