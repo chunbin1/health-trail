@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"github.com/lee/health-trail/internal/store"
@@ -12,10 +13,11 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
-// reminderDays is how far ahead the app schedules. macOS here only takes
-// one-off notifications, but it delivers them while the app is closed, so a
-// week ahead keeps reminders coming as long as the app is opened weekly.
-const reminderDays = 7
+// reminderDays is how far ahead the app schedules. The app stays in the
+// menu bar and brings them up to date every 30 seconds; what is scheduled
+// still comes if it was quit. Two days keeps a few medicines a day under
+// macOS's 64 pending notifications.
+const reminderDays = 2
 
 // reminders turns what is due (store.Reminders: habits, medicines,
 // appointments) into macOS notifications. It brings
@@ -27,6 +29,14 @@ type reminders struct {
 	ns        *notifications.NotificationService
 	lang      func() string // the UI's language, which notifications follow
 	scheduled map[string]bool
+	allowed   atomic.Int32 // notifications allowed in System Settings: 1 yes, 0 no, -1 not known yet
+}
+
+// Allowed reports whether macOS lets the app show notifications; ok is
+// false while that isn't known yet (or reminders didn't start).
+func (r *reminders) Allowed() (allowed, ok bool) {
+	v := r.allowed.Load()
+	return v == 1, v >= 0
 }
 
 func (r *reminders) ServiceName() string { return "health-trail/reminders" }
@@ -35,6 +45,7 @@ func (r *reminders) ServiceName() string { return "health-trail/reminders" }
 // (a binary run outside the .app has no bundle identifier) only turns
 // reminders off instead of stopping the app.
 func (r *reminders) ServiceStartup(ctx context.Context, opts application.ServiceOptions) error {
+	r.allowed.Store(-1)
 	if err := r.ns.ServiceStartup(ctx, opts); err != nil {
 		log.Printf("提醒不可用（需要从 健康足迹.app 启动）：%v", err)
 		return nil
@@ -43,10 +54,15 @@ func (r *reminders) ServiceStartup(ctx context.Context, opts application.Service
 	return nil
 }
 
+// run asks for permission once, then keeps the notifications in line with
+// the data. The app stays running for days, so permission is checked on
+// every round: turned on later in System Settings, reminders start then
+// (and the window stops warning about it).
 func (r *reminders) run(ctx context.Context) {
-	if ok, err := r.ns.RequestNotificationAuthorization(); !ok {
+	ok, err := r.ns.RequestNotificationAuthorization()
+	r.setAllowed(ok)
+	if !ok {
 		log.Printf("没有通知权限，提醒不会弹出（系统设置 → 通知 → 健康足迹）：%v", err)
-		return
 	}
 	// what an earlier run scheduled is unknown here: start clean
 	if err := r.ns.RemoveAllPendingNotifications(); err != nil {
@@ -56,12 +72,28 @@ func (r *reminders) run(ctx context.Context) {
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
 	for {
-		r.sync(time.Now())
+		if ok, _ := r.ns.CheckNotificationAuthorization(); ok {
+			if r.allowed.Load() != 1 {
+				r.scheduled = map[string]bool{} // allowed just now: schedule everything
+			}
+			r.setAllowed(true)
+			r.sync(time.Now())
+		} else {
+			r.setAllowed(false)
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
 		}
+	}
+}
+
+func (r *reminders) setAllowed(ok bool) {
+	if ok {
+		r.allowed.Store(1)
+	} else {
+		r.allowed.Store(0)
 	}
 }
 

@@ -1,12 +1,44 @@
-import { Database, Languages } from 'lucide-react'
+import { useState } from 'react'
+import { Database, Languages, Power } from 'lucide-react'
 import { api } from '../api'
 import { t, type Lang } from '../i18n'
 import { useApp, useLoad } from '../state'
+import { Switch } from '../ui'
+import { NotifyWarning } from '../components/NotifyWarning'
 import { BackupSettings } from './Backups'
 import { Section } from './Connect'
 
 // Each language named in itself, as language pickers do.
 const LANGS: { id: Lang; name: string }[] = [{ id: 'zh', name: '中文' }, { id: 'en', name: 'English' }]
+
+// Opening at login, in the Mac app only (elsewhere the API isn't there and
+// the section isn't shown). The switch moves at once; the login item is
+// read back after.
+function AtLogin() {
+  const { data, error } = useLoad(() => api.autostart(), [])
+  const [on, setOn] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  if (error || !data) return null
+  const checked = on ?? data.enabled
+  async function change(v: boolean) {
+    if (busy) return
+    setBusy(true)
+    setOn(v)
+    try {
+      setOn((await api.setAutostart(v)).enabled)
+    } catch (e: any) {
+      setOn(!v)
+      alert(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Section icon={<Power size={20} />} title={t('开机自动启动')}
+      sub={t('登录 Mac 后在菜单栏运行，不打开窗口，到点照常提醒。关掉窗口也会留在菜单栏；要完全退出，点菜单栏的图标 →「退出健康足迹」。')}
+      right={<Switch checked={checked} onChange={change} label={t('开机自动启动')} />} />
+  )
+}
 
 // Settings: the language, backups, and where the data lives. (Phone access
 // is hidden until it's reworked.)
@@ -22,6 +54,7 @@ export function Settings() {
         <div className="titles"><h1>{t('设置')}</h1></div>
       </div>
       <div className="stack" style={{ maxWidth: 760 }}>
+        <NotifyWarning />
         <Section icon={<Languages size={20} />} title={t('语言')}
           right={
             <select className="input" style={{ width: 'auto' }} aria-label={t('语言')} value={lang}
@@ -29,6 +62,8 @@ export function Settings() {
               {LANGS.map((l) => <option key={l.id} value={l.id} lang={l.id === 'en' ? 'en' : 'zh-CN'}>{l.name}</option>)}
             </select>
           } />
+
+        <AtLogin />
 
         <BackupSettings />
 

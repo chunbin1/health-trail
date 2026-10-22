@@ -27,6 +27,11 @@ Go SDK 会**并发**处理同一连接上的请求。把整个请求文件一次
 - 证据：2026-10-21，自定义指标的 Go 测试全过，MCP 端到端测试里 `get_metric_trend 尿酸` 报「不在可选值中」才发现。
 - 出现：1
 
+### 24. 改 bundle id 等于换了一个新 App：通知、登录项这些系统授权都要重新给，改完要确认提醒还能弹
+macOS 按 bundle id 记通知权限。改名时 bundle id 从 com.health-vault.app 换成 com.chunbin1.healthtrail，新 id 没有通知权限，提醒就静默失效了；而当时的代码在启动时问一次权限，没给就直接放弃，界面上什么也不显示。现在 App 每 30 秒重新检查一次，没有权限时「今天」和「设置」页顶上会提示。以后改 bundle id、签名身份之后，启动一次，看日志里有没有「没有通知权限」。
+- 证据：2026-10-22，做菜单栏常驻时启动测试窗口，日志里有 `Notifications are not allowed for this application`，才发现改名之后提醒一直没在工作。
+- 出现：1
+
 ### 23. 加新的记录类型时，grep 一个老类型名，找出 schema 之外手写的类型列表
 schema.go 是唯一来源，但还有几处是手写的：MCP `add_record` 的 `type` 参数说明（结构体 tag，不能从 schema 生成）、`search_records` 的说明、前端导航和「更多」列表、`CHILD_LABELS`。漏了不会报错，Claude 只是不知道可以用这个类型。加类型时搜一个现有类型名（如 `metric_kinds`、`'medications'`），逐个补上。
 - 证据：2026-10-22，加「预约」时 MCP 端到端测试看工具说明才发现 `add_record` 的 type 列表里没有 appointments，连早就有的 doses 也一直没写进去。

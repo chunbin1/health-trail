@@ -19,7 +19,8 @@ internal/store/          数据层，唯一的数据来源
 internal/server/         REST API（/api/...）、安全层 guard.go、UI 静态文件
 internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
-backups.go, reminders.go App 里的后台任务：备份触发和接口、打卡提醒
+backups.go, reminders.go App 里的后台任务：备份触发和接口、提醒（打卡、用药、预约）
+shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
 frontend/                React + TS + Vite，构建结果嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
 ```

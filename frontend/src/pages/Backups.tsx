@@ -112,7 +112,7 @@ export function BackupSettings() {
               <DateTimeInput mode="time" required value={cfg.weekly_at} onChange={(weekly_at) => set({ weekly_at })} />
             </Row>
             <Row label={t('有改动后')} hint={t('记录或修改后，等 10 分钟没有新改动就备份一次')} on={cfg.on_change} onChange={(on_change) => set({ on_change })} />
-            <Row label={t('退出 App 时')} on={cfg.on_quit} onChange={(on_quit) => set({ on_quit })} />
+            <Row label={t('关闭窗口或退出 App 时')} on={cfg.on_quit} onChange={(on_quit) => set({ on_quit })} />
             <div className="row" style={{ padding: '10px 0', gap: 8 }}>
               <span style={{ flex: 1 }}>{t('最多保留')}</span>
               <input className="input num" style={{ width: 72 }} inputMode="numeric" defaultValue={cfg.keep} key={cfg.keep}

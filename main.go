@@ -26,6 +26,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
 	"github.com/lee/health-trail/internal/mcpserver"
@@ -123,6 +124,8 @@ type app struct {
 	listener *listener
 	settings *settings
 	backups  *backups
+	shell    *shell     // the window and menu bar icon, in the app only
+	remind   *reminders // in the app only
 	token    string
 	port     string
 }
@@ -172,6 +175,9 @@ func (a *app) handler() http.Handler {
 			if err := a.settings.save(); err != nil {
 				log.Printf("保存设置失败：%v", err)
 			}
+			if a.shell != nil {
+				a.shell.refresh() // the menu bar menu follows the language
+			}
 		}
 		if in.LAN != nil && *in.LAN {
 			http.Error(w, `{"error":"手机访问暂时关闭"}`, http.StatusBadRequest)
@@ -213,6 +219,38 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 			return
 		}
 		writeJSON(w, map[string]string{"dir": dir}) // "" when cancelled
+	})
+	// whether macOS shows the reminders, and a way to its settings if not
+	mux.HandleFunc("GET /api/notifications", func(w http.ResponseWriter, r *http.Request) {
+		out := map[string]any{"allowed": nil}
+		if a.remind != nil {
+			if allowed, known := a.remind.Allowed(); known {
+				out["allowed"] = allowed
+			}
+		}
+		writeJSON(w, out)
+	})
+	mux.HandleFunc("POST /api/notifications/settings", func(w http.ResponseWriter, r *http.Request) {
+		wapp().Browser.OpenURL("x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=" + bundleID)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// opening at login is the window's to change, like the folder dialog
+	mux.HandleFunc("GET /api/autostart", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]bool{"enabled": a.shell != nil && a.shell.autostart()})
+	})
+	mux.HandleFunc("PUT /api/autostart", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || a.shell == nil {
+			writeError(w, "无效的请求")
+			return
+		}
+		if err := a.shell.setAutostart(in.Enabled); err != nil {
+			writeError(w, err.Error())
+			return
+		}
+		writeJSON(w, map[string]bool{"enabled": a.shell.autostart()})
 	})
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), inWindow{}, true)))
@@ -331,21 +369,24 @@ func runApp(dataDir, port string) {
 	var wapp *application.App
 	ctx, stopBackups := context.WithCancel(context.Background())
 	go a.backups.loop(ctx)
+	a.remind = &reminders{st: a.st, ns: notifications.New(), lang: a.settings.lang}
 	wapp = application.New(application.Options{
 		Name:        "健康足迹",
 		Description: "个人健康档案",
 		Assets:      application.AssetOptions{Handler: a.windowHandler(func() *application.App { return wapp })},
 		OnShutdown:  func() { stopBackups(); a.backups.quit() },
-		Services:    []application.Service{application.NewService(&reminders{st: a.st, ns: notifications.New(), lang: a.settings.lang})},
-		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
+		Services:    []application.Service{application.NewService(a.remind)},
+		// closing the window leaves the app in the menu bar (see shell)
+		Mac: application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: false},
 		// one window per data directory: a second launch on the same data
-		// focuses the open window, while a test copy on other data runs apart
+		// shows the open (or hidden) window, while a test copy on other data
+		// runs apart
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: instanceID(dataDir),
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
-				if win != nil {
+				if a.shell != nil {
 					win.Restore()
-					win.Focus()
+					a.shell.show()
 				}
 			},
 		},
@@ -357,23 +398,37 @@ func runApp(dataDir, port string) {
 		MinWidth:         380,
 		MinHeight:        500,
 		URL:              "/?shell=mac",
+		Hidden:           true, // shown once started, unless opened at login
 		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarHiddenInset,
 			Backdrop: application.MacBackdropTranslucent,
 		},
 	})
+	a.shell = newShell(wapp, win, a.settings.lang, a.backups.windowClosed)
+	wapp.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		// opened at login: reminders and backups run, the window waits for a click
+		if launchedAtLogin() {
+			setInDock(false)
+		} else {
+			a.shell.show()
+		}
+		a.shell.refresh()
+	})
 	if err := wapp.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
+
+// bundleID is the app's identifier (build/Info.plist).
+const bundleID = "com.chunbin1.healthtrail"
 
 func instanceID(dataDir string) string {
 	if abs, err := filepath.Abs(dataDir); err == nil {
 		dataDir = abs
 	}
 	sum := sha256.Sum256([]byte(dataDir))
-	return "com.chunbin1.healthtrail." + hex.EncodeToString(sum[:6])
+	return bundleID + "." + hex.EncodeToString(sum[:6])
 }
 
 func runInfo(dataDir, port string) {

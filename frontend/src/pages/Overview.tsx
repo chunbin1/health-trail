@@ -3,6 +3,7 @@ import { Check, ChevronRight, Plus, Sparkles } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, MONTHS, nowLocal, today, type MedDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { Modal } from '../components/Modal'
+import { NotifyWarning } from '../components/NotifyWarning'
 import { LabValue, TakeDose } from '../components/RecordDrawer'
 import { isEN, noun, t, tr, tx, type Key } from '../i18n'
 import { openRecord, recTitle, useApp, useLoad } from '../state'
@@ -72,6 +73,8 @@ export function Overview() {
           ))}
         </div>
       </div>
+
+      <NotifyWarning />
 
       {empty && (
         <div className="notice" style={{ marginBottom: 20 }}>

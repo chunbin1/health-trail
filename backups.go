@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lee/health-trail/internal/backup"
@@ -24,6 +25,9 @@ type backups struct {
 	st   *store.Store
 	path string
 	mu   sync.Mutex // one backup or restore at a time
+	// changed since the last backup, as loop sees it; true at start, when
+	// what happened while the app was closed (Claude over MCP) is unknown
+	dirty atomic.Bool
 }
 
 type backupState struct {
@@ -41,7 +45,9 @@ type backupStatus struct {
 const stamp = "2006-01-02 15:04:05"
 
 func newBackups(st *store.Store, dataDir string) *backups {
-	return &backups{st: st, path: filepath.Join(dataDir, "backup.json")}
+	b := &backups{st: st, path: filepath.Join(dataDir, "backup.json")}
+	b.dirty.Store(true)
+	return b
 }
 
 func (b *backups) load() backupState {
@@ -73,6 +79,7 @@ func (b *backups) runLocked(suffix string, prune bool) (string, error) {
 	now := time.Now()
 	name, err := backup.Create(b.st, s.Config.Dir, suffix, now)
 	if err == nil {
+		b.dirty.Store(false)
 		if prune {
 			if perr := backup.Prune(s.Config.Dir, s.Config.Keep); perr != nil {
 				log.Printf("清理旧备份失败：%v", perr)
@@ -135,6 +142,7 @@ func (b *backups) loop(ctx context.Context) {
 		now := time.Now()
 		if v := version(); v != seen {
 			seen, changedAt = v, now
+			b.dirty.Store(true)
 		}
 		if s.Config.Dir != "" {
 			// a failed attempt counts as one: an error isn't retried every 30
@@ -160,6 +168,15 @@ func (b *backups) loop(ctx context.Context) {
 func parseStamp(s string) time.Time {
 	t, _ := time.ParseInLocation(stamp, s, time.Local)
 	return t
+}
+
+// windowClosed makes the on-quit backup when the window is closed, as the
+// app now stays in the menu bar — only if something changed since the last
+// backup, so opening and closing the window doesn't push older backups out.
+func (b *backups) windowClosed() {
+	if b.dirty.Load() {
+		b.quit()
+	}
 }
 
 // quit makes the on-quit backup, if that's switched on.

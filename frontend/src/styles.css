@@ -462,6 +462,8 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 }
 .notice > svg { color: var(--accent); margin-top: 1px; }
 .notice b { color: var(--ink); }
+.notice.warn { background: var(--high-soft); color: var(--ink); align-items: center; flex-wrap: wrap; }
+.notice.warn > svg { color: var(--high); }
 
 /* ============ overview ============ */
 

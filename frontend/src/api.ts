@@ -168,6 +168,11 @@ const qs = (p: Record<string, string | number | boolean | undefined | null>) => 
 export const api = {
   schema: () => req<Schema>('GET', '/api/schema'),
   info: () => req<Info>('GET', '/api/info'),
+  // only in the Mac app's window
+  autostart: () => req<{ enabled: boolean }>('GET', '/api/autostart'),
+  notifications: () => req<{ allowed: boolean | null }>('GET', '/api/notifications'),
+  openNotificationSettings: () => req<{ ok: boolean }>('POST', '/api/notifications/settings'),
+  setAutostart: (enabled: boolean) => req<{ enabled: boolean }>('PUT', '/api/autostart', { enabled }),
   setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),
   backup: () => req<BackupState>('GET', '/api/backup'),
   saveBackup: (c: BackupConfig) => req<BackupConfig>('PUT', '/api/backup', c),

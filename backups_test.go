@@ -57,3 +57,37 @@ func TestRestoreKeepingOne(t *testing.T) {
 		t.Errorf("after the next backup = %+v, want 1", es)
 	}
 }
+
+// Closing the window backs up (when on-quit is on) only if the data changed
+// since the last backup: opening and closing it again and again mustn't
+// push older backups out of the folder.
+func TestBackupOnWindowClose(t *testing.T) {
+	data := t.TempDir()
+	st, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	b := newBackups(st, data)
+	s := b.load()
+	s.Config.Dir, s.Config.OnQuit, s.Config.Keep = t.TempDir(), true, 10
+	if err := b.save(s); err != nil {
+		t.Fatal(err)
+	}
+	count := func() int { es, _ := backup.List(s.Config.Dir); return len(es) }
+
+	b.windowClosed() // what happened before the app started is unknown: back up
+	if count() != 1 {
+		t.Fatalf("first close: %d backups, want 1", count())
+	}
+	time.Sleep(1100 * time.Millisecond)
+	b.windowClosed() // nothing changed since
+	if count() != 1 {
+		t.Errorf("second close without changes: %d backups, want 1", count())
+	}
+	b.dirty.Store(true) // as loop marks a commit
+	b.windowClosed()
+	if count() != 2 {
+		t.Errorf("close after a change: %d backups, want 2", count())
+	}
+}
