@@ -12,6 +12,14 @@
   <key>CFBundleVersion</key><string>__VERSION__</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- the links on appointments in Calendar and medicines in Reminders (calsync.go, links.go) -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>com.chunbin1.healthtrail</string>
+      <key>CFBundleURLSchemes</key><array><string>healthtrail</string></array>
+    </dict>
+  </array>
   <key>NSHumanReadableCopyright</key><string>个人健康档案 · 数据保存在本机</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>把预约写进「日历」里的「健康足迹」日历，同步到 iPhone 和手表上提醒。</string>
   <key>NSCalendarsUsageDescription</key><string>把预约写进「日历」里的「健康足迹」日历，同步到 iPhone 和手表上提醒。</string>

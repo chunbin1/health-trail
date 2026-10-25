@@ -122,6 +122,11 @@ WKWebView 只有在 App 实现了对应的 WKUIDelegate 方法时才会显示 JS
 - 证据：2026-10-18，重设计后启动测试窗口，进程秒退，截屏是黑的；查进程才发现用户的 App 在运行，测试实例把焦点交给了它。
 - 出现：1
 
+### 29. 测 `healthtrail://` 链接：用 `open -a <这份 .app>` 指定测试的那份，测完用 `lsregister -u` 注销；截不了窗口就临时加探针
+所有构建出来的 健康足迹.app 共用一个 bundle id，系统只认 Info.plist 里声明了这个链接格式的那几份。worktree 里的测试 App 一旦被 `open` 登记，用户在「日历」里点链接，系统可能就去启动它；这时如果用户的 App 没开，它会用**默认数据目录**（真实数据）跑起来。所以测试时用 `open -a "$PWD/健康足迹.app" '<链接>'`，或者 `open -n -a … '<链接>' --args -data <临时目录>`，测完用 `lsregister -u "$PWD/健康足迹.app"`（在 LaunchServices.framework/Support 里）注销，再用 `lsregister -dump URLSchemeBinding | grep healthtrail` 确认没有登记残留。编码助手没有屏幕录制和辅助功能权限：`screencapture -l` 会报 "could not create image from window"，System Events 读不到窗口内容。全屏截图可能拍到用户的真实数据，不要用。要确认窗口跳到了哪里，就临时加一个探针：用 `ExecJS` 让页面把 `location.hash` 和抽屉标题 fetch 到 `windowHandler` 里一个记日志的路由。确认完把探针去掉，重新构建。
+- 证据：2026-10-25，做日历链接跳转时，冷启动、App 已在运行、第二个实例转发、裸 `open` 四种情况都靠探针日志确认（`#/appointments/appointments/2 || 预约 · 11月2日 14:00 测试复诊`）；截屏两种办法都被系统拒绝了。
+- 出现：1
+
 ## 工作习惯
 
 ### 7. 依赖前一步结果的 shell 命令用 `&&` 串起来，并检查输出
