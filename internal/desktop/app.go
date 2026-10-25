@@ -196,7 +196,9 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 			CanChooseDirectories(true).CanChooseFiles(false).CanCreateDirectories(true).
 			PromptForSingleSelection()
 		if err != nil {
-			writeError(w, err.Error())
+			// macOS's message can name a folder; it goes to the log only
+			log.Printf("选择备份文件夹失败：%v", err)
+			writeError(w, a.msg("没能打开选择文件夹的窗口，请再试一次", "Couldn't open the folder picker; try again"))
 			return
 		}
 		writeJSON(w, map[string]string{"dir": dir}) // "" when cancelled
@@ -265,7 +267,8 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 			return
 		}
 		if err := a.shell.setAutostart(in.Enabled); err != nil {
-			writeError(w, err.Error())
+			log.Printf("设置开机启动失败：%v", err)
+			writeError(w, a.msg("没能更改开机启动，可以在「系统设置 → 通用 → 登录项」里改", "Couldn't change opening at login; you can change it in System Settings → General → Login Items"))
 			return
 		}
 		writeJSON(w, map[string]bool{"enabled": a.shell.autostart()})
