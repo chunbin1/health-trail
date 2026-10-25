@@ -2,10 +2,15 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lee/health-trail/internal/store"
 )
@@ -139,5 +144,30 @@ func TestAddAttachmentOnlyOnThisComputer(t *testing.T) {
 	local, _ := session(t)
 	if !strings.Contains(local.InitializeResult().Instructions, "add_attachment") {
 		t.Error("the instructions don't mention add_attachment on this computer")
+	}
+}
+
+// In the App Store sandbox a file outside Downloads can't be read: the
+// error says where to put it instead, and still names no path.
+func TestUnreadableInSandbox(t *testing.T) {
+	denied := &fs.PathError{Op: "open", Path: "/Users/x/Desktop/体检.pdf", Err: syscall.EPERM}
+	sandbox := "/Users/x/Library/Containers/com.chunbin1.healthtrail/Data"
+	cases := []struct {
+		err        error
+		home, want string
+	}{
+		{denied, sandbox, "「下载」"},
+		{denied, "/Users/x", "读不了这个文件"},
+		{errors.New("disk on fire"), sandbox, "读不了这个文件"},
+	}
+	for _, c := range cases {
+		res, _, _ := unreadable(c.err, c.home)
+		text := res.Content[0].(*mcp.TextContent).Text
+		if !res.IsError || !strings.Contains(text, c.want) || strings.Contains(text, "Desktop") || strings.Contains(text, "体检") {
+			t.Errorf("unreadable(%v, %q) = %q, want an error with %q and no path", c.err, c.home, text, c.want)
+		}
+	}
+	if inSandbox("/Users/x") || !inSandbox(sandbox) {
+		t.Error("inSandbox mistakes the home folder")
 	}
 }
