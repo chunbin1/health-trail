@@ -20,10 +20,10 @@ import (
 )
 
 // LatestURL is the newest release that isn't a pre-release or a draft.
-const LatestURL = "https://api.github.com/repos/chunbin1/health-vault/releases/latest"
+const LatestURL = "https://api.github.com/repos/chunbin1/health-trail/releases/latest"
 
 // ReleasesPage lists the releases, each with its dmg.
-const ReleasesPage = "https://github.com/chunbin1/health-vault/releases/latest"
+const ReleasesPage = "https://github.com/chunbin1/health-trail/releases/latest"
 
 // Release is a published version.
 type Release struct {

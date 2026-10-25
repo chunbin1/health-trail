@@ -9,10 +9,10 @@
 **病历、化验单、用药、身体数据、每日打卡，一个地方记全。**<br>
 让 Claude、Codex 帮你录入和分析，数据从不离开你的 Mac。
 
-[![Release](https://img.shields.io/github/v/release/chunbin1/health-vault?include_prereleases&label=release&color=111111)](https://github.com/chunbin1/health-vault/releases) [![CI](https://img.shields.io/github/actions/workflow/status/chunbin1/health-vault/ci.yml?label=CI&color=111111)](https://github.com/chunbin1/health-vault/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
+[![Release](https://img.shields.io/github/v/release/chunbin1/health-trail?include_prereleases&label=release&color=111111)](https://github.com/chunbin1/health-trail/releases) [![CI](https://img.shields.io/github/actions/workflow/status/chunbin1/health-trail/ci.yml?label=CI&color=111111)](https://github.com/chunbin1/health-trail/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
 ![macOS](https://img.shields.io/badge/macOS_13+-000000?logo=apple&logoColor=white) ![MCP](https://img.shields.io/badge/MCP-15_tools-111111) ![SQLite](https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white)
 
-**[下载](https://github.com/chunbin1/health-vault/releases)** &nbsp;·&nbsp; **[接入 AI](#接入-ai)** &nbsp;·&nbsp; **[从源码构建](#从源码构建)** &nbsp;·&nbsp; **[发布新版本](RELEASING.md)**
+**[下载](https://github.com/chunbin1/health-trail/releases)** &nbsp;·&nbsp; **[接入 AI](#接入-ai)** &nbsp;·&nbsp; **[从源码构建](#从源码构建)** &nbsp;·&nbsp; **[发布新版本](RELEASING.md)**
 
 <br>
 
@@ -42,7 +42,7 @@
 
 ## 快速开始
 
-**1 · 安装**：从 **[Releases](https://github.com/chunbin1/health-vault/releases)** 下载 `HealthTrail-<版本>.dmg`，打开后把「健康足迹」拖进「应用程序」。
+**1 · 安装**：从 **[Releases](https://github.com/chunbin1/health-trail/releases)** 下载 `HealthTrail-<版本>.dmg`，打开后把「健康足迹」拖进「应用程序」。
 
 <sub>dmg 用 Developer ID 签名并经过苹果公证，双击就能打开。也可以[从源码构建](#从源码构建)。以后有新版本，App 会在「设置 → 软件更新」里提示，点一下就更新。</sub>
 

@@ -18,7 +18,7 @@ func TestUpdateRoutes(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprintf(w, `{"tag_name":"v%[1]s","body":"- 新增","html_url":"https://github.com/chunbin1/health-vault/releases/tag/v%[1]s",
+		fmt.Fprintf(w, `{"tag_name":"v%[1]s","body":"- 新增","html_url":"https://github.com/chunbin1/health-trail/releases/tag/v%[1]s",
 			"assets":[{"name":"HealthTrail-%[1]s.zip","browser_download_url":"https://example.invalid/u.zip","size":3}]}`, release)
 	}))
 	defer gh.Close()
