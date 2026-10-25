@@ -1,0 +1,44 @@
+name: CI
+
+# Every push: the tests, an ad-hoc signed universal dmg (the same steps as
+# a release, without the Developer ID certificate) and an MCP end-to-end
+# run on the binary inside it. The dmg is kept for a week to download.
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe gives the version
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # the Go code embeds frontend/dist, so the UI is built before vet
+      - run: make ui
+      - run: make test
+      - run: make dmg DEV_ID=-
+      - name: Both architectures in the binary
+        run: lipo "dist/root/健康足迹.app/Contents/MacOS/health-trail" -verify_arch arm64 x86_64
+      - name: MCP end to end
+        run: python3 -I scripts/mcp_smoke.py "dist/root/健康足迹.app/Contents/MacOS/health-trail"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HealthTrail-dmg
+          path: dist/*.dmg
+          retention-days: 7

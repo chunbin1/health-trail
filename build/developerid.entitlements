@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Developer ID build (make dmg): no sandbox, so it reads files anywhere
+  like the local build, but notarizing needs the hardened runtime, and under
+  it Calendar and Reminders sync must be declared (one entitlement for both).
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.personal-information.calendars</key><true/>
+</dict>
+</plist>

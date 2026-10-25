@@ -4,6 +4,8 @@
 #   make app        bundle 健康足迹.app (ad-hoc signed)
 #   make test       Go tests + UI typecheck
 #   make appstore-test  健康足迹（App Store 测试版）.app: the App Store sandbox, its own bundle id and data
+#   make dmg        dist/HealthTrail-<version>.dmg for other Macs: universal, Developer ID signed
+#   make notarize   make dmg, then have Apple notarize it so it opens without a warning
 #   make dev        UI on Vite :5173 (hot reload) + API on :8722 with a throwaway data dir,
 #                   rebuilt and restarted when a .go file changes (scripts/dev.sh)
 #   make dev-real   the same on your real data, backed up first (never for tests)
@@ -17,8 +19,14 @@ export MACOSX_DEPLOYMENT_TARGET := 13.0
 APP     := 健康足迹.app
 TEST_APP := 健康足迹（App Store 测试版）.app
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo 0.1.0)
+# the certificate's name in the keychain; DEV_ID=- signs ad hoc to try the steps
+DEV_ID  ?= Developer ID Application: LI CHUNBIN (XU4K6FP3HC)
+# saved once with: xcrun notarytool store-credentials health-trail --team-id XU4K6FP3HC
+NOTARY  ?= health-trail
+DIST    := dist
+DMG     := $(DIST)/HealthTrail-$(VERSION).dmg
 
-.PHONY: all ui bin app appstore-test test dev dev-real clean
+.PHONY: all ui bin app appstore-test dmg notarize test dev dev-real clean
 
 all: bin
 
@@ -53,6 +61,28 @@ appstore-test: bin
 	codesign --force --options runtime --entitlements build/appstore.entitlements --sign - "$(TEST_APP)"
 	@echo "built $(TEST_APP) — data: ~/Library/Containers/com.chunbin1.healthtrail.appstoretest"
 
+# one binary for Apple silicon and Intel; the hardened runtime and a secure
+# timestamp are what notarizing asks for
+dmg: ui
+	rm -rf "$(DIST)" && mkdir -p "$(DIST)/root/$(APP)/Contents/MacOS" "$(DIST)/root/$(APP)/Contents/Resources"
+	GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o "$(DIST)/health-trail-arm64" .
+	GOARCH=amd64 CGO_ENABLED=1 CC="clang -arch x86_64" go build -ldflags "-s -w -X main.version=$(VERSION)" -o "$(DIST)/health-trail-amd64" .
+	lipo -create -output "$(DIST)/root/$(APP)/Contents/MacOS/health-trail" "$(DIST)/health-trail-arm64" "$(DIST)/health-trail-amd64"
+	sed 's/__VERSION__/$(VERSION)/g' build/Info.plist > "$(DIST)/root/$(APP)/Contents/Info.plist"
+	cp build/AppIcon.icns "$(DIST)/root/$(APP)/Contents/Resources/"
+	codesign --force --options runtime --timestamp$(if $(filter -,$(DEV_ID)),=none) \
+		--entitlements build/developerid.entitlements --sign "$(DEV_ID)" "$(DIST)/root/$(APP)"
+	codesign --verify --strict "$(DIST)/root/$(APP)"
+	ln -s /Applications "$(DIST)/root/Applications"
+	hdiutil create -volname 健康足迹 -srcfolder "$(DIST)/root" -fs HFS+ -format UDZO -ov "$(DMG)"
+	codesign --force --sign "$(DEV_ID)" "$(DMG)"
+	@echo "built $(DMG)"
+
+notarize: dmg
+	xcrun notarytool submit "$(DMG)" --keychain-profile "$(NOTARY)" --wait
+	xcrun stapler staple "$(DMG)"
+	spctl --assess --type open --context context:primary-signature -v "$(DMG)"
+
 test: frontend/node_modules
 	go vet ./...
 	go test ./...
@@ -68,4 +98,4 @@ dev-real: frontend/node_modules
 	@./scripts/dev.sh --real
 
 clean:
-	rm -rf health-trail "$(APP)" "$(TEST_APP)" frontend/dist
+	rm -rf health-trail "$(APP)" "$(TEST_APP)" "$(DIST)" frontend/dist
