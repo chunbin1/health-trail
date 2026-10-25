@@ -81,7 +81,8 @@ func (s *Store) Overview() (*Overview, error) {
 	return o, nil
 }
 
-// HabitDays lists the active habits with that day's check-in, if any.
+// HabitDays lists the active habits with that day's check-in, if any. An
+// archived habit's check-ins are kept, and CheckinStats still has them.
 func (s *Store) HabitDays(date string) ([]HabitDay, error) {
 	habits, err := s.query(`SELECT * FROM habits WHERE archived IS NULL OR archived = 0 ORDER BY id`)
 	if err != nil {
@@ -141,6 +142,9 @@ func (s *Store) Checkin(habitID int64, date string, value *float64, notes string
 	h, err := s.Get("habits", habitID)
 	if err != nil {
 		return nil, err
+	}
+	if archived(h) {
+		return nil, invalid("「%v」已归档，不能打卡；要继续打卡，先把它的 archived 改成 false（恢复）", h["name"])
 	}
 	rows, err := s.query(`SELECT * FROM checkins WHERE habit_id = ? AND date = ?`, habitID, d)
 	if err != nil {
@@ -221,8 +225,8 @@ type HabitStats struct {
 	Dates         []string `json:"dates"`
 }
 
-// CheckinStats summarises each active habit (or the one given) over
-// [from, to]. The current streak counts back from today, or from yesterday
+// CheckinStats summarises each active habit, and each archived one checked
+// in within the range (or the one given), over [from, to]. The current streak counts back from today, or from yesterday
 // when today isn't done yet: an unfinished today doesn't break it.
 func (s *Store) CheckinStats(from, to string, habitID int64) ([]HabitStats, error) {
 	var err error
@@ -244,7 +248,8 @@ func (s *Store) CheckinStats(from, to string, habitID int64) ([]HabitStats, erro
 			return nil, err
 		}
 		habits = []Record{h}
-	} else if habits, err = s.query(`SELECT * FROM habits WHERE archived IS NULL OR archived = 0 ORDER BY id`); err != nil {
+	} else if habits, err = s.query(`SELECT * FROM habits WHERE archived IS NULL OR archived = 0
+		OR id IN (SELECT habit_id FROM checkins WHERE date BETWEEN ? AND ?) ORDER BY COALESCE(archived, 0), id`, from, to); err != nil {
 		return nil, err
 	}
 	f, _ := time.ParseInLocation("2006-01-02", from, time.Local)
@@ -292,6 +297,17 @@ func (s *Store) CheckinStats(from, to string, habitID int64) ([]HabitStats, erro
 		out = append(out, st)
 	}
 	return out, nil
+}
+
+// archived says whether a habit is archived (a Bool field reads back as 0/1).
+func archived(h Record) bool {
+	switch v := h["archived"].(type) {
+	case int64:
+		return v != 0
+	case bool:
+		return v
+	}
+	return false
 }
 
 func nextDay(d string) string {

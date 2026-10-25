@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bell, ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, Plus } from 'lucide-react'
+import { Bell, ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, ListChecks, Plus } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, today, type HabitDay } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { tell } from '../components/Dialog'
@@ -97,8 +97,9 @@ export function Checkins() {
   const [adding, setAdding] = useState(false)
   const { data: day } = useLoad(() => api.checkinDay(date), [date])
   const from = addDays(today(), -29)
-  const { data: stats } = useLoad(() => api.checkinStats(from, today()), [])
-  const { data: archived } = useLoad(() => api.list('habits', { archived: 1 }), [])
+  // the items in use; archived ones and their check-ins are on 全部打卡项
+  const { data: allStats } = useLoad(() => api.checkinStats(from, today()), [])
+  const stats = allStats?.filter((s) => !s.habit.archived)
   const days = Array.from({ length: 30 }, (_, i) => addDays(from, i))
   const isToday = date === today()
 
@@ -106,6 +107,8 @@ export function Checkins() {
     <>
       <div className="page-head">
         <div className="titles"><h1>{t('打卡')}</h1><div className="sub">{t('每天的小习惯，点一下就记上')}</div></div>
+        {/* on a phone only its icon, so 新打卡项 stays beside the title */}
+        <a className="btn all-habits" href="#/habits" aria-label={t('全部打卡项')} title={t('全部打卡项')}><ListChecks size={16} /><span className="wide-only">{t('全部打卡项')}</span></a>
         <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} />{t('新打卡项')}</button>
       </div>
       <div className="stack">
@@ -124,7 +127,7 @@ export function Checkins() {
         <section className="card">
           <div className="card-head"><h2>{t('最近 30 天')}</h2><span className="muted small">{t('{from} – 今天', { from: fmtDate(from) })}</span></div>
           {stats?.length === 0 && <Empty compact>{t('暂无')}</Empty>}
-          <div>
+          <div className="habit-rows">
             {stats?.map((s) => (
               <div key={s.habit.id} className="habit-row">
                 <a href="#" onClick={(e) => { e.preventDefault(); openRecord('habits', s.habit.id) }} className="row" style={{ color: 'inherit', flexWrap: 'nowrap', minWidth: 0 }}>
@@ -144,13 +147,6 @@ export function Checkins() {
             ))}
           </div>
         </section>
-        {archived && archived.rows.length > 0 && (
-          <div className="small muted row">
-            {t('已归档：')}{archived.rows.map((h) => (
-              <a key={h.id} href="#" onClick={(e) => { e.preventDefault(); openRecord('habits', h.id) }}>{h.icon} {h.name}</a>
-            ))}
-          </div>
-        )}
       </div>
       {adding && (
         <Modal title={t('新打卡项')} icon={<KindIcon kind="habits" />} onClose={() => setAdding(false)}>

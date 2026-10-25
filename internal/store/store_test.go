@@ -302,7 +302,10 @@ func TestCustomMetric(t *testing.T) {
 	}
 	s.Delete("metrics", mid)
 	s.Delete("metrics", own["id"].(int64))
-	s.Delete("habits", h["id"].(int64))
+	// a check-in item isn't deleted; it stops logging the metric instead
+	if _, err := s.Update("habits", h["id"].(int64), Record{"metric_type": ""}); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.Delete("metric_kinds", kid); err != nil {
 		t.Fatalf("delete unused: %v", err)
 	}
@@ -468,5 +471,68 @@ func TestOverviewAndTimeline(t *testing.T) {
 	hits, _ := s.Search("扁桃体", 10)
 	if len(hits) != 2 {
 		t.Errorf("search hits = %v", hits)
+	}
+}
+
+// A check-in item can't be deleted, so its check-ins stay. Archiving takes
+// it off the days (the 打卡 page), but the stats (全部打卡项, and MCP) still
+// have yesterday's 喝水 after 喝水 is archived.
+func TestHabitsAreArchivedNotDeleted(t *testing.T) {
+	s := open(t)
+	water, err := s.Create("habits", Record{"name": "喝水"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sleep, _ := s.Create("habits", Record{"name": "早睡"})
+	wid, sid := water["id"].(int64), sleep["id"].(int64)
+	today := time.Now().Format("2006-01-02")
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	pastCheckin(t, s, wid, yesterday, 1)
+
+	err = s.Delete("habits", wid)
+	var ve *ValidationError
+	if !errors.As(err, &ve) || !strings.Contains(err.Error(), "archived") {
+		t.Fatalf("Delete(habit) = %v, want a ValidationError pointing at archived", err)
+	}
+	if err := s.Delete("habits", 999); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Delete(missing habit) = %v, want ErrNotFound", err)
+	}
+
+	for _, id := range []int64{wid, sid} {
+		if _, err := s.Update("habits", id, Record{"archived": true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	names := func(days []HabitDay) (out []string) {
+		for _, d := range days {
+			out = append(out, fmt.Sprint(d.Habit["name"]))
+		}
+		return out
+	}
+	for _, d := range []string{yesterday, today} {
+		if days, err := s.HabitDays(d); err != nil || len(days) != 0 {
+			t.Errorf("%s after archiving = %v %v, want none", d, names(days), err)
+		}
+	}
+	stats, err := s.CheckinStats("", "", 0)
+	if err != nil || len(stats) != 1 || stats[0].Habit["name"] != "喝水" || stats[0].DaysDone != 1 || stats[0].Dates[0] != yesterday {
+		t.Errorf("30-day stats after archiving = %+v %v", stats, err)
+	}
+	if _, err := s.Checkin(sid, "today", nil, ""); err == nil || !strings.Contains(err.Error(), "已归档") {
+		t.Errorf("checking in an archived item: err = %v", err)
+	}
+	if _, err := s.Create("habits", Record{"name": "喝水"}); err == nil || !strings.Contains(err.Error(), "恢复") {
+		t.Errorf("a new item with an archived one's name: err = %v", err)
+	}
+
+	// restored, it's back today, and its history is whole
+	if _, err := s.Update("habits", wid, Record{"archived": false}); err != nil {
+		t.Fatal(err)
+	}
+	if days, _ := s.HabitDays(today); len(days) != 1 || days[0].Checkin != nil {
+		t.Errorf("today after restoring = %v", names(days))
+	}
+	if _, n, _ := s.List("checkins", ListQuery{Filters: map[string]any{"habit_id": wid}}); n != 1 {
+		t.Errorf("check-ins of 喝水 = %d, want 1", n)
 	}
 }

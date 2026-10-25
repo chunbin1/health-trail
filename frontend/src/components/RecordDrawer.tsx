@@ -76,7 +76,8 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   const head = r && !locked && (
     <>
       <button className="btn sm" onClick={() => setEditing(true)}><Pencil size={14} />{t('编辑')}</button>
-      <IconButton label={t('删除')} className="danger" onClick={remove}><Trash2 size={16} /></IconButton>
+      {/* a check-in item is archived, never deleted: its check-ins stay */}
+      {entityName !== 'habits' && <IconButton label={t('删除')} className="danger" onClick={remove}><Trash2 size={16} /></IconButton>}
     </>
   )
 

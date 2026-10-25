@@ -66,7 +66,7 @@ func New(st *store.Store, version string, local bool) *mcp.Server {
 		t.update)
 	mcp.AddTool(s, &mcp.Tool{Name: "delete_record",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "永久删除一条记录（删除报告会连同其检验指标一起删除，删除打卡项会删除其打卡记录）。只在用户明确要求删除时使用。"},
+		Description: "永久删除一条记录（删除报告会连同其检验指标一起删除）。打卡项不能删除：用户不再打卡时，用 update_record 把它的 archived 设为 true（归档），打卡记录会保留。只在用户明确要求删除时使用。"},
 		t.delete)
 	mcp.AddTool(s, &mcp.Tool{Name: "add_lab_report",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &no},
@@ -91,7 +91,7 @@ func New(st *store.Store, version string, local bool) *mcp.Server {
 		Description: "取消某天的打卡。"},
 		t.undoCheckin)
 	mcp.AddTool(s, &mcp.Tool{Name: "get_checkin_stats", Annotations: ro,
-		Description: "打卡统计：每个打卡项在一段时间内（默认最近 30 天）的完成天数、完成率、当前连续天数、区间内最长连续、数量合计和打卡日期。"},
+		Description: "打卡统计：每个打卡项在一段时间内（默认最近 30 天）的完成天数、完成率、当前连续天数、区间内最长连续、数量合计和打卡日期。已归档的打卡项只要在这段时间里打过卡也会列出（habit.archived 为 1）。"},
 		t.checkinStats)
 	if local {
 		mcp.AddTool(s, &mcp.Tool{Name: "add_attachment",
