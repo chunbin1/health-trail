@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Archive, ArchiveRestore, Bell, ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, Plus } from 'lucide-react'
-import { addDays, api, fmtDate, fmtNum, today, type HabitDay, type Rec } from '../api'
+import { Bell, ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, ListChecks, Plus } from 'lucide-react'
+import { addDays, api, fmtDate, fmtNum, today, type HabitDay } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { tell } from '../components/Dialog'
 import { Modal } from '../components/Modal'
@@ -50,15 +50,14 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
   return (
     <>
       <div className="habits">
-        {/* an archived item shows only on the days it was done, as history */}
         {days.map((d) => (
-          <button key={d.habit.id} className={'habit' + (d.checkin ? ' done' : '') + (d.habit.archived ? ' archived' : '')} onClick={() => tap(d)} aria-pressed={!!d.checkin} disabled={!editable || !!d.habit.archived}>
+          <button key={d.habit.id} className={'habit' + (d.checkin ? ' done' : '')} onClick={() => tap(d)} aria-pressed={!!d.checkin} disabled={!editable}>
             <span className="emoji">{d.habit.icon || '•'}</span>
             <span style={{ minWidth: 0 }}>
               <div className="name ellipsis">{d.habit.name}</div>
               <div className="state">
                 {d.checkin
-                  ? (d.checkin.value != null ? `${fmtNum(d.checkin.value)} ${tx(d.habit.unit) || ''}` : t('已完成')) + (d.habit.archived ? ' · ' + t('已归档') : '')
+                  ? d.checkin.value != null ? `${fmtNum(d.checkin.value)} ${tx(d.habit.unit) || ''}` : t('已完成')
                   : d.habit.target == null && !d.habit.remind_at ? t('未完成')
                   : <>
                       {d.habit.remind_at && <><Bell size={11} style={{ verticalAlign: '-1px' }} aria-label={t('提醒')} /> {d.habit.remind_at}</>}
@@ -93,35 +92,23 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
 }
 
 export function Checkins() {
-  const { entity, toast, changed } = useApp()
+  const { entity, toast } = useApp()
   const [date, setDate] = useState(today())
   const [adding, setAdding] = useState(false)
   const { data: day } = useLoad(() => api.checkinDay(date), [date])
   const from = addDays(today(), -29)
-  const { data: stats } = useLoad(() => api.checkinStats(from, today()), [])
-  const { data: archived } = useLoad(() => api.list('habits', { archived: 1 }), [])
+  // the items in use; archived ones and their check-ins are on 全部打卡项
+  const { data: allStats } = useLoad(() => api.checkinStats(from, today()), [])
+  const stats = allStats?.filter((s) => !s.habit.archived)
   const days = Array.from({ length: 30 }, (_, i) => addDays(from, i))
   const isToday = date === today()
-  // archived items with check-ins in the 30 days are in that list already
-  const older = (archived?.rows || []).filter((h) => !stats?.some((s) => s.habit.id === h.id))
-
-  // A check-in item is never deleted, so its check-ins stay: archiving takes
-  // it off the day and the 30 days, and the list at the bottom brings it back.
-  async function setArchived(h: Rec, archived: boolean) {
-    const name = `${h.icon || ''} ${h.name}`.trim()
-    try {
-      await api.update('habits', h.id, { archived })
-      changed()
-      toast(archived ? t('已归档「{name}」：以后不用再打卡，打过的记录都还在', { name }) : t('已恢复「{name}」', { name }))
-    } catch (e: any) {
-      tell(e.message)
-    }
-  }
 
   return (
     <>
       <div className="page-head">
         <div className="titles"><h1>{t('打卡')}</h1><div className="sub">{t('每天的小习惯，点一下就记上')}</div></div>
+        {/* on a phone only its icon, so 新打卡项 stays beside the title */}
+        <a className="btn all-habits" href="#/habits" aria-label={t('全部打卡项')} title={t('全部打卡项')}><ListChecks size={16} /><span className="wide-only">{t('全部打卡项')}</span></a>
         <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} />{t('新打卡项')}</button>
       </div>
       <div className="stack">
@@ -140,13 +127,12 @@ export function Checkins() {
         <section className="card">
           <div className="card-head"><h2>{t('最近 30 天')}</h2><span className="muted small">{t('{from} – 今天', { from: fmtDate(from) })}</span></div>
           {stats?.length === 0 && <Empty compact>{t('暂无')}</Empty>}
-          <div>
+          <div className="habit-rows">
             {stats?.map((s) => (
               <div key={s.habit.id} className="habit-row">
                 <a href="#" onClick={(e) => { e.preventDefault(); openRecord('habits', s.habit.id) }} className="row" style={{ color: 'inherit', flexWrap: 'nowrap', minWidth: 0 }}>
                   <span style={{ fontSize: 18 }}>{s.habit.icon || '•'}</span>
                   <span className="ellipsis" style={{ fontWeight: 600 }}>{s.habit.name}</span>
-                  {!!s.habit.archived && <span className="tag">{t('已归档')}</span>}
                 </a>
                 <div className="heat" aria-label={t('{name}最近30天完成{n}天', { name: s.habit.name, n: s.days_done })}>
                   {days.map((d) => (
@@ -156,25 +142,11 @@ export function Checkins() {
                 <div className="row" style={{ flexWrap: 'nowrap', gap: 14 }}>
                   <span className="streak" title={t('当前连续天数')}><Flame size={14} />{t('{n} 天', { n: s.current_streak })}</span>
                   <span className="muted small nowrap num">{Math.round(s.completion_rate * 100)}%{s.total_value != null ? ` · ${fmtNum(s.total_value)}${tx(s.habit.unit) || ''}` : ''}</span>
-                  {s.habit.archived
-                    ? <IconButton label={t('恢复')} small className="push-end" onClick={() => setArchived(s.habit, false)}><ArchiveRestore size={15} /></IconButton>
-                    : <IconButton label={t('归档')} small className="push-end" onClick={() => setArchived(s.habit, true)}><Archive size={15} /></IconButton>}
                 </div>
               </div>
             ))}
           </div>
         </section>
-        {older.length > 0 && (
-          <div className="archived-habits small">
-            <span className="muted">{t('已归档：')}</span>
-            {older.map((h) => (
-              <span key={h.id} className="archived-habit">
-                <a href="#" onClick={(e) => { e.preventDefault(); openRecord('habits', h.id) }}>{h.icon} {h.name}</a>
-                <button className="btn sm ghost" onClick={() => setArchived(h, false)}>{t('恢复')}</button>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
       {adding && (
         <Modal title={t('新打卡项')} icon={<KindIcon kind="habits" />} onClose={() => setAdding(false)}>

@@ -10,6 +10,7 @@ import { Overview } from './pages/Overview'
 import { RecordList, RecordsPage } from './pages/RecordsPage'
 import { Reports } from './pages/Reports'
 import { Settings } from './pages/Settings'
+import { AllHabits } from './pages/Habits'
 import { useApp, useLoad, useRoute } from './state'
 import { Empty, KindIcon, KIND } from './ui'
 
@@ -73,9 +74,12 @@ export function App() {
   }, [route.page])
 
   const page = route.page
+  // 全部打卡项 is part of 打卡 in the sidebar and the tab bar
+  const navPage = page === 'habits' ? 'checkins' : page
   let body
   switch (page) {
     case 'checkins': body = <Checkins />; break
+    case 'habits': body = <AllHabits />; break
     case 'reports': body = <Reports />; break
     case 'metrics': body = <Metrics />; break
     case 'connect': body = <Connect />; break
@@ -87,7 +91,7 @@ export function App() {
   }
 
   const navItem = (p: string, label: Key, count?: string) => (
-    <a key={p} href={'#/' + p} className={'nav-item' + (page === p ? ' active' : '')}>
+    <a key={p} href={'#/' + p} className={'nav-item' + (navPage === p ? ' active' : '')}>
       <KindIcon kind={p} size="sm" />{t(label)}
       {count && counts[count] ? <span className="count">{counts[count]}</span> : null}
     </a>
@@ -131,12 +135,12 @@ export function App() {
         {TABS.map((p) => {
           const Icon = KIND[p].icon
           return (
-            <a key={p} href={'#/' + p} className={'tab' + (page === p ? ' active' : '')}>
-              <Icon size={22} strokeWidth={page === p ? 2.3 : 1.8} />{t(LABEL[p])}
+            <a key={p} href={'#/' + p} className={'tab' + (navPage === p ? ' active' : '')}>
+              <Icon size={22} strokeWidth={navPage === p ? 2.3 : 1.8} />{t(LABEL[p])}
             </a>
           )
         })}
-        <button className={'tab' + (!TABS.includes(page) ? ' active' : '')} onClick={() => setMore(true)}>
+        <button className={'tab' + (!TABS.includes(navPage) ? ' active' : '')} onClick={() => setMore(true)}>
           <MoreHorizontal size={22} />{t('更多')}
         </button>
       </nav>

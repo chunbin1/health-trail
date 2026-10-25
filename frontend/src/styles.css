@@ -518,8 +518,6 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 .habit.done { background: var(--accent-soft); }
 .habit.done .check { color: var(--accent); }
 .habit.done .state { color: var(--accent); }
-/* an archived item on a day it was done: history, not a button */
-.habit.archived { opacity: 0.7; cursor: default; }
 .habit:disabled { cursor: default; }
 .habit:disabled:hover { background: var(--surface-2); }
 .habit.done:disabled:hover { background: var(--accent-soft); }
@@ -534,11 +532,22 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 .heat span.today { box-shadow: 0 0 0 1.5px var(--canvas), 0 0 0 3px var(--ink-3); }
 .habit-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .habit-row:last-child { border-bottom: 0; }
-/* the archive button keeps to the right edge, wherever the numbers end */
-.habit-row .push-end { margin-left: auto; }
-.archived-habits { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
-.archived-habit { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
-@media (max-width: 700px) { .habit-row { grid-template-columns: 1fr auto; } .habit-row .heat { grid-column: 1 / -1; } }
+/* the rows share one grid, so every row's 30 days start and end in line
+   whatever the numbers beside them */
+.habit-rows { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; column-gap: 16px; }
+.habit-rows > .habit-row { grid-column: 1 / -1; grid-template-columns: subgrid; }
+.habit-rows.all { grid-template-columns: 230px minmax(0, 1fr) auto; }
+.habit-name { display: flex; align-items: center; gap: 10px; min-width: 0; color: inherit; }
+.back-link { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--ink-3); margin: 0 0 6px -4px; }
+.back-link:hover { color: var(--ink); }
+@media (max-width: 700px) {
+  .habit-row { grid-template-columns: 1fr auto; } .habit-row .heat { grid-column: 1 / -1; }
+  .habit-rows, .habit-rows.all { grid-template-columns: minmax(0, 1fr) auto; }
+  /* 归档 / 恢复 stays beside the name, above the 30 days */
+  .habit-rows.all .habit-act { grid-row: 1; grid-column: 2; }
+  .wide-only { display: none; }
+  .btn.all-habits { padding: 0 10px; }
+}
 .streak { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
 .streak svg { color: #f07a22; }
 

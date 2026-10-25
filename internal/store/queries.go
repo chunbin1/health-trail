@@ -81,12 +81,10 @@ func (s *Store) Overview() (*Overview, error) {
 	return o, nil
 }
 
-// HabitDays lists the active habits with that day's check-in, if any, then
-// the archived ones checked in that day: archiving stops a habit, it doesn't
-// take back the days it was done.
+// HabitDays lists the active habits with that day's check-in, if any. An
+// archived habit's check-ins are kept, and CheckinStats still has them.
 func (s *Store) HabitDays(date string) ([]HabitDay, error) {
-	habits, err := s.query(`SELECT * FROM habits WHERE archived IS NULL OR archived = 0
-		OR id IN (SELECT habit_id FROM checkins WHERE date = ?) ORDER BY COALESCE(archived, 0), id`, date)
+	habits, err := s.query(`SELECT * FROM habits WHERE archived IS NULL OR archived = 0 ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}

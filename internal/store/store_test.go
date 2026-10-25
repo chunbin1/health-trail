@@ -474,9 +474,9 @@ func TestOverviewAndTimeline(t *testing.T) {
 	}
 }
 
-// A check-in item can't be deleted, so its check-ins stay. Archiving stops
-// it, but the days it was done still show: yesterday's 喝水 is still there
-// on yesterday, and in the stats, after 喝水 is archived.
+// A check-in item can't be deleted, so its check-ins stay. Archiving takes
+// it off the days (the 打卡 page), but the stats (全部打卡项, and MCP) still
+// have yesterday's 喝水 after 喝水 is archived.
 func TestHabitsAreArchivedNotDeleted(t *testing.T) {
 	s := open(t)
 	water, err := s.Create("habits", Record{"name": "喝水"})
@@ -509,12 +509,10 @@ func TestHabitsAreArchivedNotDeleted(t *testing.T) {
 		}
 		return out
 	}
-	// yesterday still has 喝水, done; today and 早睡 (never done) are gone
-	if days, err := s.HabitDays(yesterday); err != nil || len(days) != 1 || days[0].Habit["name"] != "喝水" || days[0].Checkin == nil {
-		t.Errorf("yesterday after archiving = %v %v", names(days), err)
-	}
-	if days, _ := s.HabitDays(today); len(days) != 0 {
-		t.Errorf("today after archiving = %v, want none", names(days))
+	for _, d := range []string{yesterday, today} {
+		if days, err := s.HabitDays(d); err != nil || len(days) != 0 {
+			t.Errorf("%s after archiving = %v %v, want none", d, names(days), err)
+		}
 	}
 	stats, err := s.CheckinStats("", "", 0)
 	if err != nil || len(stats) != 1 || stats[0].Habit["name"] != "喝水" || stats[0].DaysDone != 1 || stats[0].Dates[0] != yesterday {
