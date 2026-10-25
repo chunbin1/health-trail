@@ -1,6 +1,20 @@
 /health-trail
 /健康足迹.app/
+/健康足迹（App Store 测试版）.app/
 /frontend/node_modules/
 /frontend/dist/
 /frontend/*.tsbuildinfo
 .DS_Store
+/dist/
+/.claude/
+# this Mac's signing identity, and anything that holds a key or a person's data
+/local.mk
+/APPSTORE.md
+*.p12
+*.p8
+*.cer
+*.certSigningRequest
+*.provisionprofile
+*.db
+*.db-shm
+*.db-wal

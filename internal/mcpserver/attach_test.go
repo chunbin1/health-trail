@@ -2,10 +2,15 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lee/health-trail/internal/store"
 )
@@ -139,5 +144,58 @@ func TestAddAttachmentOnlyOnThisComputer(t *testing.T) {
 	local, _ := session(t)
 	if !strings.Contains(local.InitializeResult().Instructions, "add_attachment") {
 		t.Error("the instructions don't mention add_attachment on this computer")
+	}
+}
+
+// In the App Store sandbox a file outside Downloads can't be read: the
+// error says where to put it instead, and still names no path.
+func TestUnreadableInSandbox(t *testing.T) {
+	denied := &fs.PathError{Op: "open", Path: "/Users/x/Desktop/体检.pdf", Err: syscall.EPERM}
+	sandbox := "/Users/x/Library/Containers/com.chunbin1.healthtrail/Data"
+	cases := []struct {
+		err        error
+		home, want string
+	}{
+		{denied, sandbox, "「下载」"},
+		{denied, "/Users/x", "读不了这个文件"},
+		{errors.New("disk on fire"), sandbox, "读不了这个文件"},
+	}
+	for _, c := range cases {
+		res, _, _ := unreadable(c.err, c.home)
+		text := res.Content[0].(*mcp.TextContent).Text
+		if !res.IsError || !strings.Contains(text, c.want) || strings.Contains(text, "Desktop") || strings.Contains(text, "体检") {
+			t.Errorf("unreadable(%v, %q) = %q, want an error with %q and no path", c.err, c.home, text, c.want)
+		}
+	}
+	if inSandbox("/Users/x") || !inSandbox(sandbox) {
+		t.Error("inSandbox mistakes the home folder")
+	}
+}
+
+// In the sandbox $HOME is the app's container, so ~/Library is checked
+// against the person's real home as well: a folder they granted may hold it.
+func TestAttachKeepsRealLibraryOutInSandbox(t *testing.T) {
+	real := t.TempDir()
+	if r, err := filepath.EvalSymlinks(real); err == nil {
+		real = r
+	}
+	defer func(f func() string) { realHome = f }(realHome)
+	realHome = func() string { return real }
+	t.Setenv("HOME", filepath.Join(real, "Library", "Containers", "com.example.app", "Data"))
+	os.MkdirAll(os.Getenv("HOME"), 0o700)
+
+	cs, st := session(t)
+	rep, _ := st.Create("reports", store.Record{"report_date": "2026-10-01", "title": "体检"})
+	put := func(rel string) string {
+		p := filepath.Join(real, rel)
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte("%PDF-1.4 test"), 0o600)
+		return p
+	}
+	if out, isErr := call(t, cs, "add_attachment", map[string]any{"path": put("Library/Caches/报告.pdf"), "type": "reports", "id": rep["id"]}); !isErr || !strings.Contains(out, "资源库") {
+		t.Errorf("real ~/Library: isErr=%v %s", isErr, out)
+	}
+	if out, isErr := call(t, cs, "add_attachment", map[string]any{"path": put("Desktop/报告.pdf"), "type": "reports", "id": rep["id"]}); isErr {
+		t.Errorf("Desktop: %s", out)
 	}
 }

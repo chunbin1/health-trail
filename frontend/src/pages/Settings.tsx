@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Database, Languages, Power, Smartphone } from 'lucide-react'
+import { Database, FolderOpen, Languages, Power, Smartphone } from 'lucide-react'
 import { api, fmtDate, type CalSync } from '../api'
 import { t, type Lang } from '../i18n'
 import { useApp, useLoad } from '../state'
 import { Switch } from '../ui'
 import { NotifyWarning } from '../components/NotifyWarning'
-import { tell } from '../components/Dialog'
+import { ask, tell } from '../components/Dialog'
 import { BackupSettings } from './Backups'
 import { Section } from './Connect'
 
@@ -113,6 +113,49 @@ function AtLogin() {
   )
 }
 
+// Folders Claude may attach files from, in the App Store build only: its
+// sandbox allows Downloads and nothing else outside the app, so a report on
+// the Desktop needs its folder granted here once. The open dialog is what
+// grants it.
+function AllowedFolders() {
+  const { data, error } = useLoad(() => api.folders(), [])
+  const [list, setList] = useState<string[] | null>(null)
+  const [busy, setBusy] = useState('')
+  if (error || !data || !data.sandboxed) return null
+  const folders = list ?? data.folders
+  async function run(key: string, f: () => Promise<{ folders: string[] }>) {
+    if (busy) return
+    setBusy(key)
+    try {
+      setList((await f()).folders)
+    } catch (e: any) {
+      tell(e.message)
+    } finally {
+      setBusy('')
+    }
+  }
+  async function remove(p: string) {
+    if (busy || !(await ask(t('不再允许读取这个文件夹？\n\n{path}\n\nClaude 之后就存不了这里的文件；已经连着的 Claude 要重新连接一次。', { path: p }), { ok: t('移除'), danger: true }))) return
+    run(p, () => api.removeFolder(p))
+  }
+  return (
+    <Section icon={<FolderOpen size={20} />} title={t('允许读取的文件夹')}
+      sub={t('App Store 版受系统沙盒限制，Claude 只能把「下载」里的文件存成附件。在这里添加别的文件夹（比如桌面、文稿），Claude 就能存那里的文件。添加或移除后，已经连着的 Claude 要重新连接一次。')}
+      right={<button className="btn sm" disabled={!!busy} onClick={() => run('add', api.addFolder)}>{busy === 'add' ? t('等待选择…') : t('添加…')}</button>}>
+      {folders.length > 0 && (
+        <div className="list">
+          {folders.map((p) => (
+            <div key={p} className="row-item no-ico" style={{ cursor: 'default' }}>
+              <div className="body"><div className="title ellipsis"><code>{p}</code></div></div>
+              <button className="btn sm" disabled={!!busy} onClick={() => remove(p)}>{busy === p ? t('移除中…') : t('移除')}</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
+
 // Settings: the language, backups, and where the data lives. (Phone access
 // is hidden until it's reworked.)
 export function Settings() {
@@ -139,6 +182,8 @@ export function Settings() {
         <AtLogin />
 
         <PhoneSync />
+
+        <AllowedFolders />
 
         <BackupSettings />
 

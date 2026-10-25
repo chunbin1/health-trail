@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Mac App Store build's sandbox. What each one is for:
+  network.server              the local service: phone access and MCP over HTTP
+  network.client              the window: WKWebView shows a blank page in the sandbox without it
+  files.user-selected         attachments the person uploads, the backup folder they pick
+  files.bookmarks.app-scope   keeping access to that backup folder across launches
+  files.downloads.read-only   add_attachment over MCP: Claude may attach files in Downloads
+  personal-information.calendars  Calendar and Reminders sync (one entitlement for both)
+  Checked in a sandboxed test build on 2026-10-25: the window, HTTP and stdio MCP
+  (launched by Claude from outside) all share the data in the container.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key><true/>
+  <key>com.apple.security.network.server</key><true/>
+  <key>com.apple.security.network.client</key><true/>
+  <key>com.apple.security.files.user-selected.read-write</key><true/>
+  <key>com.apple.security.files.bookmarks.app-scope</key><true/>
+  <key>com.apple.security.files.downloads.read-only</key><true/>
+  <key>com.apple.security.personal-information.calendars</key><true/>
+</dict>
+</plist>

@@ -3,6 +3,9 @@
 #   make            build the UI and the binary (./health-trail)
 #   make app        bundle 健康足迹.app (ad-hoc signed)
 #   make test       Go tests + UI typecheck
+#   make appstore-test  健康足迹（App Store 测试版）.app: the App Store sandbox, its own bundle id and data
+#   make dmg        dist/HealthTrail-<version>.dmg for other Macs: universal, Developer ID signed
+#   make notarize   make dmg, then have Apple notarize it so it opens without a warning
 #   make dev        UI on Vite :5173 (hot reload) + API on :8722 with a throwaway data dir,
 #                   rebuilt and restarted when a .go file changes (scripts/dev.sh)
 #   make dev-real   the same on your real data, backed up first (never for tests)
@@ -14,9 +17,21 @@ export CGO_LDFLAGS := -mmacosx-version-min=13.0
 export MACOSX_DEPLOYMENT_TARGET := 13.0
 
 APP     := 健康足迹.app
-VERSION := $(shell git describe --tags --always 2>/dev/null || echo 0.1.0)
+TEST_APP := 健康足迹（App Store 测试版）.app
+# a tag v1.2.0 gives 1.2.0
+VERSION := $(patsubst v%,%,$(shell git describe --tags --always 2>/dev/null || echo 0.1.0))
+# your own signing identity goes in local.mk (git-ignored; see local.mk.example).
+# Without one, DEV_ID=- signs ad hoc: fine for trying the steps, not for sharing.
+# CI finds the identity in the certificate it imports.
+-include local.mk
+DEV_ID  ?= -
+# saved once with: xcrun notarytool store-credentials health-trail --team-id <your team id>;
+# CI passes an App Store Connect API key instead (--key … --key-id … --issuer …)
+NOTARY_AUTH ?= --keychain-profile health-trail
+DIST    := dist
+DMG     := $(DIST)/HealthTrail-$(VERSION).dmg
 
-.PHONY: all ui bin app test dev dev-real clean
+.PHONY: all ui bin app appstore-test dmg notarize test dev dev-real clean
 
 all: bin
 
@@ -38,6 +53,41 @@ app: bin
 	codesign --force --deep --sign - "$(APP)"
 	@echo "built $(APP) — drag it to /Applications"
 
+# A local stand-in for the App Store build: the same sandbox
+# (build/appstore.entitlements), ad-hoc signed, with a bundle id of its own so
+# its data container, permissions and calendars stay apart from the real app.
+appstore-test: bin
+	rm -rf "$(TEST_APP)"
+	mkdir -p "$(TEST_APP)/Contents/MacOS" "$(TEST_APP)/Contents/Resources"
+	cp health-trail "$(TEST_APP)/Contents/MacOS/health-trail"
+	sed -e 's/__VERSION__/$(VERSION)/g' -e 's#<string>com.chunbin1.healthtrail</string>#<string>com.chunbin1.healthtrail.appstoretest</string>#' \
+		-e 's#<string>健康足迹</string>#<string>健康足迹测试版</string>#g' build/Info.plist > "$(TEST_APP)/Contents/Info.plist"
+	cp build/AppIcon.icns build/tray.png "$(TEST_APP)/Contents/Resources/" 2>/dev/null || true
+	codesign --force --options runtime --entitlements build/appstore.entitlements --sign - "$(TEST_APP)"
+	@echo "built $(TEST_APP) — data: ~/Library/Containers/com.chunbin1.healthtrail.appstoretest"
+
+# one binary for Apple silicon and Intel; the hardened runtime and a secure
+# timestamp are what notarizing asks for
+dmg: ui
+	rm -rf "$(DIST)" && mkdir -p "$(DIST)/root/$(APP)/Contents/MacOS" "$(DIST)/root/$(APP)/Contents/Resources"
+	GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o "$(DIST)/health-trail-arm64" .
+	GOARCH=amd64 CGO_ENABLED=1 CC="clang -arch x86_64" go build -ldflags "-s -w -X main.version=$(VERSION)" -o "$(DIST)/health-trail-amd64" .
+	lipo -create -output "$(DIST)/root/$(APP)/Contents/MacOS/health-trail" "$(DIST)/health-trail-arm64" "$(DIST)/health-trail-amd64"
+	sed 's/__VERSION__/$(VERSION)/g' build/Info.plist > "$(DIST)/root/$(APP)/Contents/Info.plist"
+	cp build/AppIcon.icns "$(DIST)/root/$(APP)/Contents/Resources/"
+	codesign --force --options runtime --timestamp$(if $(filter -,$(DEV_ID)),=none) \
+		--entitlements build/developerid.entitlements --sign "$(DEV_ID)" "$(DIST)/root/$(APP)"
+	codesign --verify --strict "$(DIST)/root/$(APP)"
+	ln -s /Applications "$(DIST)/root/Applications"
+	hdiutil create -volname 健康足迹 -srcfolder "$(DIST)/root" -fs HFS+ -format UDZO -ov "$(DMG)"
+	codesign --force --sign "$(DEV_ID)" "$(DMG)"
+	@echo "built $(DMG)"
+
+notarize: dmg
+	xcrun notarytool submit "$(DMG)" $(NOTARY_AUTH) --wait
+	xcrun stapler staple "$(DMG)"
+	spctl --assess --type open --context context:primary-signature -v "$(DMG)"
+
 test: frontend/node_modules
 	go vet ./...
 	go test ./...
@@ -53,4 +103,4 @@ dev-real: frontend/node_modules
 	@./scripts/dev.sh --real
 
 clean:
-	rm -rf health-trail "$(APP)" frontend/dist
+	rm -rf health-trail "$(APP)" "$(TEST_APP)" "$(DIST)" frontend/dist

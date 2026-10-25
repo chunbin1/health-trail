@@ -1,0 +1,3 @@
+# Copy to local.mk (git-ignored) and fill in your own Developer ID certificate,
+# as `security find-identity -v -p codesigning` lists it.
+DEV_ID := Developer ID Application: Your Name (TEAMID1234)

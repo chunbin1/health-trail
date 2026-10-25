@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"mime"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -19,7 +21,7 @@ import (
 )
 
 const attachInstruction = `
-- 用户发来报告单、处方、片子等的截图、PDF、录屏，并且你能拿到它在这台电脑上的文件路径时，录完内容后用 add_attachment 把原文件挂到对应的记录下（报告挂 reports，处方挂 visits 或 medications）。只贴在对话里、没有本机路径的图片存不了，告诉用户可以在 App 里那条记录下自己上传。`
+- 用户发来报告单、处方、片子等的截图、PDF、录屏，并且你能拿到它在这台电脑上的文件路径时，录完内容后用 add_attachment 把原文件挂到对应的记录下（报告挂 reports，处方挂 visits 或 medications）。只贴在对话里、没有本机路径的图片存不了，告诉用户可以在 App 里那条记录下自己上传。App Store 版只能读「下载」和用户在 App「设置 → 允许读取的文件夹」里添加过的文件夹，工具会提示；这时请用户把文件放进「下载」、在设置里添加那个文件夹，或者在 App 里那条记录下自己上传。`
 
 type attachIn struct {
 	Path     string `json:"path" jsonschema:"这台电脑上文件的完整路径，如 /Users/me/Downloads/报告.pdf，也可以用 ~/ 开头"`
@@ -68,10 +70,35 @@ func attachable(real, home string) string {
 
 // unreadable reports a failure to read a file without its path: the result
 // goes into the conversation, which leaves this computer. The detail goes
-// to the log (stderr) only.
-func unreadable(err error) (*mcp.CallToolResult, any, error) {
+// to the log (stderr) only. In the App Store build the sandbox lets the app
+// read only the Downloads folder (and what the person picks in the window),
+// so a file elsewhere fails with a permission error: say where to put it.
+func unreadable(err error, home string) (*mcp.CallToolResult, any, error) {
 	log.Printf("add_attachment: %v", err)
+	if errors.Is(err, fs.ErrPermission) && inSandbox(home) {
+		return failed(&store.ValidationError{Msg: sandboxedMsg})
+	}
 	return failed(&store.ValidationError{Msg: "读不了这个文件（可能没有权限）"})
+}
+
+const sandboxedMsg = "这个版本的健康足迹只能读「下载」文件夹，和在 App「设置 → 允许读取的文件夹」里添加过的文件夹。请用户把文件放进「下载」后再试，或者在设置里添加这个文件夹（添加后要重新连接这个 MCP），或者在 App 里那条记录下点「上传」。"
+
+// realHome is the person's own home folder, also in the sandbox (where
+// $HOME is the app's container). A variable so a test needn't use the real one.
+var realHome = func() string {
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		if h, err := filepath.EvalSymlinks(u.HomeDir); err == nil {
+			return h
+		}
+		return u.HomeDir
+	}
+	return ""
+}
+
+// inSandbox says the app runs in the App Sandbox: there the system points
+// the home folder at the app's container.
+func inSandbox(home string) bool {
+	return strings.Contains(home, string(filepath.Separator)+filepath.Join("Library", "Containers")+string(filepath.Separator))
 }
 
 // attach copies a file on this computer into the data directory as an
@@ -105,19 +132,23 @@ func (t *tools) attach(ctx context.Context, _ *mcp.CallToolRequest, in attachIn)
 		return failed(&store.ValidationError{Msg: "找不到这个文件，请确认 path 是对的"})
 	}
 	if err != nil {
-		return unreadable(err)
+		return unreadable(err, home)
 	}
 	if home != "" {
 		if h, err := filepath.EvalSymlinks(home); err == nil {
 			home = h
 		}
 	}
-	if why := attachable(real, home); why != "" {
-		return failed(&store.ValidationError{Msg: why})
+	// in the App Store sandbox the home is the app's container; a folder the
+	// person granted may hold the real ~/Library, which is kept out as well
+	for _, h := range []string{home, realHome()} {
+		if why := attachable(real, h); why != "" {
+			return failed(&store.ValidationError{Msg: why})
+		}
 	}
 	fi, err := os.Stat(real)
 	if err != nil {
-		return unreadable(err)
+		return unreadable(err, home)
 	}
 	if !fi.Mode().IsRegular() {
 		return failed(&store.ValidationError{Msg: "path 指向的不是一个文件（是文件夹或特殊文件）"})
@@ -131,7 +162,7 @@ func (t *tools) attach(ctx context.Context, _ *mcp.CallToolRequest, in attachIn)
 	}
 	f, err := os.Open(real)
 	if err != nil {
-		return unreadable(err)
+		return unreadable(err, home)
 	}
 	defer f.Close()
 
@@ -146,7 +177,7 @@ func (t *tools) attach(ctx context.Context, _ *mcp.CallToolRequest, in attachIn)
 			return failed(&store.ValidationError{Msg: "这个文件没有扩展名，内容也不是图片、PDF 或视频，不能存"})
 		}
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return unreadable(err)
+			return unreadable(err, home)
 		}
 	}
 	// a display name keeps the file's real extension, so the type shown
