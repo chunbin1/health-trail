@@ -33,7 +33,7 @@ GitHub Actions（`.github/workflows/release.yml`）会跑测试，打一个同�
 **1. 证书（Developer ID Application）**
 
 1. 打开「钥匙串访问」→ 左边选「登录」→ 上面选「我的证书」。
-2. 右键「Developer ID Application: LI CHUNBIN (XU4K6FP3HC)」→「导出…」，格式选 .p12，存到桌面，设一个密码。
+2. 右键「Developer ID Application: 你的名字 (团队 ID)」→「导出…」，格式选 .p12，存到桌面，设一个密码。
 3. 在终端运行（第二条会提示你输入刚才设的密码）：
 
    ```bash
@@ -59,14 +59,18 @@ GitHub Actions（`.github/workflows/release.yml`）会跑测试，打一个同�
 
 ## 在本机打包（可选）
 
+先把 `local.mk.example` 复制成 `local.mk`（不会提交），在里面填上自己的证书名（`security find-identity -v -p codesigning` 能查到）。
+
 ```bash
 make dmg         # Developer ID 签名的 dmg，在 dist/ 里，还没公证
 make notarize    # 再交给苹果公证；需要先保存一次凭证：
-                 # xcrun notarytool store-credentials health-trail --team-id XU4K6FP3HC
+                 # xcrun notarytool store-credentials health-trail --team-id <你的团队 ID>
 ```
+
+没有 `local.mk` 时 `make dmg` 用临时签名，只能自己测试用。
 
 第一次签名时，系统会问 codesign 能不能用钥匙串里的私钥：输入 Mac 登录密码，点「始终允许」。
 
 ## 证书到期
 
-Developer ID Application 证书 2027-11-24 到期。到期前，按上面的方法重新申请一张，再更新 `DEVELOPER_ID_P12` 和 `DEVELOPER_ID_P12_PASSWORD`。已经发出去的版本不受影响：签名带了时间戳，公证也有记录。
+Developer ID Application 证书的到期日，在「钥匙串访问」里双击证书就能看到。到期前，按上面的方法重新申请一张，再更新 `DEVELOPER_ID_P12` 和 `DEVELOPER_ID_P12_PASSWORD`。已经发出去的版本不受影响：签名带了时间戳，公证也有记录。

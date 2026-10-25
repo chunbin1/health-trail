@@ -20,9 +20,12 @@ APP     := 健康足迹.app
 TEST_APP := 健康足迹（App Store 测试版）.app
 # a tag v1.2.0 gives 1.2.0
 VERSION := $(patsubst v%,%,$(shell git describe --tags --always 2>/dev/null || echo 0.1.0))
-# the certificate's name in the keychain; DEV_ID=- signs ad hoc to try the steps
-DEV_ID  ?= Developer ID Application: LI CHUNBIN (XU4K6FP3HC)
-# saved once with: xcrun notarytool store-credentials health-trail --team-id XU4K6FP3HC;
+# your own signing identity goes in local.mk (git-ignored; see local.mk.example).
+# Without one, DEV_ID=- signs ad hoc: fine for trying the steps, not for sharing.
+# CI finds the identity in the certificate it imports.
+-include local.mk
+DEV_ID  ?= -
+# saved once with: xcrun notarytool store-credentials health-trail --team-id <your team id>;
 # CI passes an App Store Connect API key instead (--key … --key-id … --issuer …)
 NOTARY_AUTH ?= --keychain-profile health-trail
 DIST    := dist
