@@ -34,6 +34,8 @@ internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
 frontend/                React + TS + Vite；embed.go 把构建结果（dist）嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
+scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_review_gate.py（AI 审阅门禁，见 RELEASING.md）
+.github/workflows/       ci.yml（每次推送）、ai-review.yml（PR 的 AI 审阅检查）、release.yml（打标签发布，先查 AI 审阅）
 ```
 
 **schema.go 是唯一的数据来源**：数据表（自动迁移、只增不删）、API 接受的字段、MCP 工具说明里的字段列表、前端表单，全部从它生成。加一个字段只需改 schema.go（再在 schema_en.go 里补英文，`TestEnglishCoversSchema` 会提醒），其他地方会自动跟上；需要特殊展示的地方再改前端。

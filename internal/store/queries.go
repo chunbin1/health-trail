@@ -31,21 +31,38 @@ type Overview struct {
 // latestMetrics is the latest reading of each metric that has any, a lab
 // result of the same name included (see MetricSeries).
 func (s *Store) latestMetrics() ([]Record, error) {
+	rows, err := s.query(`SELECT x.* FROM metrics x
+		JOIN (SELECT metric_type, MAX(measured_at || printf('%010d', id)) AS k FROM metrics GROUP BY metric_type) m
+		  ON x.metric_type = m.metric_type AND x.measured_at || printf('%010d', x.id) = m.k`)
+	if err != nil {
+		return nil, err
+	}
+	latest := map[string]Record{}
+	for _, r := range rows {
+		r["source"] = "metrics"
+		latest[r["metric_type"].(string)] = r
+	}
 	kinds, err := s.customNames("metric_kinds")
 	if err != nil {
 		return nil, err
 	}
-	out := []Record{}
-	for _, m := range append(slices.Clone(MetricTypes), kinds...) {
-		rows, err := s.MetricSeries(m, "", "")
-		if err != nil {
-			return nil, err
-		}
-		if len(rows) > 0 {
-			out = append(out, rows[len(rows)-1])
+	labs, err := s.labReadings(append(slices.Clone(MetricTypes), kinds...), "", "")
+	if err != nil {
+		return nil, err
+	}
+	// oldest first, so the last one of a metric is its latest; a reading
+	// on the day of a lab result counts as later, as in MetricSeries
+	for _, l := range labs {
+		m := l["metric_type"].(string)
+		if r, ok := latest[m]; !ok || fmt.Sprint(l["measured_at"]) > fmt.Sprint(r["measured_at"]) {
+			latest[m] = l
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i]["metric_type"].(string) < out[j]["metric_type"].(string) })
+	out := make([]Record, 0, len(latest))
+	for _, r := range latest {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i]["metric_type"].(string) < out[j]["metric_type"].(string) })
 	return out, nil
 }
 
@@ -403,22 +420,42 @@ func (s *Store) LabTrend(name string) ([]Record, error) {
 		WHERE l.item_name LIKE ? ORDER BY l.item_name, l.test_date, l.id`, "%"+name+"%")
 }
 
-// MetricSeries returns one metric's readings in [from, to], oldest first:
-// the metric records (source "metrics") and, shown but not copied, the lab
-// results of the same name in the same unit (source "lab_results", id is the
-// lab result's), so a 尿酸 measured at the hospital shows next to the ones
+// MetricSeries returns one metric's latest readings in [from, to], oldest
+// first: the metric records (source "metrics") and, shown but not copied, the
+// lab results of the same name in the same unit (source "lab_results", id is
+// the lab result's), so a 尿酸 measured at the hospital shows next to the ones
 // measured at home.
 func (s *Store) MetricSeries(metricType, from, to string) ([]Record, error) {
+	var err error
+	if from != "" {
+		if from, err = normalizeDate(from); err != nil {
+			return nil, invalid("from：%v", err)
+		}
+	}
+	if to != "" {
+		if to, err = normalizeDate(to); err != nil {
+			return nil, invalid("to：%v", err)
+		}
+	}
+	// the newest ones when there are more, turned oldest first
+	const max = 1000
 	rows, _, err := s.List("metrics", ListQuery{
-		Filters: map[string]any{"metric_type": metricType}, From: from, To: to, Asc: true, Limit: 1000,
+		Filters: map[string]any{"metric_type": metricType}, From: from, To: to, Limit: max,
 	})
 	if err != nil {
 		return nil, err
 	}
+	slices.Reverse(rows)
 	for _, r := range rows {
 		r["source"] = "metrics"
 	}
-	labs, err := s.labReadings(metricType, from, to)
+	if len(rows) == max {
+		// lab results only as far back as the readings reach
+		if d := fmt.Sprint(rows[0]["measured_at"])[:10]; d > from {
+			from = d
+		}
+	}
+	labs, err := s.labReadings([]string{metricType}, from, to)
 	if err != nil || len(labs) == 0 {
 		return rows, err
 	}
@@ -429,36 +466,42 @@ func (s *Store) MetricSeries(metricType, from, to string) ([]Record, error) {
 	return rows, nil
 }
 
-// labReadings are the lab results named like the metric, as metric readings.
-// A result in another unit (尿酸 in mg/dL against μmol/L) is left out rather
-// than drawn on the same scale.
-func (s *Store) labReadings(metricType, from, to string) ([]Record, error) {
-	cond, args := "", []any{metricType}
+// labReadings are the lab results named like the metrics, as metric
+// readings, oldest first; from and to are normalized dates. Only a result in
+// the metric's unit is taken: one in another unit (尿酸 in mg/dL against
+// μmol/L), or where either unit is missing, would be drawn on the wrong scale.
+func (s *Store) labReadings(metricTypes []string, from, to string) ([]Record, error) {
+	where := []string{"l.value_num IS NOT NULL", "l.item_name IN (" + strings.Repeat(",?", len(metricTypes))[1:] + ")"}
+	args := []any{}
+	for _, m := range metricTypes {
+		args = append(args, m)
+	}
 	if from != "" {
-		cond += " AND l.test_date >= ?"
+		where = append(where, "substr(l.test_date,1,10) >= ?")
 		args = append(args, from)
 	}
 	if to != "" {
-		cond += " AND l.test_date <= ?"
+		where = append(where, "substr(l.test_date,1,10) <= ?")
 		args = append(args, to)
 	}
 	labs, err := s.query(`SELECT l.*, r.title AS report_title FROM lab_results l LEFT JOIN reports r ON r.id = l.report_id
-		WHERE l.item_name = ? AND l.value_num IS NOT NULL`+cond+` ORDER BY l.test_date, l.id`, args...)
+		WHERE `+strings.Join(where, " AND ")+` ORDER BY l.test_date, l.id`, args...)
 	if err != nil {
 		return nil, err
 	}
-	want, _ := s.metricUnit(metricType).(string)
+	units := map[string]string{}
+	for _, m := range metricTypes {
+		units[m], _ = s.metricUnit(m).(string)
+	}
 	out := []Record{}
 	for _, l := range labs {
+		name, _ := l["item_name"].(string)
 		unit, _ := l["unit"].(string)
-		if want != "" && unit != "" && !sameUnit(want, unit) {
+		if want := units[name]; want == "" || unit == "" || !sameUnit(want, unit) {
 			continue
 		}
-		if unit == "" {
-			unit = want
-		}
 		out = append(out, Record{
-			"source": "lab_results", "id": l["id"], "metric_type": metricType,
+			"source": "lab_results", "id": l["id"], "metric_type": name,
 			"measured_at": l["test_date"], "value": l["value_num"], "value2": nil, "unit": unit,
 			"flag": l["flag"], "ref_range": l["ref_range"], "report_id": l["report_id"], "report_title": l["report_title"],
 		})

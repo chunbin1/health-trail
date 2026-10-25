@@ -180,7 +180,7 @@ export function Overview() {
                   <div className="k">{tx(m.metric_type)}</div>
                   <div className="v">{metricValue(m)}<small>{tx(m.unit)}</small></div>
                   <Sparkline values={series?.[m.metric_type] || []} />
-                  <div className="d">{fmtDate(m.measured_at)}</div>
+                  <div className="d">{fmtDate(m.measured_at)}{m.source === 'lab_results' && ` · ${t('化验单')}`}</div>
                 </div>
               ))}
             </div>
