@@ -154,6 +154,31 @@ export interface Folders {
   folders: string[]
 }
 
+// A newer release and how installing it goes, in the Mac app only.
+export interface UpdateRelease {
+  version: string
+  name: string
+  notes: string
+  page: string
+  published: string
+}
+
+export interface UpdateStatus {
+  current: string
+  auto: boolean
+  state: {
+    checked_at?: string
+    checking: boolean
+    latest?: UpdateRelease // only when newer than this build
+    error?: string
+    phase?: 'backup' | 'download' | 'restart'
+    done?: number
+    total?: number
+  }
+  installable?: boolean // the release has the zip the app installs
+  why_not?: string // why this copy can't replace itself
+}
+
 export class ApiError extends Error {}
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -197,6 +222,11 @@ export const api = {
   folders: () => req<Folders>('GET', '/api/folders'),
   addFolder: () => req<Folders>('POST', '/api/folders'),
   removeFolder: (path: string) => req<Folders>('DELETE', '/api/folders', { path }),
+  updateStatus: () => req<UpdateStatus>('GET', '/api/update'),
+  checkUpdate: () => req<UpdateStatus>('POST', '/api/update/check'),
+  setAutoUpdate: (auto: boolean) => req<UpdateStatus>('PUT', '/api/update', { auto }),
+  installUpdate: () => req<UpdateStatus>('POST', '/api/update/install'),
+  openReleasePage: () => req<{ ok: boolean }>('POST', '/api/update/page'),
   setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),
   backup: () => req<BackupState>('GET', '/api/backup'),
   saveBackup: (c: BackupConfig) => req<BackupConfig>('PUT', '/api/backup', c),

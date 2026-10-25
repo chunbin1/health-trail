@@ -5,7 +5,8 @@
 #   make test       Go tests + UI typecheck
 #   make appstore-test  健康足迹（App Store 测试版）.app: the App Store sandbox, its own bundle id and data
 #   make dmg        dist/HealthTrail-<version>.dmg for other Macs: universal, Developer ID signed
-#   make notarize   make dmg, then have Apple notarize it so it opens without a warning
+#   make notarize   make dmg, then have Apple notarize it so it opens without a warning,
+#                   and zip the app for the in-app update (dist/HealthTrail-<version>.zip)
 #   make dev        UI on Vite :5173 (hot reload) + API on :8722 with a throwaway data dir,
 #                   rebuilt and restarted when a .go file changes (scripts/dev.sh)
 #   make dev-real   the same on your real data, backed up first (never for tests)
@@ -30,6 +31,8 @@ DEV_ID  ?= -
 NOTARY_AUTH ?= --keychain-profile health-trail
 DIST    := dist
 DMG     := $(DIST)/HealthTrail-$(VERSION).dmg
+# what the app downloads to update itself (internal/update)
+ZIP     := $(DIST)/HealthTrail-$(VERSION).zip
 
 .PHONY: all ui bin app appstore-test dmg notarize test dev dev-real clean
 
@@ -87,6 +90,10 @@ notarize: dmg
 	xcrun notarytool submit "$(DMG)" $(NOTARY_AUTH) --wait
 	xcrun stapler staple "$(DMG)"
 	spctl --assess --type open --context context:primary-signature -v "$(DMG)"
+	# the in-app update installs the same app, with its ticket stapled on
+	xcrun stapler staple "$(DIST)/root/$(APP)"
+	spctl --assess --type execute -v "$(DIST)/root/$(APP)"
+	ditto -c -k --keepParent "$(DIST)/root/$(APP)" "$(ZIP)"
 
 test: frontend/node_modules
 	go vet ./...

@@ -44,7 +44,7 @@
 
 **1 · 安装**：从 **[Releases](https://github.com/chunbin1/health-vault/releases)** 下载 `HealthTrail-<版本>.dmg`，打开后把「健康足迹」拖进「应用程序」。
 
-<sub>dmg 用 Developer ID 签名并经过苹果公证，双击就能打开。也可以[从源码构建](#从源码构建)。</sub>
+<sub>dmg 用 Developer ID 签名并经过苹果公证，双击就能打开。也可以[从源码构建](#从源码构建)。以后有新版本，App 会在「设置 → 软件更新」里提示，点一下就更新。</sub>
 
 **2 · 连接 AI**：打开 App 的「连接 AI」页，按你用的 AI 复制配置（Claude 桌面版、Claude Code、Codex 或其他支持 MCP 的 AI）。
 
@@ -186,7 +186,7 @@ flowchart LR
 
 ## 隐私与安全
 
-- **数据只在你的电脑上**：默认在 `~/Library/Application Support/HealthVault`，可以用 `-data` 参数或环境变量 `HEALTH_TRAIL_DATA` 换地方。App 本身不联网上传任何东西，也不收集使用统计。
+- **数据只在你的电脑上**：默认在 `~/Library/Application Support/HealthVault`，可以用 `-data` 参数或环境变量 `HEALTH_TRAIL_DATA` 换地方。App 本身不联网上传任何东西，也不收集使用统计。唯一的联网是每天向 GitHub 查一次有没有新版本（只问版本号，可以在「设置 → 软件更新」里关掉）。
 - **AI 会看到它读取的记录**：AI 读取记录时，相关内容会发给它的服务商处理（Claude 发给 Anthropic，Codex 发给 OpenAI）。用哪个 AI、让它读什么，由你决定。
 - **本地服务只对本机开放**：默认只监听 `127.0.0.1`；本机浏览器里的其他网站无法读写数据，服务会拒绝 DNS 重绑定和跨站请求。
 - **附件不会被当成网页运行**：只有图片、PDF 和纯文本能在页面里直接打开，其他类型一律作为下载返回。

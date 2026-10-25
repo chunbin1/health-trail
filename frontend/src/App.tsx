@@ -33,6 +33,23 @@ const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string 
     ],
   },
 ]
+// Whether the Mac app has found a newer version: asked at start, when the
+// window comes back, on each page change and every half hour (the app checks GitHub itself; this
+// only reads what it found). Outside the app the API isn't there.
+function useNewerVersion(page: string) {
+  const { data, reload } = useLoad(() => api.updateStatus().catch(() => null), [page])
+  useEffect(() => {
+    const id = setInterval(reload, 30 * 60_000)
+    window.addEventListener('focus', reload)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('focus', reload)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return !!data?.state.latest
+}
+
 const TABS = ['overview', 'checkins', 'reports', 'metrics']
 const LABEL: Record<string, Key> = Object.fromEntries(NAV.flatMap((g) => g.items.map((i) => [i.page, i.label])))
 LABEL.connect = '连接 AI'
@@ -77,10 +94,14 @@ export function App() {
   )
 
 
-  // the settings sit behind a gear at the end of the 连接 AI row
+  // the settings sit behind a gear at the end of the 连接 AI row, with a dot
+  // when the Mac app has found a newer version
+  const newer = useNewerVersion(page)
+  const gearLabel = newer ? t('设置 · 有新版本') : t('设置')
   const settingsLink = (
-    <a href="#/settings" className={'icon-btn' + (page === 'settings' ? ' on' : '')} aria-label={t('设置')} title={t('设置')}>
+    <a href="#/settings" className={'icon-btn' + (page === 'settings' ? ' on' : '') + (newer ? ' has-dot' : '')} aria-label={gearLabel} title={gearLabel}>
       <SettingsIcon size={18} />
+      {newer && <span className="dot" />}
     </a>
   )
 

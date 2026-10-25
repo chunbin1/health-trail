@@ -24,6 +24,15 @@ git push origin v1.0.1
 
 GitHub Actions（`.github/workflows/release.yml`）会跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，再跑一遍 MCP 端到端测试，最后建一个 GitHub Release 把 dmg 挂上去。版本号直接取标签：`v1.0.0` → `1.0.0`。
 
+## App 里的自动更新
+
+Release 上除了 dmg，还有一个 `HealthTrail-<版本>.zip`：订了公证票据的同一个 .app。装好的 App 每天查一次 `releases/latest`（不含 pre-release，所以带连字符的测试标签不会推给用户），发现更新就在「设置 → 软件更新」和菜单栏里提示。点「更新并重启」后：先备份一次（设置了备份的话）→ 下载 zip → 校验大小和 SHA-256 → 检查是同一个团队的 Developer ID 签名、bundle id 一致、经过公证、版本号对得上 → 替换「应用程序」里的 App → 退出后重新打开。
+
+- **仓库必须是公开的**：App 不带令牌，私有仓库的 Release 它读不到（显示「还没有找到发布的版本」）。
+- 1.0.0 的 Release 没有 zip，App 会显示新版本，但只能点「打开下载页面」手动装。
+- 自己 `make app` 构建的版本是临时签名，不会自动更新，只提示有新版本。
+- 用户把 App 放在「应用程序」以外、用户没有写权限的地方，或者直接从 dmg 里运行，也只能手动装。
+
 每次推送分支跑的是 `ci.yml`：测试，加一个临时签名的 dmg（只能自己测，别的 Mac 打不开）。
 
 ## 第一次：把签名和公证用的东西放进 GitHub Secrets

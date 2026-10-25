@@ -1,7 +1,8 @@
 name: Release
 
 # A tag like v1.0.0: the same checks as CI, then a Developer ID signed,
-# notarized universal dmg published as a GitHub Release.
+# notarized universal dmg published as a GitHub Release, with the zip of the
+# app that the app's own update downloads (HealthTrail-<version>.zip).
 #
 # Secrets (set once with `gh secret set`; how to make each is in RELEASING.md):
 #   DEVELOPER_ID_P12           the Developer ID Application certificate and its
@@ -59,7 +60,7 @@ jobs:
           test -n "$DEV_ID" || { echo "no Developer ID Application identity in DEVELOPER_ID_P12"; exit 1; }
           echo "DEV_ID=$DEV_ID" >> "$GITHUB_ENV"
 
-      - name: Signed, notarized dmg
+      - name: Signed, notarized dmg and update zip
         env:
           NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
@@ -80,7 +81,7 @@ jobs:
         # A tag with a hyphen (v1.1.0-test.1) is a pre-release.
         run: |
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-          gh release create "$GITHUB_REF_NAME" dist/*.dmg --verify-tag --notes-from-tag \
+          gh release create "$GITHUB_REF_NAME" dist/*.dmg dist/*.zip --verify-tag --notes-from-tag \
             --title "健康足迹 ${GITHUB_REF_NAME#v}" $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)
 
       - name: Remove the keychain and key

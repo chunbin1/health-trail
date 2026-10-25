@@ -14,10 +14,12 @@ internal/desktop/        桌面 App 这一层
   app.go                 app 结构体、网络端口的 handler()、窗口专用的 windowHandler()、RunApp/RunServe/RunMCP/RunInfo
   listener.go            本地端口的监听、settings.json
   backups.go             备份的触发和接口（打包、恢复在 internal/backup）
+  updates.go             检查新版本（启动后和每天一次）、窗口里的「更新并重启」、菜单栏的新版本提示
   folders.go, attachments.go  只给窗口用的接口：允许读取的文件夹、在 Mac 上打开 / 删除附件
   shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
 internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
+internal/update/         查 GitHub 最新 Release、下载 zip、校验同一团队的 Developer ID 签名和公证、替换 .app、退出后重新打开
 internal/reminders/      打卡、用药、预约的系统通知（Wails 服务）
 internal/folders/        沙盒版「允许读取的文件夹」：安全书签（bookmarks_darwin.go），窗口和 MCP 启动时都打开
 internal/attachopen/     窗口里点附件：复制一份到临时目录，用 Mac 上对应的 App 打开（不认识的类型只在访达里显示）；副本在删除、超过 1 小时、启动和退出时清掉

@@ -649,3 +649,13 @@ button.slot:disabled { opacity: .6; cursor: default; }
 /* settings: a switch with its label and hint */
 .sync-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .sync-row:first-of-type { border-top: none; }
+.update-box { background: var(--accent-soft); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.update-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.update-notes { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); margin-top: 6px; max-height: 220px; overflow-y: auto; }
+.update-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.update-progress { margin-top: 10px; }
+.update-progress .bar { height: 6px; border-radius: 3px; background: var(--surface); margin-top: 6px; overflow: hidden; }
+.update-progress .bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
+/* a newer version: a dot on the settings gear */
+.icon-btn.has-dot { position: relative; }
+.icon-btn .dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--sidebar); }
