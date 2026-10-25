@@ -5,6 +5,7 @@ name: CI
 # run on the binary inside it. The dmg is kept for a week to download.
 on:
   push:
+    branches: ['**'] # a tag runs release.yml instead
   workflow_dispatch:
 
 concurrency:

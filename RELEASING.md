@@ -1,0 +1,59 @@
+# 发布新版本
+
+健康足迹不上 Mac App Store，发的是 Developer ID 签名、苹果公证过的 dmg。别人下载后双击就能打开，不会弹「无法验证开发者」。
+
+## 平时：打个标签就行
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+GitHub Actions（`.github/workflows/release.yml`）会跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，再跑一遍 MCP 端到端测试，最后建一个 GitHub Release 把 dmg 挂上去。版本号直接取标签：`v1.0.0` → `1.0.0`。
+
+每次推送分支跑的是 `ci.yml`：测试，加一个临时签名的 dmg（只能自己测，别的 Mac 打不开）。
+
+## 第一次：把签名和公证用的东西放进 GitHub Secrets
+
+下面这些都是你自己的凭证，只在你自己的电脑上操作，不要发给任何人。
+
+**1. 证书（Developer ID Application）**
+
+1. 打开「钥匙串访问」→ 左边选「登录」→ 上面选「我的证书」。
+2. 右键「Developer ID Application: LI CHUNBIN (XU4K6FP3HC)」→「导出…」，格式选 .p12，存到桌面，设一个密码。
+3. 在终端运行（第二条会提示你输入刚才设的密码）：
+
+   ```bash
+   base64 -i ~/Desktop/developerid.p12 | gh secret set DEVELOPER_ID_P12
+   gh secret set DEVELOPER_ID_P12_PASSWORD
+   ```
+4. 这个 .p12 同时也是证书私钥的备份：存到安全的地方，比如加密的 U 盘或密码管理器，然后从桌面删掉。换电脑或者重装系统，靠它恢复签名能力。
+
+**2. 公证用的 App Store Connect API 密钥**
+
+1. 打开 https://appstoreconnect.apple.com/access/integrations/api 。第一次用要先点「请求访问」并同意条款。
+2. 在「团队密钥」里点「+」，名称填 `health-trail notary`，访问权限选「开发者」（Developer），然后生成。
+3. 下载 `AuthKey_XXXXXXXXXX.p8`。**只能下载一次**，下载后好好保存。页面上会显示「密钥 ID」，列表上方有「Issuer ID」。
+4. 在终端运行：
+
+   ```bash
+   gh secret set NOTARY_KEY < ~/Downloads/AuthKey_XXXXXXXXXX.p8
+   gh secret set NOTARY_KEY_ID --body 密钥ID
+   gh secret set NOTARY_ISSUER_ID --body IssuerID
+   ```
+
+用 `gh secret list` 检查，应该有这 5 个：`DEVELOPER_ID_P12`、`DEVELOPER_ID_P12_PASSWORD`、`NOTARY_KEY`、`NOTARY_KEY_ID`、`NOTARY_ISSUER_ID`。
+
+## 在本机打包（可选）
+
+```bash
+make dmg         # Developer ID 签名的 dmg，在 dist/ 里，还没公证
+make notarize    # 再交给苹果公证；需要先保存一次凭证：
+                 # xcrun notarytool store-credentials health-trail --team-id XU4K6FP3HC
+```
+
+第一次签名时，系统会问 codesign 能不能用钥匙串里的私钥：输入 Mac 登录密码，点「始终允许」。
+
+## 证书到期
+
+Developer ID Application 证书 2027-11-24 到期。到期前，按上面的方法重新申请一张，再更新 `DEVELOPER_ID_P12` 和 `DEVELOPER_ID_P12_PASSWORD`。已经发出去的版本不受影响：签名带了时间戳，公证也有记录。

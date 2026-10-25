@@ -18,11 +18,13 @@ export MACOSX_DEPLOYMENT_TARGET := 13.0
 
 APP     := 健康足迹.app
 TEST_APP := 健康足迹（App Store 测试版）.app
-VERSION := $(shell git describe --tags --always 2>/dev/null || echo 0.1.0)
+# a tag v1.2.0 gives 1.2.0
+VERSION := $(patsubst v%,%,$(shell git describe --tags --always 2>/dev/null || echo 0.1.0))
 # the certificate's name in the keychain; DEV_ID=- signs ad hoc to try the steps
 DEV_ID  ?= Developer ID Application: LI CHUNBIN (XU4K6FP3HC)
-# saved once with: xcrun notarytool store-credentials health-trail --team-id XU4K6FP3HC
-NOTARY  ?= health-trail
+# saved once with: xcrun notarytool store-credentials health-trail --team-id XU4K6FP3HC;
+# CI passes an App Store Connect API key instead (--key … --key-id … --issuer …)
+NOTARY_AUTH ?= --keychain-profile health-trail
 DIST    := dist
 DMG     := $(DIST)/HealthTrail-$(VERSION).dmg
 
@@ -79,7 +81,7 @@ dmg: ui
 	@echo "built $(DMG)"
 
 notarize: dmg
-	xcrun notarytool submit "$(DMG)" --keychain-profile "$(NOTARY)" --wait
+	xcrun notarytool submit "$(DMG)" $(NOTARY_AUTH) --wait
 	xcrun stapler staple "$(DMG)"
 	spctl --assess --type open --context context:primary-signature -v "$(DMG)"
 
