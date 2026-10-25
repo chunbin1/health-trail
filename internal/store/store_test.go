@@ -470,3 +470,42 @@ func TestOverviewAndTimeline(t *testing.T) {
 		t.Errorf("search hits = %v", hits)
 	}
 }
+
+// Deleting a check-in item takes its check-ins with it, and only its own;
+// a reading it logged to body metrics stays.
+func TestDeleteHabit(t *testing.T) {
+	s := open(t)
+	weigh, err := s.Create("habits", Record{"name": "晨起称体重", "unit": "kg", "metric_type": "体重"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	walk, _ := s.Create("habits", Record{"name": "散步"})
+	wid, kid := weigh["id"].(int64), walk["id"].(int64)
+	v := 61.5
+	if _, err := s.Checkin(wid, "today", &v, ""); err != nil {
+		t.Fatal(err)
+	}
+	pastCheckin(t, s, wid, time.Now().AddDate(0, 0, -1).Format("2006-01-02"), 61.8)
+	if _, err := s.Checkin(kid, "today", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete("habits", wid); err != nil {
+		t.Fatal(err)
+	}
+	count := func(entity string, f map[string]any) int {
+		_, n, err := s.List(entity, ListQuery{Filters: f})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count("checkins", map[string]any{"habit_id": wid}); n != 0 {
+		t.Errorf("check-ins left of the deleted item: %d", n)
+	}
+	if n := count("checkins", map[string]any{"habit_id": kid}); n != 1 {
+		t.Errorf("the other item's check-ins: %d, want 1", n)
+	}
+	if n := count("metrics", map[string]any{"metric_type": "体重"}); n != 1 {
+		t.Errorf("body metric readings after deleting the item: %d, want 1", n)
+	}
+}

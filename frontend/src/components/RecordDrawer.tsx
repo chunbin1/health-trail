@@ -25,7 +25,7 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   const r = data?.record
 
   async function remove() {
-    if (!r || !(await ask(t('删除这条{label}？{extra}此操作不可撤销。', { label: noun(e), extra: entityName === 'reports' ? t('报告里的所有指标也会一起删除。') : '' }), { ok: t('删除'), danger: true }))) return
+    if (!r || !(await ask(t('删除这条{label}？{extra}此操作不可撤销。', { label: noun(e), extra: entityName === 'reports' ? t('报告里的所有指标也会一起删除。') : entityName === 'habits' ? t('它的所有打卡记录也会一起删除。') : '' }), { ok: t('删除'), danger: true }))) return
     try {
       await api.remove(entityName, id)
       changed()
