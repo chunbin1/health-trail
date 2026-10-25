@@ -28,6 +28,9 @@ const Prefix = "health-trail-"
 // BeforeRestore marks the backup made of the current data before a restore.
 const BeforeRestore = "-before-restore"
 
+// BeforeUpdate marks the backup made before the app installs a new version.
+const BeforeUpdate = "-before-update"
+
 // legacyPrefixes are what earlier backups were called: first in Chinese, then
 // before the app was renamed Health Trail. They still list, prune and restore.
 var legacyPrefixes = []string{"health-vault-", "健康档案-"}

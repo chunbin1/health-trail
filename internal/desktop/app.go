@@ -32,6 +32,7 @@ import (
 	"github.com/lee/health-trail/internal/reminders"
 	"github.com/lee/health-trail/internal/server"
 	"github.com/lee/health-trail/internal/store"
+	"github.com/lee/health-trail/internal/update"
 )
 
 // Version is the app's Version, which main sets from the build.
@@ -87,6 +88,7 @@ type app struct {
 	listener *listener
 	settings *settings
 	backups  *backups
+	updates  *updates
 	grants   *folders.Grants    // folders the person let the sandboxed app read
 	shell    *shell             // the window and menu bar icon, in the app only
 	remind   *reminders.Service // in the app only
@@ -103,6 +105,7 @@ func newApp(dataDir, port string) *app {
 		log.Fatalf("读取访问令牌失败：%v", err)
 	}
 	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir), grants: folders.New(dataDir)}
+	a.updates = newUpdates(a.settings)
 	a.grants.Open()
 	// phone access is hidden until it's reworked: a choice saved earlier no
 	// longer opens the app to the network (serve -lan still does, on purpose)
@@ -204,6 +207,17 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 		writeJSON(w, map[string]string{"dir": dir}) // "" when cancelled
 	})
 	a.folderRoutes(mux, wapp)
+	a.updates.routes(mux)
+	// the release's page in the browser, for its notes and the dmg; only a
+	// page on GitHub, whatever the release says
+	mux.HandleFunc("POST /api/update/page", func(w http.ResponseWriter, r *http.Request) {
+		page := update.ReleasesPage
+		if rel := a.updates.latest(); rel != nil && strings.HasPrefix(rel.Page, "https://github.com/") {
+			page = rel.Page
+		}
+		wapp().Browser.OpenURL(page)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("POST /api/attachments/{id}/open", a.openAttachmentHandler)
 	mux.HandleFunc("DELETE /api/attachments/{id}", a.deleteAttachmentHandler(h))
 	// whether macOS shows the reminders, and a way to its settings if not
@@ -436,6 +450,10 @@ func RunApp(dataDir, port string) {
 		},
 	})
 	a.shell = newShell(wapp, win, a.settings.lang, a.backups.windowClosed)
+	a.updates.backup = a.backups.beforeUpdate
+	a.updates.quit = wapp.Quit
+	a.updates.changed = func(u *updates) { a.shell.setUpdate(u.latest()) }
+	go a.updates.loop(ctx)
 	wapp.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		// opened at login: reminders and backups run, the window waits for a click
 		if launchedAtLogin() {

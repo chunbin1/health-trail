@@ -135,7 +135,8 @@ export function BackupSettings() {
               {data.backups.map((b) => (
                 <div key={b.name} className="row-item no-ico" style={{ cursor: 'default' }}>
                   <div className="body">
-                    <div className="title">{fmtDate(b.time.slice(0, 16))}{(b.name.includes('-before-restore') || b.name.includes('-恢复前')) && <span className="tag" style={{ marginLeft: 8 }}>{t('恢复前')}</span>}</div>
+                    <div className="title">{fmtDate(b.time.slice(0, 16))}{(b.name.includes('-before-restore') || b.name.includes('-恢复前')) && <span className="tag" style={{ marginLeft: 8 }}>{t('恢复前')}</span>}
+                    {b.name.includes('-before-update') && <span className="tag" style={{ marginLeft: 8 }}>{t('更新前')}</span>}</div>
                     <div className="meta ellipsis">{b.name} · {size(b.size)}</div>
                   </div>
                   <button className="btn sm" disabled={!!busy} onClick={() => restore(b.name, b.time)}><ArchiveRestore size={14} />{busy === b.name ? t('恢复中…') : t('恢复')}</button>

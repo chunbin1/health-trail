@@ -74,14 +74,30 @@ func (l *listener) close() {
 type settings struct {
 	path string
 	mu   sync.Mutex // Lang is read by the reminders goroutine
-	LAN  bool   `json:"lan"`
-	Lang string `json:"lang,omitempty"` // UI language: "" (Chinese) or "en"
+	LAN  bool       `json:"lan"`
+	Lang string     `json:"lang,omitempty"` // UI language: "" (Chinese) or "en"
+	// looking for updates by itself is on unless switched off
+	NoUpdateCheck bool `json:"no_update_check,omitempty"`
 }
 
 func (s *settings) lang() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.Lang
+}
+
+// msg picks the text for the UI's language.
+func (s *settings) msg(zh, en string) string {
+	if s.lang() == "en" {
+		return en
+	}
+	return zh
+}
+
+func (s *settings) autoUpdate() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.NoUpdateCheck
 }
 
 func loadSettings(dir string) *settings {

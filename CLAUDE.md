@@ -14,10 +14,12 @@ internal/desktop/        桌面 App 这一层
   app.go                 app 结构体、网络端口的 handler()、窗口专用的 windowHandler()、RunApp/RunServe/RunMCP/RunInfo
   listener.go            本地端口的监听、settings.json
   backups.go             备份的触发和接口（打包、恢复在 internal/backup）
+  updates.go             检查新版本（启动后和每天一次）、窗口里的「更新并重启」、菜单栏的新版本提示
   folders.go, attachments.go  只给窗口用的接口：允许读取的文件夹、在 Mac 上打开 / 删除附件
   shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
 internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
+internal/update/         查 GitHub 最新 Release、下载 zip、校验同一团队的 Developer ID 签名和公证、替换 .app、退出后重新打开
 internal/reminders/      打卡、用药、预约的系统通知（Wails 服务）
 internal/folders/        沙盒版「允许读取的文件夹」：安全书签（bookmarks_darwin.go），窗口和 MCP 启动时都打开
 internal/attachopen/     窗口里点附件：复制一份到临时目录，用 Mac 上对应的 App 打开（不认识的类型只在访达里显示）；副本在删除、超过 1 小时、启动和退出时清掉
@@ -45,6 +47,7 @@ frontend/                React + TS + Vite；embed.go 把构建结果（dist）�
 - **一份报告要么全部写入，要么一条不写**：批量写入用 `CreateMany`（事务）；`add_lab_report`（mcpserver 的 `importLabs`）失败时要删掉它新建的报告。
 - **界面统一**：颜色和图标用 `ui.tsx` 的 `KIND`（每类记录一个图标 + `--c-<kind>` 颜色）和 `styles.css` 里的 token，不要在组件里写死颜色。图表系列颜色要先用 dataviz 的 `validate_palette.js` 校验浅色和深色两套。
 - **界面文字中英两套**：前端写死的文字一律 `t('中文原文')`，并在 `i18n.tsx` 的 `EN` 里加英文（漏了类型检查不过）；schema 来的字段名、提示、枚举选项、单位用 `tx()` 显示。枚举存进数据库的值永远是中文，只翻译显示。语言保存在数据目录的 settings.json（`lang`）。MCP 的说明和 prompts 保持中文。
+- **README 中英两份**：`README.md` 是中文版，`README.en.md` 是英文版。改其中一份时同步改另一份，章节、链接和页内锚点一一对应；英文版里的界面名字用 `i18n.tsx` 的 `EN` 里的叫法。
 - **不编造医疗结论**：MCP 的 instructions 和 prompts 要求 Claude 只依据数据说话、提醒就医。改这些文字时保留这些约束。
 
 ## 验证

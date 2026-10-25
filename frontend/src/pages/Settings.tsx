@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Database, FolderOpen, Languages, Power, Smartphone } from 'lucide-react'
-import { api, fmtDate, type CalSync } from '../api'
+import { Database, FolderOpen, Languages, Power, RefreshCw, Smartphone } from 'lucide-react'
+import { api, fmtDate, type CalSync, type UpdateStatus } from '../api'
 import { t, type Lang } from '../i18n'
 import { useApp, useLoad } from '../state'
 import { Switch } from '../ui'
@@ -113,6 +113,86 @@ function AtLogin() {
   )
 }
 
+// Looking for a newer release and installing it, in the Mac app only. The
+// check button keeps its place whatever is found; while an install runs the
+// page asks how it goes, until the app quits and reopens as the new version.
+function Updates() {
+  const { data, error } = useLoad(() => api.updateStatus(), [])
+  const [cur, setCur] = useState<UpdateStatus | null>(null)
+  const [err, setErr] = useState('')
+  const s = cur || data
+  const st = s?.state
+  const running = !!st && (st.checking || !!st.phase)
+  useEffect(() => {
+    if (!running) return
+    const id = setInterval(() => api.updateStatus().then(setCur, () => {}), 700)
+    return () => clearInterval(id)
+  }, [running])
+  if (error || !s || !st) return null
+
+  async function run(f: () => Promise<UpdateStatus>) {
+    setErr('')
+    try {
+      setCur(await f())
+    } catch (e: any) {
+      setErr(e.message)
+    }
+  }
+  async function check() {
+    if (running) return
+    setCur({ ...s!, state: { ...st!, checking: true, error: '' } })
+    await run(api.checkUpdate)
+  }
+  async function install() {
+    const r = st!.latest
+    if (running || !r || !(await ask(t('更新到 {version}？\n\n设置了备份的话，会先备份一次数据；然后下载新版本、检查签名，替换后重新打开健康足迹。', { version: r.version }), { ok: t('更新并重启') }))) return
+    setCur({ ...s!, state: { ...st!, phase: 'backup', error: '' } })
+    await run(api.installUpdate)
+  }
+
+  const r = st.latest
+  const pct = st.total ? Math.floor(((st.done || 0) * 100) / st.total) : 0
+  const phase = st.phase === 'backup' ? t('正在备份…') : st.phase === 'download' ? (st.total ? t('正在下载 {pct}%', { pct }) : t('正在下载…')) : st.phase === 'restart' ? t('正在重启…') : ''
+  const canInstall = !!r && s.installable && !s.why_not
+  return (
+    <Section icon={<RefreshCw size={20} />} title={t('软件更新')}
+      sub={t('当前版本 {version}', { version: s.current }) + (!r && st.checked_at && !st.error && !st.checking ? ' · ' + t('已是最新版本 · 上次检查 {time}', { time: fmtDate(st.checked_at.slice(0, 16)) }) : '')}
+      right={<button className="btn sm" disabled={running} onClick={check}>{st.checking ? t('正在检查…') : t('检查更新')}</button>}>
+      {r && (
+        <div className="update-box">
+          <div className="update-head">
+            <b>{t('新版本 {version}', { version: r.version })}</b>
+            {r.published && <span className="small muted">{t('发布于 {date}', { date: fmtDate(r.published.slice(0, 10)) })}</span>}
+          </div>
+          {r.notes && <div className="update-notes small">{r.notes}</div>}
+          {phase ? (
+            <div className="update-progress">
+              <div className="small">{phase}</div>
+              <div className="bar"><span style={{ width: (st.phase === 'download' ? pct : st.phase === 'restart' ? 100 : 0) + '%' }} /></div>
+            </div>
+          ) : (
+            <div className="update-actions">
+              {canInstall
+                ? <button className="btn primary sm" onClick={install}>{t('更新并重启')}</button>
+                : <button className="btn primary sm" onClick={() => api.openReleasePage()}>{t('打开下载页面')}</button>}
+              {canInstall && <button className="btn sm" onClick={() => api.openReleasePage()}>{t('发布页面')}</button>}
+            </div>
+          )}
+          {s.why_not && s.installable && !phase && <div className="small muted" style={{ marginTop: 8 }}>{s.why_not}</div>}
+        </div>
+      )}
+      {(err || st.error) && <div className="error" style={{ marginBottom: 12 }}>{err || st.error}</div>}
+      <div className="sync-row">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div>{t('自动检查更新')}</div>
+          <div className="small muted">{t('每天向 GitHub 查一次有没有新版本，只问版本号，不会发送任何健康数据。')}</div>
+        </div>
+        <Switch checked={s.auto} onChange={(v) => { setCur({ ...s, auto: v }); run(() => api.setAutoUpdate(v)) }} label={t('自动检查更新')} />
+      </div>
+    </Section>
+  )
+}
+
 // Folders Claude may attach files from, in the App Store build only: its
 // sandbox allows Downloads and nothing else outside the app, so a report on
 // the Desktop needs its folder granted here once. The open dialog is what
@@ -180,6 +260,8 @@ export function Settings() {
           } />
 
         <AtLogin />
+
+        <Updates />
 
         <PhoneSync />
 

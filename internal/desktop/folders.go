@@ -45,9 +45,4 @@ func (a *app) folderRoutes(mux *http.ServeMux, wapp func() *application.App) {
 }
 
 // msg is a message for the window, in its language.
-func (a *app) msg(zh, en string) string {
-	if a.settings.lang() == "en" {
-		return en
-	}
-	return zh
-}
+func (a *app) msg(zh, en string) string { return a.settings.msg(zh, en) }
