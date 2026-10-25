@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -103,6 +104,9 @@ func runMCP(dataDir string) {
 	log.SetOutput(os.Stderr)
 	st := openStore(dataDir)
 	defer st.Close()
+	// the folders granted in the window, so add_attachment can read there
+	// in the App Store sandbox too
+	newGrants(dataDir).open()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := mcpserver.New(st, version, true).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
@@ -124,6 +128,7 @@ type app struct {
 	listener *listener
 	settings *settings
 	backups  *backups
+	grants   *grants    // folders the person let the sandboxed app read
 	shell    *shell     // the window and menu bar icon, in the app only
 	remind   *reminders // in the app only
 	cal      *calSync   // in the app only
@@ -138,7 +143,8 @@ func newApp(dataDir, port string) *app {
 	if err != nil {
 		log.Fatalf("读取访问令牌失败：%v", err)
 	}
-	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir)}
+	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir), grants: newGrants(dataDir)}
+	a.grants.open()
 	// phone access is hidden until it's reworked: a choice saved earlier no
 	// longer opens the app to the network (serve -lan still does, on purpose)
 	a.settings.LAN = false
@@ -236,6 +242,7 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 		}
 		writeJSON(w, map[string]string{"dir": dir}) // "" when cancelled
 	})
+	a.folderRoutes(mux, wapp)
 	mux.HandleFunc("POST /api/attachments/{id}/open", a.openAttachmentHandler)
 	mux.HandleFunc("DELETE /api/attachments/{id}", a.deleteAttachmentHandler(h))
 	// whether macOS shows the reminders, and a way to its settings if not
@@ -421,9 +428,10 @@ func runApp(dataDir, port string) {
 	var wapp *application.App
 	ctx, stopBackups := context.WithCancel(context.Background())
 	go a.backups.loop(ctx)
-	// a test copy on other data writes to calendars of its own
+	// a test copy on other data, or a test build with a bundle id of its
+	// own (make appstore-test), writes to calendars of its own
 	calTitle := "健康足迹"
-	if dataDir != defaultDataDir() {
+	if id := runningBundleID(); dataDir != defaultDataDir() || id != "" && id != bundleID {
 		calTitle = "健康足迹（测试）"
 	}
 	a.openDir = openedDir(os.TempDir(), dataDir)
@@ -511,6 +519,25 @@ func (a *app) calStatus() map[string]any {
 
 // bundleID is the app's identifier (build/Info.plist).
 const bundleID = "com.chunbin1.healthtrail"
+
+var bundleIDRe = regexp.MustCompile(`<key>CFBundleIdentifier</key>\s*<string>([^<]+)</string>`)
+
+// runningBundleID is the bundle id of the .app this binary runs from, or ""
+// outside one.
+func runningBundleID() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(exe), "..", "Info.plist"))
+	if err != nil {
+		return ""
+	}
+	if m := bundleIDRe.FindSubmatch(b); m != nil {
+		return string(m[1])
+	}
+	return ""
+}
 
 func instanceID(dataDir string) string {
 	if abs, err := filepath.Abs(dataDir); err == nil {

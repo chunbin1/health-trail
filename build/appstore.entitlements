@@ -3,6 +3,7 @@
 <!--
   The Mac App Store build's sandbox. What each one is for:
   network.server              the local service: phone access and MCP over HTTP
+  network.client              the window: WKWebView shows a blank page in the sandbox without it
   files.user-selected         attachments the person uploads, the backup folder they pick
   files.bookmarks.app-scope   keeping access to that backup folder across launches
   files.downloads.read-only   add_attachment over MCP: Claude may attach files in Downloads
@@ -14,6 +15,7 @@
 <dict>
   <key>com.apple.security.app-sandbox</key><true/>
   <key>com.apple.security.network.server</key><true/>
+  <key>com.apple.security.network.client</key><true/>
   <key>com.apple.security.files.user-selected.read-write</key><true/>
   <key>com.apple.security.files.bookmarks.app-scope</key><true/>
   <key>com.apple.security.files.downloads.read-only</key><true/>

@@ -3,6 +3,7 @@
 #   make            build the UI and the binary (./health-trail)
 #   make app        bundle 健康足迹.app (ad-hoc signed)
 #   make test       Go tests + UI typecheck
+#   make appstore-test  健康足迹（App Store 测试版）.app: the App Store sandbox, its own bundle id and data
 #   make dev        UI on Vite :5173 (hot reload) + API on :8722 with a throwaway data dir,
 #                   rebuilt and restarted when a .go file changes (scripts/dev.sh)
 #   make dev-real   the same on your real data, backed up first (never for tests)
@@ -14,9 +15,10 @@ export CGO_LDFLAGS := -mmacosx-version-min=13.0
 export MACOSX_DEPLOYMENT_TARGET := 13.0
 
 APP     := 健康足迹.app
+TEST_APP := 健康足迹（App Store 测试版）.app
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo 0.1.0)
 
-.PHONY: all ui bin app test dev dev-real clean
+.PHONY: all ui bin app appstore-test test dev dev-real clean
 
 all: bin
 
@@ -38,6 +40,19 @@ app: bin
 	codesign --force --deep --sign - "$(APP)"
 	@echo "built $(APP) — drag it to /Applications"
 
+# A local stand-in for the App Store build: the same sandbox
+# (build/appstore.entitlements), ad-hoc signed, with a bundle id of its own so
+# its data container, permissions and calendars stay apart from the real app.
+appstore-test: bin
+	rm -rf "$(TEST_APP)"
+	mkdir -p "$(TEST_APP)/Contents/MacOS" "$(TEST_APP)/Contents/Resources"
+	cp health-trail "$(TEST_APP)/Contents/MacOS/health-trail"
+	sed -e 's/__VERSION__/$(VERSION)/g' -e 's#<string>com.chunbin1.healthtrail</string>#<string>com.chunbin1.healthtrail.appstoretest</string>#' \
+		-e 's#<string>健康足迹</string>#<string>健康足迹测试版</string>#g' build/Info.plist > "$(TEST_APP)/Contents/Info.plist"
+	cp build/AppIcon.icns build/tray.png "$(TEST_APP)/Contents/Resources/" 2>/dev/null || true
+	codesign --force --options runtime --entitlements build/appstore.entitlements --sign - "$(TEST_APP)"
+	@echo "built $(TEST_APP) — data: ~/Library/Containers/com.chunbin1.healthtrail.appstoretest"
+
 test: frontend/node_modules
 	go vet ./...
 	go test ./...
@@ -53,4 +68,4 @@ dev-real: frontend/node_modules
 	@./scripts/dev.sh --real
 
 clean:
-	rm -rf health-trail "$(APP)" frontend/dist
+	rm -rf health-trail "$(APP)" "$(TEST_APP)" frontend/dist

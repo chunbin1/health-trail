@@ -148,6 +148,12 @@ export interface BackupState {
   can_choose_dir: boolean
 }
 
+// Folders the sandboxed App Store build may read, beyond Downloads.
+export interface Folders {
+  sandboxed: boolean
+  folders: string[]
+}
+
 export class ApiError extends Error {}
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -188,6 +194,9 @@ export const api = {
   openCalPrivacy: (reminders: boolean) => req<{ ok: boolean }>('POST', '/api/calsync/privacy' + (reminders ? '?reminders=1' : '')),
   openNotificationSettings: () => req<{ ok: boolean }>('POST', '/api/notifications/settings'),
   setAutostart: (enabled: boolean) => req<{ enabled: boolean }>('PUT', '/api/autostart', { enabled }),
+  folders: () => req<Folders>('GET', '/api/folders'),
+  addFolder: () => req<Folders>('POST', '/api/folders'),
+  removeFolder: (path: string) => req<Folders>('DELETE', '/api/folders', { path }),
   setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),
   backup: () => req<BackupState>('GET', '/api/backup'),
   saveBackup: (c: BackupConfig) => req<BackupConfig>('PUT', '/api/backup', c),

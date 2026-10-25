@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,7 +21,7 @@ import (
 )
 
 const attachInstruction = `
-- 用户发来报告单、处方、片子等的截图、PDF、录屏，并且你能拿到它在这台电脑上的文件路径时，录完内容后用 add_attachment 把原文件挂到对应的记录下（报告挂 reports，处方挂 visits 或 medications）。只贴在对话里、没有本机路径的图片存不了，告诉用户可以在 App 里那条记录下自己上传。App Store 版只能读「下载」文件夹里的文件，工具会提示；这时请用户把文件放进「下载」再试，或者在 App 里那条记录下自己上传。`
+- 用户发来报告单、处方、片子等的截图、PDF、录屏，并且你能拿到它在这台电脑上的文件路径时，录完内容后用 add_attachment 把原文件挂到对应的记录下（报告挂 reports，处方挂 visits 或 medications）。只贴在对话里、没有本机路径的图片存不了，告诉用户可以在 App 里那条记录下自己上传。App Store 版只能读「下载」和用户在 App「设置 → 允许读取的文件夹」里添加过的文件夹，工具会提示；这时请用户把文件放进「下载」、在设置里添加那个文件夹，或者在 App 里那条记录下自己上传。`
 
 type attachIn struct {
 	Path     string `json:"path" jsonschema:"这台电脑上文件的完整路径，如 /Users/me/Downloads/报告.pdf，也可以用 ~/ 开头"`
@@ -80,7 +81,19 @@ func unreadable(err error, home string) (*mcp.CallToolResult, any, error) {
 	return failed(&store.ValidationError{Msg: "读不了这个文件（可能没有权限）"})
 }
 
-const sandboxedMsg = "这个版本的健康足迹只能读「下载」文件夹里的文件。请用户把文件放进「下载」文件夹后再试，或者在 App 里那条记录下点「上传」。"
+const sandboxedMsg = "这个版本的健康足迹只能读「下载」文件夹，和在 App「设置 → 允许读取的文件夹」里添加过的文件夹。请用户把文件放进「下载」后再试，或者在设置里添加这个文件夹（添加后要重新连接这个 MCP），或者在 App 里那条记录下点「上传」。"
+
+// realHome is the person's own home folder, also in the sandbox (where
+// $HOME is the app's container).
+func realHome() string {
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		if h, err := filepath.EvalSymlinks(u.HomeDir); err == nil {
+			return h
+		}
+		return u.HomeDir
+	}
+	return ""
+}
 
 // inSandbox says the app runs in the App Sandbox: there the system points
 // the home folder at the app's container.
@@ -126,8 +139,12 @@ func (t *tools) attach(ctx context.Context, _ *mcp.CallToolRequest, in attachIn)
 			home = h
 		}
 	}
-	if why := attachable(real, home); why != "" {
-		return failed(&store.ValidationError{Msg: why})
+	// in the App Store sandbox the home is the app's container; a folder the
+	// person granted may hold the real ~/Library, which is kept out as well
+	for _, h := range []string{home, realHome()} {
+		if why := attachable(real, h); why != "" {
+			return failed(&store.ValidationError{Msg: why})
+		}
 	}
 	fi, err := os.Stat(real)
 	if err != nil {
