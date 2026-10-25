@@ -134,3 +134,25 @@ func TestAPI(t *testing.T) {
 		t.Errorf("attachment outlived its record: %d", w.Code)
 	}
 }
+
+// FromThisComputer is the same test Guard uses to let a request in without
+// a token; the MCP endpoint uses it to decide who may attach local files.
+func TestFromThisComputer(t *testing.T) {
+	for _, c := range []struct {
+		remote, host string
+		want         bool
+	}{
+		{"127.0.0.1:50000", "127.0.0.1:8721", true},
+		{"[::1]:50000", "localhost:8721", true},
+		{"127.0.0.1:50000", "evil.example:8721", false},      // DNS rebinding
+		{"127.0.0.1:50000", "mac.tail1234.ts.net", false},    // tailscale serve, proxied from the phone
+		{"192.168.1.20:50000", "127.0.0.1:8721", false},      // another device
+		{"100.101.102.103:50000", "192.168.1.5:8721", false}, // Tailscale
+	} {
+		r := httptest.NewRequest("POST", "/mcp", nil)
+		r.RemoteAddr, r.Host = c.remote, c.host
+		if got := FromThisComputer(r); got != c.want {
+			t.Errorf("%s → %s: %v, want %v", c.remote, c.host, got, c.want)
+		}
+	}
+}

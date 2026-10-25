@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Check, ChevronRight, Plus, Sparkles } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, MONTHS, nowLocal, today, type MedDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
+import { tell } from '../components/Dialog'
 import { Modal } from '../components/Modal'
 import { NotifyWarning } from '../components/NotifyWarning'
 import { LabValue, TakeDose } from '../components/RecordDrawer'
@@ -228,7 +229,7 @@ function MedsToday({ days }: { days: MedDay[] }) {
       changed()
       toast(t('已记录：{name} {time} 这一次', { name: m.name, time }))
     } catch (e: any) {
-      alert(e.message)
+      tell(e.message)
     } finally {
       setBusy('')
     }

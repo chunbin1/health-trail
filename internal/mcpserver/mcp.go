@@ -29,10 +29,16 @@ const instructions = `这是用户本人的个人健康档案（单人）。所�
 - 你可以帮助整理、对比、发现趋势、准备就医问题，但不能替代医生诊断；涉及用药调整或明显异常时，建议用户咨询医生。
 - delete_record 会永久删除，只在用户明确要求时使用。`
 
-// New builds the MCP server over st.
-func New(st *store.Store, version string) *mcp.Server {
+// New builds the MCP server over st. local adds add_attachment, which
+// reads files on this computer: pass true only for a client on this
+// computer (stdio, or HTTP from loopback), never for another device.
+func New(st *store.Store, version string, local bool) *mcp.Server {
+	ins := instructions
+	if local {
+		ins = strings.Replace(ins, "\n- 不要编造数据", attachInstruction+"\n- 不要编造数据", 1)
+	}
 	s := mcp.NewServer(&mcp.Implementation{Name: "health-trail", Title: "健康足迹", Version: version},
-		&mcp.ServerOptions{Instructions: instructions})
+		&mcp.ServerOptions{Instructions: ins})
 	t := &tools{st}
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	no := false
@@ -87,6 +93,12 @@ func New(st *store.Store, version string) *mcp.Server {
 	mcp.AddTool(s, &mcp.Tool{Name: "get_checkin_stats", Annotations: ro,
 		Description: "打卡统计：每个打卡项在一段时间内（默认最近 30 天）的完成天数、完成率、当前连续天数、区间内最长连续、数量合计和打卡日期。"},
 		t.checkinStats)
+	if local {
+		mcp.AddTool(s, &mcp.Tool{Name: "add_attachment",
+			Annotations: &mcp.ToolAnnotations{DestructiveHint: &no},
+			Description: "把这台电脑上的一个文件（报告单截图、PDF、片子录屏、处方照片等）存成附件，挂到一条记录下。文件会复制进档案，原文件不动；最大 " + fmt.Sprint(store.MaxAttachment>>20) + " MB。get_record 会列出一条记录的附件。"},
+			t.attach)
+	}
 	addPrompts(s)
 	return s
 }

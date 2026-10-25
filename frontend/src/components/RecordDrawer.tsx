@@ -5,6 +5,7 @@ import { noun, t, tx, type Key } from '../i18n'
 import { closeRecord, openRecord, recTitle, useApp, useLoad, useRefOptions } from '../state'
 import { Empty, IconButton, KindIcon, RangeBar } from '../ui'
 import { EntityForm } from './EntityForm'
+import { ask, tell } from './Dialog'
 import { Drawer, Modal } from './Modal'
 
 const CHILD_LABELS: Record<string, Key> = {
@@ -24,14 +25,14 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   const r = data?.record
 
   async function remove() {
-    if (!r || !confirm(t('删除这条{label}？{extra}此操作不可撤销。', { label: noun(e), extra: entityName === 'reports' ? t('报告里的所有指标也会一起删除。') : '' }))) return
+    if (!r || !(await ask(t('删除这条{label}？{extra}此操作不可撤销。', { label: noun(e), extra: entityName === 'reports' ? t('报告里的所有指标也会一起删除。') : '' }), { ok: t('删除'), danger: true }))) return
     try {
       await api.remove(entityName, id)
       changed()
       toast(t('已删除'))
       closeRecord()
     } catch (err: any) {
-      alert(err.message)
+      tell(err.message)
     }
   }
 
@@ -41,16 +42,33 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
       try {
         await api.upload(entityName, id, f)
       } catch (err: any) {
-        alert(t('{name}：{error}', { name: f.name, error: err.message }))
+        tell(t('{name}：{error}', { name: f.name, error: err.message }))
       }
     }
     changed()
   }
 
   async function removeFile(aid: number) {
-    if (!confirm(t('删除这个附件？'))) return
-    await api.removeAttachment(aid)
-    changed()
+    if (!(await ask(t('删除这个附件？'), { ok: t('删除'), danger: true }))) return
+    try {
+      await api.removeAttachment(aid)
+      changed()
+    } catch (err: any) {
+      tell(err.message)
+    }
+  }
+
+  // the Mac window can't follow a link to a new window, so there the file
+  // opens in its Mac app; a browser or the phone follows the link
+  async function openFile(ev: MouseEvent, aid: number) {
+    if (!document.documentElement.classList.contains('mac-window')) return
+    ev.preventDefault()
+    try {
+      const { revealed } = await api.openAttachment(aid)
+      if (revealed) toast(t('这种文件不能直接打开，已在访达中显示'))
+    } catch (err: any) {
+      tell(err.message)
+    }
   }
 
   // a past check-in is history: it can be looked at, not changed
@@ -122,7 +140,7 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
               return (
                 <div className="attach" key={a.id}>
                   <Icon size={18} className="muted" />
-                  <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer">{a.filename}</a>
+                  <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" onClick={(ev) => openFile(ev, a.id)}>{a.filename}</a>
                   <span className="small muted nowrap">{Math.max(1, Math.round(a.size / 1024))} KB</span>
                   <IconButton label={t('删除附件')} small className="danger" onClick={() => removeFile(a.id)}><X size={15} /></IconButton>
                 </div>
@@ -208,7 +226,7 @@ export function TakeDose({ med }: { med: Rec }) {
       changed()
       toast(t('已记录：{name} {amount} · {time}', { name: med.name, amount: t('{n} 颗', { n: d.amount }), time: String(d.taken_at).slice(11) }))
     } catch (err: any) {
-      alert(err.message)
+      tell(err.message)
     } finally {
       setBusy(false)
     }

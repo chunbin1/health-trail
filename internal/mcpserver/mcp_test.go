@@ -13,6 +13,12 @@ import (
 
 func session(t *testing.T) (*mcp.ClientSession, *store.Store) {
 	t.Helper()
+	return sessionFor(t, true)
+}
+
+// sessionFor connects a client on this computer (local) or another device.
+func sessionFor(t *testing.T, local bool) (*mcp.ClientSession, *store.Store) {
+	t.Helper()
 	st, err := store.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +26,7 @@ func session(t *testing.T) (*mcp.ClientSession, *store.Store) {
 	t.Cleanup(func() { st.Close() })
 	ctx := context.Background()
 	ct, svt := mcp.NewInMemoryTransports()
-	ss, err := New(st, "test").Connect(ctx, svt, nil)
+	ss, err := New(st, "test", local).Connect(ctx, svt, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +61,7 @@ func TestToolsListed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 14 {
+	if len(res.Tools) != 15 {
 		t.Errorf("%d tools", len(res.Tools))
 	}
 	for _, tool := range res.Tools {

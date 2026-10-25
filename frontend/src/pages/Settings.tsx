@@ -5,6 +5,7 @@ import { t, type Lang } from '../i18n'
 import { useApp, useLoad } from '../state'
 import { Switch } from '../ui'
 import { NotifyWarning } from '../components/NotifyWarning'
+import { tell } from '../components/Dialog'
 import { BackupSettings } from './Backups'
 import { Section } from './Connect'
 
@@ -100,7 +101,7 @@ function AtLogin() {
       setOn((await api.setAutostart(v)).enabled)
     } catch (e: any) {
       setOn(!v)
-      alert(e.message)
+      tell(e.message)
     } finally {
       setBusy(false)
     }
