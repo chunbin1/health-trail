@@ -11,10 +11,10 @@
 **Medical history, lab reports, medications, body metrics and daily check-ins, all in one place.**<br>
 Let Claude or Codex enter and analyze them for you. Your data never leaves your Mac.
 
-[![Release](https://img.shields.io/github/v/release/chunbin1/health-vault?include_prereleases&label=release&color=111111)](https://github.com/chunbin1/health-vault/releases) [![CI](https://img.shields.io/github/actions/workflow/status/chunbin1/health-vault/ci.yml?label=CI&color=111111)](https://github.com/chunbin1/health-vault/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
+[![Release](https://img.shields.io/github/v/release/chunbin1/health-trail?include_prereleases&label=release&color=111111)](https://github.com/chunbin1/health-trail/releases) [![CI](https://img.shields.io/github/actions/workflow/status/chunbin1/health-trail/ci.yml?label=CI&color=111111)](https://github.com/chunbin1/health-trail/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
 ![macOS](https://img.shields.io/badge/macOS_13+-000000?logo=apple&logoColor=white) ![MCP](https://img.shields.io/badge/MCP-15_tools-111111) ![SQLite](https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white)
 
-**[Download](https://github.com/chunbin1/health-vault/releases)** &nbsp;·&nbsp; **[Connect your AI](#connect-your-ai)** &nbsp;·&nbsp; **[Build from source](#build-from-source)** &nbsp;·&nbsp; **[Releasing](RELEASING.md)** (Chinese)
+**[Download](https://github.com/chunbin1/health-trail/releases)** &nbsp;·&nbsp; **[Connect your AI](#connect-your-ai)** &nbsp;·&nbsp; **[Build from source](#build-from-source)** &nbsp;·&nbsp; **[Releasing](RELEASING.md)** (Chinese)
 
 <br>
 
@@ -44,7 +44,7 @@ For now it supports macOS 13 and later only, on both Apple silicon and Intel.
 
 ## Quick start
 
-**1 · Install**: download `HealthTrail-<version>.dmg` from **[Releases](https://github.com/chunbin1/health-vault/releases)**, open it, and drag 健康足迹 (Health Trail) into Applications.
+**1 · Install**: download `HealthTrail-<version>.dmg` from **[Releases](https://github.com/chunbin1/health-trail/releases)**, open it, and drag 健康足迹 (Health Trail) into Applications.
 
 <sub>The dmg is signed with a Developer ID and notarized by Apple, so it opens with a double-click. You can also [build from source](#build-from-source). When a new version comes out, the app tells you in Settings → Software update, and one click updates it.</sub>
 
