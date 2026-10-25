@@ -171,3 +171,31 @@ func TestUnreadableInSandbox(t *testing.T) {
 		t.Error("inSandbox mistakes the home folder")
 	}
 }
+
+// In the sandbox $HOME is the app's container, so ~/Library is checked
+// against the person's real home as well: a folder they granted may hold it.
+func TestAttachKeepsRealLibraryOutInSandbox(t *testing.T) {
+	real := t.TempDir()
+	if r, err := filepath.EvalSymlinks(real); err == nil {
+		real = r
+	}
+	defer func(f func() string) { realHome = f }(realHome)
+	realHome = func() string { return real }
+	t.Setenv("HOME", filepath.Join(real, "Library", "Containers", "com.example.app", "Data"))
+	os.MkdirAll(os.Getenv("HOME"), 0o700)
+
+	cs, st := session(t)
+	rep, _ := st.Create("reports", store.Record{"report_date": "2026-10-01", "title": "体检"})
+	put := func(rel string) string {
+		p := filepath.Join(real, rel)
+		os.MkdirAll(filepath.Dir(p), 0o700)
+		os.WriteFile(p, []byte("%PDF-1.4 test"), 0o600)
+		return p
+	}
+	if out, isErr := call(t, cs, "add_attachment", map[string]any{"path": put("Library/Caches/报告.pdf"), "type": "reports", "id": rep["id"]}); !isErr || !strings.Contains(out, "资源库") {
+		t.Errorf("real ~/Library: isErr=%v %s", isErr, out)
+	}
+	if out, isErr := call(t, cs, "add_attachment", map[string]any{"path": put("Desktop/报告.pdf"), "type": "reports", "id": rep["id"]}); isErr {
+		t.Errorf("Desktop: %s", out)
+	}
+}

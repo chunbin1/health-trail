@@ -84,8 +84,8 @@ func unreadable(err error, home string) (*mcp.CallToolResult, any, error) {
 const sandboxedMsg = "这个版本的健康足迹只能读「下载」文件夹，和在 App「设置 → 允许读取的文件夹」里添加过的文件夹。请用户把文件放进「下载」后再试，或者在设置里添加这个文件夹（添加后要重新连接这个 MCP），或者在 App 里那条记录下点「上传」。"
 
 // realHome is the person's own home folder, also in the sandbox (where
-// $HOME is the app's container).
-func realHome() string {
+// $HOME is the app's container). A variable so a test needn't use the real one.
+var realHome = func() string {
 	if u, err := user.Current(); err == nil && u.HomeDir != "" {
 		if h, err := filepath.EvalSymlinks(u.HomeDir); err == nil {
 			return h

@@ -34,8 +34,10 @@ func newGrants(dataDir string) *grants {
 	return &grants{path: filepath.Join(dataDir, "folders.json")}
 }
 
+// load and save are called with g.mu held: the window adds and removes
+// while the MCP side of the same process may be reading.
 func (g *grants) load() []grant {
-	var out []grant
+	out := []grant{}
 	if b, err := os.ReadFile(g.path); err == nil {
 		json.Unmarshal(b, &out)
 	}
@@ -43,6 +45,9 @@ func (g *grants) load() []grant {
 }
 
 func (g *grants) save(list []grant) error {
+	if list == nil {
+		list = []grant{} // [] in the file, not null
+	}
 	b, _ := json.MarshalIndent(list, "", "  ")
 	return os.WriteFile(g.path, b, 0o600)
 }
@@ -97,6 +102,9 @@ func (g *grants) add(wapp *application.App, title string) (bool, error) {
 	return true, g.save(append(kept, grant{Path: dir, Bookmark: b}))
 }
 
+// remove forgets a folder for the next launches. This process keeps reading
+// it until it quits: macOS has no way to drop a resolved bookmark's access
+// short of stopAccessingSecurityScopedResource, and the next start won't open it.
 func (g *grants) remove(dir string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -111,6 +119,8 @@ func (g *grants) remove(dir string) error {
 }
 
 func (g *grants) paths() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	out := []string{}
 	for _, gr := range g.load() {
 		out = append(out, gr.Path)
@@ -132,12 +142,11 @@ func (a *app) folderRoutes(mux *http.ServeMux, wapp func() *application.App) {
 		writeJSON(w, map[string]any{"sandboxed": sandboxed(), "folders": a.grants.paths()})
 	})
 	mux.HandleFunc("POST /api/folders", func(w http.ResponseWriter, r *http.Request) {
-		title := "选择允许读取的文件夹"
-		if a.settings.lang() == "en" {
-			title = "Choose a folder to allow"
-		}
+		title := a.msg("选择允许读取的文件夹", "Choose a folder to allow")
 		if _, err := a.grants.add(wapp(), title); err != nil {
-			writeError(w, err.Error())
+			// macOS's message can name the folder; it goes to the log only
+			log.Printf("添加允许读取的文件夹失败：%v", err)
+			writeError(w, a.msg("没能添加这个文件夹，请换一个再试", "Couldn't add that folder; try another one"))
 			return
 		}
 		a.grants.open() // and this process may read it from now on
@@ -152,9 +161,18 @@ func (a *app) folderRoutes(mux *http.ServeMux, wapp func() *application.App) {
 			return
 		}
 		if err := a.grants.remove(in.Path); err != nil {
-			writeError(w, err.Error())
+			log.Printf("移除允许读取的文件夹失败：%v", err)
+			writeError(w, a.msg("没能移除这个文件夹，请再试一次", "Couldn't remove that folder; try again"))
 			return
 		}
 		writeJSON(w, map[string]any{"sandboxed": sandboxed(), "folders": a.grants.paths()})
 	})
+}
+
+// msg is a message for the window, in its language.
+func (a *app) msg(zh, en string) string {
+	if a.settings.lang() == "en" {
+		return en
+	}
+	return zh
 }
