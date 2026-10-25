@@ -1,0 +1,45 @@
+name: AI 审阅
+
+# A pull request is merged and released only after an AI review of its latest
+# commit says 可以合 (RELEASING.md). Runs again when a review is posted, so the
+# check turns green without another push; a push after the review turns it red
+# until that commit is reviewed too.
+#
+# The script comes from main, not from the PR, so a PR can't pass by changing
+# it. This file itself is still the PR's (GitHub runs a PR's own workflows):
+# a review must look hard at any change to it, and only branch protection
+# that requires this check makes the merge button wait (RELEASING.md).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: AI 审阅
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      # only until the PR that adds the script is merged: main has none to use
+      - name: The script from the PR, while main has none
+        if: hashFiles('scripts/ai_review_gate.py') == ''
+        run: |
+          git fetch --depth=1 origin "${{ github.event.pull_request.head.sha }}"
+          git checkout FETCH_HEAD -- scripts/ai_review_gate.py
+          echo "::notice::main 上还没有 scripts/ai_review_gate.py，这次用 PR 里的"
+      - name: The latest commit has a review that says 可以合
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/ai_review_gate.py pr ${{ github.event.pull_request.number }}

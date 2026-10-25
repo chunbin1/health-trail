@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Check, ChevronRight, Plus, Sparkles } from 'lucide-react'
+import { Check, ChevronRight, Plus, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, MONTHS, nowLocal, today, type MedDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { tell } from '../components/Dialog'
@@ -8,7 +8,7 @@ import { NotifyWarning } from '../components/NotifyWarning'
 import { LabValue, TakeDose } from '../components/RecordDrawer'
 import { isEN, noun, t, tr, tx, type Key } from '../i18n'
 import { openRecord, recTitle, useApp, useLoad } from '../state'
-import { Empty, KindIcon, RangeBar, Ring, Sparkline, kindStyle } from '../ui'
+import { Empty, IconButton, KindIcon, RangeBar, Ring, Sparkline, Switch, kindStyle } from '../ui'
 import { HabitGrid } from './Checkins'
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六']
@@ -52,6 +52,11 @@ export function Overview() {
     return out
   }, [types])
   const [adding, setAdding] = useState<string | null>(null)
+  // the body metrics to leave off this page, kept in settings.json
+  const { data: info } = useLoad(() => api.info(), [])
+  const [hidden, setHidden] = useState<string[] | null>(null)
+  const hide = hidden ?? info?.hidden_metrics ?? []
+  const [choosing, setChoosing] = useState(false)
   const d = new Date()
 
   if (error) return <div className="error">{error}</div>
@@ -161,15 +166,21 @@ export function Overview() {
 
         {o.latest_metrics.length > 0 && (
           <section className="card">
-            <div className="card-head"><h2>{t('身体数据')}</h2><a href="#/metrics" className="card-link">{t('全部')}<ChevronRight size={14} /></a></div>
+            <div className="card-head">
+              <h2>{t('身体数据')}<IconButton small label={t('选择首页显示的指标')} onClick={() => setChoosing(true)}><SlidersHorizontal size={14} /></IconButton></h2>
+              <a href="#/metrics" className="card-link">{t('全部')}<ChevronRight size={14} /></a>
+            </div>
+            {o.latest_metrics.every((m) => hide.includes(m.metric_type)) && (
+              <div className="row muted small" style={{ gap: 8 }}>{t('首页没有选中的指标。')}<button className="btn ghost sm" onClick={() => setChoosing(true)}>{t('选择指标')}</button></div>
+            )}
             <div className="tiles">
-              {o.latest_metrics.map((m) => (
-                <div key={m.id} className="tile" style={kindStyle('metrics')}
+              {o.latest_metrics.filter((m) => !hide.includes(m.metric_type)).map((m) => (
+                <div key={m.metric_type} className="tile" style={kindStyle('metrics')}
                   onClick={() => (location.hash = '/metrics?type=' + encodeURIComponent(m.metric_type))}>
                   <div className="k">{tx(m.metric_type)}</div>
                   <div className="v">{metricValue(m)}<small>{tx(m.unit)}</small></div>
                   <Sparkline values={series?.[m.metric_type] || []} />
-                  <div className="d">{fmtDate(m.measured_at)}</div>
+                  <div className="d">{fmtDate(m.measured_at)}{m.source === 'lab_results' && ` · ${t('化验单')}`}</div>
                 </div>
               ))}
             </div>
@@ -191,6 +202,27 @@ export function Overview() {
         </section>
       </div>
 
+      {choosing && (
+        <Modal title={t('选择首页显示的指标')} icon={<KindIcon kind="metrics" />} onClose={() => setChoosing(false)}>
+          <div className="modal-body">
+            {o.latest_metrics.map((m) => {
+              const on = !hide.includes(m.metric_type)
+              return (
+                <div key={m.metric_type} className="row" style={{ gap: 8, flexWrap: 'nowrap', padding: '8px 0' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>{tx(m.metric_type)}</div>
+                  <Switch checked={on} label={tx(m.metric_type)} onChange={(v) => {
+                    const next = v ? hide.filter((x) => x !== m.metric_type) : [...hide, m.metric_type]
+                    setHidden(next)
+                    api.setHiddenMetrics(next).catch((e) => toast(e.message))
+                  }} />
+                </div>
+              )
+            })}
+            <div className="small muted" style={{ marginTop: 8 }}>{t('关掉的指标只是不在首页显示，记录都还在「身体数据」里。')}</div>
+          </div>
+          <div className="modal-foot"><span className="spacer" /><button className="btn primary" onClick={() => setChoosing(false)}>{t('完成')}</button></div>
+        </Modal>
+      )}
       {adding && (
         <Modal title={t('添加{label}', { label: noun(entity(adding)) })} icon={<KindIcon kind={adding} />} onClose={() => setAdding(null)}>
           <EntityForm entity={entity(adding)} onCancel={() => setAdding(null)} onSaved={() => { setAdding(null); toast(t('已添加')) }} />

@@ -245,6 +245,103 @@ func TestCheckinLogsMetric(t *testing.T) {
 	}
 }
 
+// A lab result named like a metric shows in that metric's series and as its
+// latest value, without being copied; one in another unit stays out.
+func TestMetricSeriesWithLabs(t *testing.T) {
+	s := open(t)
+	if _, err := s.Create("metric_kinds", Record{"name": "尿酸", "unit": "μmol/L"}); err != nil {
+		t.Fatal(err)
+	}
+	home, _ := s.Create("metrics", Record{"measured_at": "2026-10-21 17:13", "metric_type": "尿酸", "value": 490})
+	lab, err := s.Create("lab_results", Record{"test_date": "2026-10-25", "item_name": "尿酸", "value_num": 576, "unit": "µmol/L", "ref_range": "208-428"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Create("lab_results", Record{"test_date": "2026-09-21", "item_name": "尿酸", "value_num": 10.3, "unit": "mg/dL"})
+	// no unit: could be either, so left out
+	s.Create("lab_results", Record{"test_date": "2026-09-22", "item_name": "尿酸", "value_num": 9.8})
+	s.Create("lab_results", Record{"test_date": "2026-09-21", "item_name": "尿尿酸", "value_num": 2361, "unit": "µmol/L"})
+
+	pts, err := s.MetricSeries("尿酸", "", "")
+	if err != nil || len(pts) != 2 {
+		t.Fatalf("series = %v %v, want the home reading and the μmol/L lab result", pts, err)
+	}
+	if pts[0]["source"] != "metrics" || pts[0]["id"] != home["id"] || pts[1]["source"] != "lab_results" ||
+		pts[1]["id"] != lab["id"] || pts[1]["value"] != 576.0 || pts[1]["measured_at"] != "2026-10-25" || pts[1]["flag"] != "偏高" {
+		t.Errorf("series = %v", pts)
+	}
+	// any date the API takes, on both kinds the same way
+	for _, from := range []string{"2026-10-22", "2026/10/22", "20261022", "2026-10-22 08:00"} {
+		if pts, err := s.MetricSeries("尿酸", from, ""); err != nil || len(pts) != 1 || pts[0]["source"] != "lab_results" {
+			t.Errorf("series from %s = %v %v, want only the lab result", from, pts, err)
+		}
+	}
+	for _, to := range []string{"2026-10-24", "2026/10/24"} {
+		if pts, err := s.MetricSeries("尿酸", "", to); err != nil || len(pts) != 1 || pts[0]["source"] != "metrics" {
+			t.Errorf("series to %s = %v %v, want only the home reading", to, pts, err)
+		}
+	}
+	if _, err := s.MetricSeries("尿酸", "下周", ""); err == nil || !strings.Contains(err.Error(), "from") {
+		t.Errorf("bad from: err = %v", err)
+	}
+	o, err := s.Overview()
+	if err != nil || len(o.LatestMetrics) != 1 || o.LatestMetrics[0]["value"] != 576.0 {
+		t.Errorf("latest metrics = %v %v, want the lab result", o.LatestMetrics, err)
+	}
+	if o.Counts["metrics"] != 1 {
+		t.Errorf("metrics = %d, the lab result was copied", o.Counts["metrics"])
+	}
+}
+
+// With more readings than a series holds, the latest ones are kept, and the
+// 今天 page still shows the latest value.
+func TestMetricSeriesKeepsLatest(t *testing.T) {
+	s := open(t)
+	day := time.Date(2023, 1, 1, 8, 0, 0, 0, time.Local)
+	var in []Record
+	for i := 0; i < 1005; i++ {
+		in = append(in, Record{"measured_at": day.AddDate(0, 0, i).Format("2006-01-02 15:04"), "metric_type": "体重", "value": 60 + i%30})
+	}
+	if _, err := s.CreateMany("metrics", in); err != nil {
+		t.Fatal(err)
+	}
+	last := day.AddDate(0, 0, 1004).Format("2006-01-02 15:04")
+	pts, err := s.MetricSeries("体重", "", "")
+	if err != nil || len(pts) != 1000 || pts[len(pts)-1]["measured_at"] != last || pts[0]["measured_at"] != day.AddDate(0, 0, 5).Format("2006-01-02 15:04") {
+		t.Fatalf("series = %d readings, %v … %v, %v; want the latest 1000 ending %s", len(pts), pts[0]["measured_at"], pts[len(pts)-1]["measured_at"], err, last)
+	}
+	o, err := s.Overview()
+	if err != nil || len(o.LatestMetrics) != 1 || o.LatestMetrics[0]["measured_at"] != last {
+		t.Errorf("latest = %v %v, want the reading of %s", o.LatestMetrics, err, last)
+	}
+
+	// exactly as many as a series holds: nothing cut, so an older lab result shows
+	var bg []Record
+	for i := 0; i < 1000; i++ {
+		bg = append(bg, Record{"measured_at": day.AddDate(0, 0, i).Format("2006-01-02 15:04"), "metric_type": "血糖", "value": 5})
+	}
+	if _, err := s.CreateMany("metrics", bg); err != nil {
+		t.Fatal(err)
+	}
+	s.Create("lab_results", Record{"test_date": "2022-06-01", "item_name": "血糖", "value_num": 6.1, "unit": "mmol/L"})
+	if pts, _ := s.MetricSeries("血糖", "", ""); len(pts) != 1001 || pts[0]["source"] != "lab_results" {
+		t.Errorf("series of 1000 readings = %d, first %v; want the 2022 lab result too", len(pts), pts[0])
+	}
+}
+
+// Of two lab results on one day, the later is the latest, on the 今天 page
+// as in the series.
+func TestLatestOfTwoLabsOnADay(t *testing.T) {
+	s := open(t)
+	s.Create("lab_results", Record{"test_date": "2026-10-25", "item_name": "血糖", "value_num": 5.1, "unit": "mmol/L"})
+	s.Create("lab_results", Record{"test_date": "2026-10-25", "item_name": "血糖", "value_num": 7.7, "unit": "mmol/L"})
+	pts, _ := s.MetricSeries("血糖", "", "")
+	o, err := s.Overview()
+	if err != nil || len(pts) != 2 || len(o.LatestMetrics) != 1 || o.LatestMetrics[0]["value"] != pts[1]["value"] || pts[1]["value"] != 7.7 {
+		t.Errorf("latest = %v, series = %v %v; want 7.7 in both", o.LatestMetrics, pts, err)
+	}
+}
+
 func TestCustomMetric(t *testing.T) {
 	s := open(t)
 	if _, err := s.Create("metrics", Record{"measured_at": "today", "metric_type": "尿酸", "value": 420}); err == nil ||

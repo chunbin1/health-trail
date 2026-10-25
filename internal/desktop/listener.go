@@ -78,6 +78,8 @@ type settings struct {
 	Lang string     `json:"lang,omitempty"` // UI language: "" (Chinese) or "en"
 	// looking for updates by itself is on unless switched off
 	NoUpdateCheck bool `json:"no_update_check,omitempty"`
+	// body metrics left off the 今天 page; a metric is shown unless listed
+	HiddenMetrics []string `json:"hidden_metrics,omitempty"`
 }
 
 func (s *settings) lang() string {
@@ -92,6 +94,12 @@ func (s *settings) msg(zh, en string) string {
 		return en
 	}
 	return zh
+}
+
+func (s *settings) hiddenMetrics() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string{}, s.HiddenMetrics...)
 }
 
 func (s *settings) autoUpdate() bool {

@@ -34,6 +34,8 @@ internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
 frontend/                React + TS + Vite；embed.go 把构建结果（dist）嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
+scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_review_gate.py（AI 审阅门禁，见 RELEASING.md）
+.github/workflows/       ci.yml（每次推送）、ai-review.yml（PR 的 AI 审阅检查）、release.yml（打标签发布，先查 AI 审阅）
 ```
 
 **schema.go 是唯一的数据来源**：数据表（自动迁移、只增不删）、API 接受的字段、MCP 工具说明里的字段列表、前端表单，全部从它生成。加一个字段只需改 schema.go（再在 schema_en.go 里补英文，`TestEnglishCoversSchema` 会提醒），其他地方会自动跟上；需要特殊展示的地方再改前端。
@@ -62,4 +64,5 @@ make app         # 打包 健康足迹.app
 - 改了 MCP 工具：用逐条发送的 stdio 驱动做一次端到端测试（见 LESSONS #1），不要一次性把请求全部塞进 stdin。
 - 改了界面：用一个临时数据目录启动 `./health-trail serve -data <临时目录> -port 8731`，在浏览器里检查桌面宽度和 375px 手机宽度（不能横向溢出）。先确认数据加载完再判断（LESSONS #4），重新构建后强制刷新（LESSONS #5）。弹窗、抽屉、日期选择器都有动画：测量位置或截图前先 `document.getAnimations().forEach(a => a.finish())` 并稍等一下；截图里「没有出现」时，先用 `getBoundingClientRect` 和再截一张确认，再判断是 bug。需要容器宽度才能绘制的组件用 `useLayoutEffect` 在第一次绘制前量好。
 - 改了桌面窗口：`./health-trail -data <临时目录> -port 8732` 启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。要测日历、提醒事项这类系统权限，改用 `open -n 健康足迹.app --stderr <日志> --args -data <临时目录> -port 8734`（LESSONS #25）。不在默认数据目录的测试窗口不发系统通知（会清掉真实 App 排好的提醒），日历和提醒事项写进「健康足迹（测试）」。
+- **PR 要过 AI 审阅才能合并、发布**：开完 PR，由没写这段代码的会话或子代理跑 `/code-review` 审，按 [RELEASING.md](RELEASING.md)「先过 AI 审阅」的格式发评审；审完又推了提交就再审一次。不要在 AI 审阅检查没通过时合并或打标签（`release.yml` 也会拦下）。
 - **永远不要用默认数据目录做测试**，那里是用户真实的健康数据：`~/Library/Application Support/HealthVault`。`make dev-real` 读写的就是这个目录，只给用户自己用，编码助手不要运行它；要测 `dev.sh --real` 这条路径，就把 `HEALTH_TRAIL_DATA` 设成临时目录。

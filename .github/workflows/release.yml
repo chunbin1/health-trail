@@ -1,8 +1,11 @@
 name: Release
 
-# A tag like v1.0.0: the same checks as CI, then a Developer ID signed,
-# notarized universal dmg published as a GitHub Release, with the zip of the
-# app that the app's own update downloads (HealthTrail-<version>.zip).
+# A tag like v1.0.0: first, the tagged commit came into main through a PR
+# whose AI review says 可以合 (a test tag like v1.0.0-test.1 may instead be the
+# latest commit of an open PR, reviewed the same way); then the same checks as
+# CI, then a Developer ID signed, notarized universal dmg published as a GitHub
+# Release, with the zip of the app that the app's own update downloads
+# (HealthTrail-<version>.zip).
 #
 # Secrets (set once with `gh secret set`; how to make each is in RELEASING.md):
 #   DEVELOPER_ID_P12           the Developer ID Application certificate and its
@@ -18,7 +21,31 @@ permissions:
   contents: write # create the release
 
 jobs:
+  ai-review:
+    name: AI 审阅
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # to tell whether the tag is on main
+      - name: The tagged commit was reviewed and said 可以合
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            python3 -I scripts/ai_review_gate.py prerelease "$GITHUB_SHA"
+          else
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main ||
+              { echo "没通过：$GITHUB_REF_NAME 指向的提交不在 main 上，不能发布。"; exit 1; }
+            python3 -I scripts/ai_review_gate.py commit "$GITHUB_SHA"
+          fi
+
   macos:
+    needs: ai-review
     runs-on: macos-15
     timeout-minutes: 45
     steps:

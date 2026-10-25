@@ -108,6 +108,7 @@ export interface Info {
   version: string
   lan: boolean
   lang: string
+  hidden_metrics: string[] | null // body metrics left off the 今天 page
   listening: string
   listen_error: string
   phone_urls: string[] | null
@@ -228,6 +229,7 @@ export const api = {
   installUpdate: () => req<UpdateStatus>('POST', '/api/update/install'),
   openReleasePage: () => req<{ ok: boolean }>('POST', '/api/update/page'),
   setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),
+  setHiddenMetrics: (hidden_metrics: string[]) => req<Info>('PUT', '/api/settings', { hidden_metrics }),
   backup: () => req<BackupState>('GET', '/api/backup'),
   saveBackup: (c: BackupConfig) => req<BackupConfig>('PUT', '/api/backup', c),
   runBackup: () => req<{ name: string }>('POST', '/api/backup/run'),

@@ -98,6 +98,7 @@ notarize: dmg
 test: frontend/node_modules
 	go vet ./...
 	go test ./...
+	python3 -I scripts/test_ai_review_gate.py
 	cd frontend && npx tsc -b
 
 # the binary embeds frontend/dist, so it has to exist once before the first build

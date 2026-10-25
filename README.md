@@ -14,7 +14,7 @@
 [![Release](https://img.shields.io/github/v/release/chunbin1/health-trail?include_prereleases&label=release&color=111111)](https://github.com/chunbin1/health-trail/releases) [![CI](https://img.shields.io/github/actions/workflow/status/chunbin1/health-trail/ci.yml?label=CI&color=111111)](https://github.com/chunbin1/health-trail/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
 ![macOS](https://img.shields.io/badge/macOS_13+-000000?logo=apple&logoColor=white) ![MCP](https://img.shields.io/badge/MCP-15_tools-111111) ![SQLite](https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white)
 
-**[下载](https://github.com/chunbin1/health-trail/releases)** &nbsp;·&nbsp; **[接入 AI](#接入-ai)** &nbsp;·&nbsp; **[从源码构建](#从源码构建)** &nbsp;·&nbsp; **[发布新版本](RELEASING.md)**
+**[下载](https://github.com/chunbin1/health-trail/releases)** &nbsp;·&nbsp; **[接入 AI](#接入-ai)** &nbsp;·&nbsp; **[从源码构建](#从源码构建)**
 
 <br>
 
@@ -69,7 +69,7 @@
 | **就诊** | 医院、科室、医生、诊断、医嘱 |
 | **用药** | 剂量、频次、每天几点吃；点一下记「吃过了」，自动统计吃了多少颗 |
 | **检查报告** | 体检、化验、影像；化验指标逐项保存，参考范围原样记录，可以看单项趋势 |
-| **身体数据** | 体重、血压、血糖，或者任何你自己加的指标 |
+| **身体数据** | 体重、血压、血糖，或者任何你自己加的指标；和化验项目同名的指标（如尿酸），化验单上的结果也一起显示 |
 | **预约** | 复诊、检查，地点和要准备的东西（空腹、带上次的片子） |
 | **打卡** | 「晨起称体重」「作息守住」，连续天数和完成率 |
 
