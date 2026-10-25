@@ -1,0 +1,31 @@
+name: AI 审阅
+
+# A pull request is merged and released only after an AI review of its latest
+# commit says 可以合 (RELEASING.md). Runs again when a review is posted, so the
+# check turns green without another push; a push after the review turns it red
+# until that commit is reviewed too.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: AI 审阅
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: The latest commit has a review that says 可以合
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/ai_review_gate.py pr ${{ github.event.pull_request.number }}
