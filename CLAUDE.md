@@ -47,6 +47,7 @@ frontend/                React + TS + Vite；embed.go 把构建结果（dist）�
 - **一份报告要么全部写入，要么一条不写**：批量写入用 `CreateMany`（事务）；`add_lab_report`（mcpserver 的 `importLabs`）失败时要删掉它新建的报告。
 - **界面统一**：颜色和图标用 `ui.tsx` 的 `KIND`（每类记录一个图标 + `--c-<kind>` 颜色）和 `styles.css` 里的 token，不要在组件里写死颜色。图表系列颜色要先用 dataviz 的 `validate_palette.js` 校验浅色和深色两套。
 - **界面文字中英两套**：前端写死的文字一律 `t('中文原文')`，并在 `i18n.tsx` 的 `EN` 里加英文（漏了类型检查不过）；schema 来的字段名、提示、枚举选项、单位用 `tx()` 显示。枚举存进数据库的值永远是中文，只翻译显示。语言保存在数据目录的 settings.json（`lang`）。MCP 的说明和 prompts 保持中文。
+- **README 中英两份**：`README.md` 是中文版，`README.en.md` 是英文版。改其中一份时同步改另一份，章节、链接和页内锚点一一对应；英文版里的界面名字用 `i18n.tsx` 的 `EN` 里的叫法。
 - **不编造医疗结论**：MCP 的 instructions 和 prompts 要求 Claude 只依据数据说话、提醒就医。改这些文字时保留这些约束。
 
 ## 验证

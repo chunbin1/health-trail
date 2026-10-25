@@ -1,5 +1,7 @@
 <div align="center">
 
+**中文** | [English](README.en.md)
+
 <img src="frontend/public/icon.svg" width="112" alt="健康足迹">
 
 # 健康足迹 · Health Trail
