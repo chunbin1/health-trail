@@ -14,6 +14,15 @@
 
 **[下载](https://github.com/chunbin1/health-vault/releases)** &nbsp;·&nbsp; **[接入 AI](#接入-ai)** &nbsp;·&nbsp; **[从源码构建](#从源码构建)** &nbsp;·&nbsp; **[发布新版本](RELEASING.md)**
 
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/overview-dark.png">
+  <img src="docs/img/overview-light.png" width="900" alt="「今天」页：进行中的健康问题、今天的用药、今日打卡、接下来的预约和需要留意的指标">
+</picture>
+
+<sub>截图里都是虚构的示例数据。</sub>
+
 </div>
 
 <br>
@@ -64,6 +73,23 @@
 
 报告单、处方、片子可以作为附件存在对应的记录下，在窗口里点开就看。
 
+<table>
+<tr>
+<td width="50%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/trend-dark.png">
+  <img src="docs/img/trend-light.png" alt="指标趋势：尿酸四次化验的结果、参考范围和变化曲线">
+</picture>
+</td>
+<td width="50%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/metrics-dark.png">
+  <img src="docs/img/metrics-light.png" alt="身体数据：90 天的体重曲线和区间变化">
+</picture>
+</td>
+</tr>
+</table>
+
 ### 提醒和同步到 iPhone
 
 | | |
@@ -74,6 +100,11 @@
 | **iPhone** | 预约写进「日历」、吃药写进「提醒事项」，用 iCloud 同步到手机和手表；在 iPhone 上勾掉吃药提醒，App 里就记一次吃药 |
 
 关掉窗口后 App 留在菜单栏继续运行，提醒和自动备份照常；也可以设成开机自动启动。日历里的条目带着 `healthtrail://` 链接，点一下就回到 App 里那条记录。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/checkins-dark.png">
+  <img src="docs/img/checkins-light.png" width="760" alt="打卡：今天的打卡项和最近 30 天的完成情况、连续天数">
+</picture>
 
 ### 备份
 
