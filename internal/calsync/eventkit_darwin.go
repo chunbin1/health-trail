@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package calsync
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc
@@ -240,9 +240,9 @@ import (
 	"unsafe"
 )
 
-// eventKit is the Mac's Calendar and Reminders, through EventKit. What is
+// EventKit is the Mac's Calendar and Reminders, through EventKit. What is
 // written there syncs through iCloud to the iPhone and the watch.
-type eventKit struct{ mu sync.Mutex }
+type EventKit struct{ mu sync.Mutex }
 
 func cstr(s string) (*C.char, func()) {
 	c := C.CString(s)
@@ -269,19 +269,19 @@ func cbool(b bool) C.int {
 	return 0
 }
 
-func (k *eventKit) Access(reminders bool) access {
+func (k *EventKit) Access(reminders bool) access {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	return access(C.ekStatus(cbool(reminders)))
 }
 
-func (k *eventKit) Request(reminders bool) bool {
+func (k *EventKit) Request(reminders bool) bool {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	return C.ekRequest(cbool(reminders)) == 1
 }
 
-func (k *eventKit) Calendar(reminders bool, title, saved string) (id, source string, err error) {
+func (k *EventKit) Calendar(reminders bool, title, saved string) (id, source string, err error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	t, free1 := cstr(title)
@@ -298,7 +298,7 @@ func (k *eventKit) Calendar(reminders bool, title, saved string) (id, source str
 	return r.ID, r.Source, err
 }
 
-func (k *eventKit) Events(calID string, from, to time.Time) ([]calItem, error) {
+func (k *EventKit) Events(calID string, from, to time.Time) ([]calItem, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	c, free := cstr(calID)
@@ -313,7 +313,7 @@ func (k *eventKit) Events(calID string, from, to time.Time) ([]calItem, error) {
 	return items, err
 }
 
-func (k *eventKit) Reminders(listID string, completedSince time.Time) ([]calItem, error) {
+func (k *EventKit) Reminders(listID string, completedSince time.Time) ([]calItem, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	c, free := cstr(listID)
@@ -342,7 +342,7 @@ func (k *eventKit) Reminders(listID string, completedSince time.Time) ([]calItem
 	return items, nil
 }
 
-func (k *eventKit) save(fn func(*C.char, *C.char, **C.char) *C.char, calID string, v any) (string, error) {
+func (k *EventKit) save(fn func(*C.char, *C.char, **C.char) *C.char, calID string, v any) (string, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	raw, err := json.Marshal(v)
@@ -357,15 +357,15 @@ func (k *eventKit) save(fn func(*C.char, *C.char, **C.char) *C.char, calID strin
 	return result(fn(c, j, &cerr), cerr)
 }
 
-func (k *eventKit) SaveEvent(calID string, e calEvent) (string, error) {
+func (k *EventKit) SaveEvent(calID string, e calEvent) (string, error) {
 	return k.save(func(c, j *C.char, err **C.char) *C.char { return C.ekSaveEvent(c, j, err) }, calID, e)
 }
 
-func (k *eventKit) SaveReminder(listID string, r calReminder) (string, error) {
+func (k *EventKit) SaveReminder(listID string, r calReminder) (string, error) {
 	return k.save(func(c, j *C.char, err **C.char) *C.char { return C.ekSaveReminder(c, j, err) }, listID, r)
 }
 
-func (k *eventKit) Remove(id string) error {
+func (k *EventKit) Remove(id string) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	c, free := cstr(id)

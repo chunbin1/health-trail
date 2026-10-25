@@ -1,4 +1,5 @@
-package main
+// Package calsync writes appointments to Calendar and medicines to Reminders.
+package calsync
 
 import (
 	"context"
@@ -23,7 +24,7 @@ import (
 // off in Reminders logs the dose here; logging it here ticks it off there.
 // Each item carries a URL (healthtrail://…) naming the record it comes from.
 
-const syncURL = "healthtrail://"
+const URLPrefix = "healthtrail://"
 
 type access int
 
@@ -93,7 +94,7 @@ type calState struct {
 	LastError string            `json:"last_error,omitempty"`
 }
 
-type calSync struct {
+type Sync struct {
 	st    *store.Store
 	api   calendarAPI
 	path  string
@@ -102,11 +103,11 @@ type calSync struct {
 	kick  chan struct{}
 }
 
-func newCalSync(st *store.Store, api calendarAPI, dataDir, title string) *calSync {
-	return &calSync{st: st, api: api, path: filepath.Join(dataDir, "calendar-sync.json"), title: title, kick: make(chan struct{}, 1)}
+func New(st *store.Store, api calendarAPI, dataDir, title string) *Sync {
+	return &Sync{st: st, api: api, path: filepath.Join(dataDir, "calendar-sync.json"), title: title, kick: make(chan struct{}, 1)}
 }
 
-func (c *calSync) load() calState {
+func (c *Sync) load() calState {
 	var s calState
 	if raw, err := os.ReadFile(c.path); err == nil {
 		json.Unmarshal(raw, &s)
@@ -117,7 +118,7 @@ func (c *calSync) load() calState {
 	return s
 }
 
-func (c *calSync) save(s calState) error {
+func (c *Sync) save(s calState) error {
 	raw, _ := json.MarshalIndent(s, "", "  ")
 	return os.WriteFile(c.path, raw, 0o600)
 }
@@ -125,12 +126,12 @@ func (c *calSync) save(s calState) error {
 // syncing reports which kinds are written to Calendar and Reminders (with
 // access), so the app's own notifications for them can step aside instead
 // of reminding twice.
-func (c *calSync) syncing() (events, reminders bool) {
+func (c *Sync) Syncing() (events, reminders bool) {
 	s := c.load()
 	return s.Events && c.api.Access(false) == accessFull, s.Reminders && c.api.Access(true) == accessFull
 }
 
-func (c *calSync) loop(ctx context.Context) {
+func (c *Sync) Loop(ctx context.Context) {
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
 	for {
@@ -146,7 +147,7 @@ func (c *calSync) loop(ctx context.Context) {
 	}
 }
 
-func (c *calSync) poke() {
+func (c *Sync) poke() {
 	select {
 	case c.kick <- struct{}{}:
 	default:
@@ -157,7 +158,7 @@ func (c *calSync) poke() {
 // or off. Turning on asks for access (the system's prompt, the first time)
 // and finds or makes the calendar; turning off takes away what is still
 // ahead, so nothing stale reminds.
-func (c *calSync) set(reminders, on bool) error {
+func (c *Sync) Set(reminders, on bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	s := c.load()
@@ -205,7 +206,7 @@ func (s *calState) setOff(reminders bool) {
 
 // clear removes what the app wrote that is still ahead: the open reminders,
 // the events from now on.
-func (c *calSync) clear(s *calState, reminders bool, now time.Time) error {
+func (c *Sync) clear(s *calState, reminders bool, now time.Time) error {
 	var items []calItem
 	var err error
 	if reminders && s.ListID != "" {
@@ -217,11 +218,11 @@ func (c *calSync) clear(s *calState, reminders bool, now time.Time) error {
 		return err
 	}
 	for _, it := range items {
-		if strings.HasPrefix(it.URL, syncURL) && !it.Completed {
+		if strings.HasPrefix(it.URL, URLPrefix) && !it.Completed {
 			if err := c.api.Remove(it.ID); err != nil {
 				return err
 			}
-			delete(s.Made, strings.TrimPrefix(it.URL, syncURL))
+			delete(s.Made, strings.TrimPrefix(it.URL, URLPrefix))
 		}
 	}
 	return nil
@@ -229,7 +230,7 @@ func (c *calSync) clear(s *calState, reminders bool, now time.Time) error {
 
 // sync brings Calendar and Reminders in line with the records, and records
 // the medicines ticked off there.
-func (c *calSync) sync(now time.Time) error {
+func (c *Sync) sync(now time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	s := c.load()
@@ -272,8 +273,8 @@ func digest(v any) string {
 func byURL(items []calItem) map[string]calItem {
 	m := map[string]calItem{}
 	for _, it := range items {
-		if strings.HasPrefix(it.URL, syncURL) {
-			m[strings.TrimPrefix(it.URL, syncURL)] = it
+		if strings.HasPrefix(it.URL, URLPrefix) {
+			m[strings.TrimPrefix(it.URL, URLPrefix)] = it
 		}
 	}
 	return m
@@ -300,7 +301,7 @@ func appointmentEvent(a store.Record, at time.Time) calEvent {
 	e := calEvent{
 		Title: str(a, "title"), Start: at.Unix(), End: at.Add(time.Hour).Unix(),
 		Location: str(a, "place"), Notes: joinLines(str(a, "preparation"), str(a, "notes")),
-		URL: fmt.Sprintf("%sappointments/%v", syncURL, a["id"]),
+		URL: fmt.Sprintf("%sappointments/%v", URLPrefix, a["id"]),
 	}
 	rb := str(a, "remind_before")
 	if rb == "不提醒" {
@@ -317,7 +318,7 @@ func appointmentEvent(a store.Record, at time.Time) calEvent {
 	return e
 }
 
-func (c *calSync) syncEvents(s *calState, now time.Time) error {
+func (c *Sync) syncEvents(s *calState, now time.Time) error {
 	from := now.Add(-24 * time.Hour)
 	appts, err := c.st.AppointmentsSince(from)
 	if err != nil {
@@ -338,7 +339,7 @@ func (c *calSync) syncEvents(s *calState, now time.Time) error {
 			continue
 		}
 		e := appointmentEvent(a, at)
-		key := strings.TrimPrefix(e.URL, syncURL)
+		key := strings.TrimPrefix(e.URL, URLPrefix)
 		want[key] = true
 		h := digest(e)
 		ex, ok := have[key]
@@ -374,7 +375,7 @@ func (c *calSync) syncEvents(s *calState, now time.Time) error {
 	return nil
 }
 
-func (c *calSync) syncReminders(s *calState, now time.Time) error {
+func (c *Sync) syncReminders(s *calState, now time.Time) error {
 	times, err := c.st.MedTimes(now.AddDate(0, 0, -1), 3)
 	if err != nil {
 		return err
@@ -393,10 +394,10 @@ func (c *calSync) syncReminders(s *calState, now time.Time) error {
 		m := t.Medication
 		r := calReminder{
 			Title: "💊 " + strings.TrimSpace(str(m, "name")+" "+str(m, "dosage")), Due: t.At.Unix(),
-			Notes: str(m, "frequency"), URL: fmt.Sprintf("%smedications/%v/%s", syncURL, m["id"], t.At.Format("200601021504")),
+			Notes: str(m, "frequency"), URL: fmt.Sprintf("%smedications/%v/%s", URLPrefix, m["id"], t.At.Format("200601021504")),
 			Completed: t.Dose != nil, Alarms: []int64{t.At.Unix()},
 		}
-		key := strings.TrimPrefix(r.URL, syncURL)
+		key := strings.TrimPrefix(r.URL, URLPrefix)
 		want[key] = true
 		open, done := r, r
 		open.Completed, done.Completed = false, true
@@ -456,5 +457,17 @@ func forget(s *calState, kind string, have map[string]calItem, want map[string]b
 		if _, ok := have[key]; strings.HasPrefix(key, kind) && !ok && !want[key] {
 			delete(s.Made, key)
 		}
+	}
+}
+
+// Status is what the settings page shows of the sync: what is on, whether
+// macOS allows it, the account, how it last went.
+func (c *Sync) Status() map[string]any {
+	s := c.load()
+	names := []string{"not_asked", "full", "denied", "write_only"}
+	return map[string]any{
+		"events": s.Events, "reminders": s.Reminders, "source": s.Source, "title": c.title,
+		"events_access": names[c.api.Access(false)], "reminders_access": names[c.api.Access(true)],
+		"last_at": s.LastAt, "last_error": s.LastError,
 	}
 }

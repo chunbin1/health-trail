@@ -9,7 +9,18 @@
 ## 结构
 
 ```
-main.go, listener.go     入口：app（Wails 窗口 + 本地服务）/ serve / mcp（stdio）/ info
+main.go                  只读命令行：app（Wails 窗口 + 本地服务）/ serve / mcp（stdio）/ info，交给 internal/desktop
+internal/desktop/        桌面 App 这一层
+  app.go                 app 结构体、网络端口的 handler()、窗口专用的 windowHandler()、RunApp/RunServe/RunMCP/RunInfo
+  listener.go            本地端口的监听、settings.json
+  backups.go             备份的触发和接口（打包、恢复在 internal/backup）
+  folders.go, attachments.go  只给窗口用的接口：允许读取的文件夹、在 Mac 上打开 / 删除附件
+  shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
+  links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
+internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
+internal/reminders/      打卡、用药、预约的系统通知（Wails 服务）
+internal/folders/        沙盒版「允许读取的文件夹」：安全书签（bookmarks_darwin.go），窗口和 MCP 启动时都打开
+internal/attachopen/     窗口里点附件：复制一份到临时目录，用 Mac 上对应的 App 打开（不认识的类型只在访达里显示）；副本在删除、超过 1 小时、启动和退出时清掉
 internal/store/          数据层，唯一的数据来源
   schema.go              所有记录类型和字段的定义 ← 加字段从这里开始
   schema_en.go           schema 里的中文在英文界面显示成什么（有测试检查覆盖）
@@ -19,11 +30,7 @@ internal/store/          数据层，唯一的数据来源
 internal/server/         REST API（/api/...）、安全层 guard.go、UI 静态文件
 internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
-backups.go, reminders.go App 里的后台任务：备份触发和接口、提醒（打卡、用药、预约）
-attachopen.go            窗口里点附件：复制一份到临时目录，用 Mac 上对应的 App 打开（不认识的类型只在访达里显示）；副本在删除、超过 1 小时、启动和退出时清掉
-shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
-calsync.go               预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
-frontend/                React + TS + Vite，构建结果嵌进 Go 程序
+frontend/                React + TS + Vite；embed.go 把构建结果（dist）嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
 ```
 

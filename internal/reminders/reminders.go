@@ -1,4 +1,5 @@
-package main
+// Package reminders shows what is due as macOS notifications.
+package reminders
 
 import (
 	"context"
@@ -20,12 +21,12 @@ import (
 // macOS's 64 pending notifications.
 const reminderDays = 2
 
-// reminders turns what is due (store.Reminders: habits, medicines,
+// Service turns what is due (store.Reminders: habits, medicines,
 // appointments) into macOS notifications. It brings
 // the scheduled ones in line with the data at start and every 30 seconds:
 // a check-in, a new time or an archived habit may come from MCP in another
 // process, so there is nothing to listen to.
-type reminders struct {
+type Service struct {
 	st        *store.Store
 	ns        *notifications.NotificationService
 	lang      func() string // the UI's language, which notifications follow
@@ -37,11 +38,19 @@ type reminders struct {
 	synced func() (appointments, medicines bool)
 }
 
+// New is the reminders for st, in the language lang gives, leaving to
+// Calendar and Reminders what synced says goes there.
+func New(st *store.Store, ns *notifications.NotificationService, lang func() string, synced func() (appointments, medicines bool)) *Service {
+	r := &Service{st: st, ns: ns, lang: lang, synced: synced}
+	r.allowed.Store(-1) // not known until the service starts
+	return r
+}
+
 // Allowed asks macOS now whether the app may show notifications, so the
 // window's warning goes as soon as they're turned on; ok is false when it
 // can't be known (reminders didn't start). Newly allowed, the reminders are
 // scheduled right away.
-func (r *reminders) Allowed() (allowed, ok bool) {
+func (r *Service) Allowed() (allowed, ok bool) {
 	if r.allowed.Load() < 0 {
 		return false, false
 	}
@@ -59,12 +68,12 @@ func (r *reminders) Allowed() (allowed, ok bool) {
 	return allowed, true
 }
 
-func (r *reminders) ServiceName() string { return "health-trail/reminders" }
+func (r *Service) ServiceName() string { return "health-trail/reminders" }
 
 // ServiceStartup starts the notification service itself, so that its failing
 // (a binary run outside the .app has no bundle identifier) only turns
 // reminders off instead of stopping the app.
-func (r *reminders) ServiceStartup(ctx context.Context, opts application.ServiceOptions) error {
+func (r *Service) ServiceStartup(ctx context.Context, opts application.ServiceOptions) error {
 	r.allowed.Store(-1)
 	r.kick = make(chan struct{}, 1)
 	if err := r.ns.ServiceStartup(ctx, opts); err != nil {
@@ -79,7 +88,7 @@ func (r *reminders) ServiceStartup(ctx context.Context, opts application.Service
 // the data. The app stays running for days, so permission is checked on
 // every round: turned on later in System Settings, reminders start then
 // (and the window stops warning about it).
-func (r *reminders) run(ctx context.Context) {
+func (r *Service) run(ctx context.Context) {
 	ok, err := r.ns.RequestNotificationAuthorization()
 	r.setAllowed(ok)
 	if !ok {
@@ -111,7 +120,7 @@ func (r *reminders) run(ctx context.Context) {
 	}
 }
 
-func (r *reminders) setAllowed(ok bool) {
+func (r *Service) setAllowed(ok bool) {
 	if ok {
 		r.allowed.Store(1)
 	} else {
@@ -119,7 +128,7 @@ func (r *reminders) setAllowed(ok bool) {
 	}
 }
 
-func (r *reminders) sync(now time.Time) {
+func (r *Service) sync(now time.Time) {
 	plan, err := r.st.Reminders(now, reminderDays)
 	if err != nil {
 		log.Printf("读取提醒失败：%v", err)
