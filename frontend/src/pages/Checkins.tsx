@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Bell, ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, Plus } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, today, type HabitDay } from '../api'
 import { EntityForm } from '../components/EntityForm'
+import { tell } from '../components/Dialog'
 import { Modal } from '../components/Modal'
 import { t, tr, tx } from '../i18n'
 import { openRecord, useApp, useLoad } from '../state'
@@ -32,7 +33,7 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
       }
       changed()
     } catch (e: any) {
-      alert(e.message)
+      tell(e.message)
     }
   }
 

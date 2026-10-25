@@ -105,7 +105,7 @@ func runMCP(dataDir string) {
 	defer st.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := mcpserver.New(st, version).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
+	if err := mcpserver.New(st, version, true).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
 		log.Fatal(err)
 	}
 }
@@ -141,12 +141,19 @@ func newApp(dataDir, port string) *app {
 	// phone access is hidden until it's reworked: a choice saved earlier no
 	// longer opens the app to the network (serve -lan still does, on purpose)
 	a.settings.LAN = false
-	mcpSrv := mcpserver.New(st, version)
+	// add_attachment reads files on this computer, so only a client on this
+	// computer gets it; the phone (with the token) gets the server without it
+	mcpLocal, mcpRemote := mcpserver.New(st, version, true), mcpserver.New(st, version, false)
 	a.srv = &server.Server{
 		Store: st,
 		UI:    uiFS(),
-		MCP:   mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpSrv }, nil),
-		Info:  a.info,
+		MCP: mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+			if server.FromThisComputer(r) {
+				return mcpLocal
+			}
+			return mcpRemote
+		}, nil),
+		Info: a.info,
 	}
 	a.listener = &listener{handler: &server.Guard{Token: token, Next: a.handler()}}
 	return a
@@ -221,6 +228,7 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 		}
 		writeJSON(w, map[string]string{"dir": dir}) // "" when cancelled
 	})
+	mux.HandleFunc("POST /api/attachments/{id}/open", a.openAttachmentHandler)
 	// whether macOS shows the reminders, and a way to its settings if not
 	mux.HandleFunc("GET /api/notifications", func(w http.ResponseWriter, r *http.Request) {
 		out := map[string]any{"allowed": nil}

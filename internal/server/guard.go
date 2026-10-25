@@ -65,7 +65,7 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.Next.ServeHTTP(w, r)
 		return
 	}
-	if fromLoopback(r) && loopbackHost(r.Host) {
+	if FromThisComputer(r) {
 		g.Next.ServeHTTP(w, r)
 		return
 	}
@@ -90,6 +90,14 @@ func bearer(r *http.Request) string {
 		return strings.TrimSpace(h[7:])
 	}
 	return ""
+}
+
+// FromThisComputer reports whether r came from this computer under a
+// loopback Host, the test Guard lets in without a token. A request through
+// a proxy on this computer (tailscale serve) carries another Host, so it
+// doesn't count.
+func FromThisComputer(r *http.Request) bool {
+	return fromLoopback(r) && loopbackHost(r.Host)
 }
 
 func fromLoopback(r *http.Request) bool {

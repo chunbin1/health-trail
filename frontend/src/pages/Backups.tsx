@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { ArchiveRestore, Cloud, FolderOpen } from 'lucide-react'
 import { api, fmtDate, type BackupConfig, type BackupState } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
+import { ask, tell } from '../components/Dialog'
 import { t } from '../i18n'
 import { useApp, useLoad } from '../state'
 import { Empty, Switch } from '../ui'
@@ -68,14 +69,14 @@ export function BackupSettings() {
   }
 
   async function restore(name: string, time: string) {
-    if (!confirm(t('恢复到 {time} 的备份？\n\n恢复前会先把当前数据另存一份（文件名以 before-restore 结尾），恢复错了可以从那份再恢复回来。', { time: fmtDate(time.slice(0, 16)) }))) return
+    if (!(await ask(t('恢复到 {time} 的备份？\n\n恢复前会先把当前数据另存一份（文件名以 before-restore 结尾），恢复错了可以从那份再恢复回来。', { time: fmtDate(time.slice(0, 16)) }), { ok: t('恢复') }))) return
     setBusy(name)
     try {
       await api.restoreBackup(name)
       toast(t('已恢复到 {time} 的数据', { time: fmtDate(time.slice(0, 16)) }))
       changed()
     } catch (e: any) {
-      alert(e.message)
+      tell(e.message)
       reload()
     } finally {
       setBusy('')

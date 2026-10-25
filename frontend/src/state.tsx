@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, type Entity, type Rec, type Schema } from './api'
+import { DialogHost } from './components/Dialog'
 import { t, tx, type Lang } from './i18n'
 
 interface Ctx {
@@ -28,6 +29,7 @@ export function AppProvider({ schema, lang, switchLang, children }: { schema: Sc
     <AppCtx.Provider value={{ schema, entity, version, changed, toast, lang, switchLang }}>
       {children}
       {msg && <div className="toast">{msg}</div>}
+      <DialogHost />
     </AppCtx.Provider>
   )
 }

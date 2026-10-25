@@ -20,6 +20,7 @@ internal/server/         REST API（/api/...）、安全层 guard.go、UI 静态
 internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
 backups.go, reminders.go App 里的后台任务：备份触发和接口、提醒（打卡、用药、预约）
+attachopen.go            窗口里点附件：复制一份到临时目录，用 Mac 上对应的 App 打开（不认识的类型只在访达里显示）
 shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
 calsync.go               预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
 frontend/                React + TS + Vite，构建结果嵌进 Go 程序

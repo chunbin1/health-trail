@@ -218,6 +218,8 @@ export const api = {
     return req<Attachment>('POST', '/api/attachments', fd)
   },
   removeAttachment: (id: number) => req<unknown>('DELETE', `/api/attachments/${id}`),
+  // the Mac window only: opens the file in its Mac app (or the Finder)
+  openAttachment: (id: number) => req<{ revealed: boolean }>('POST', `/api/attachments/${id}/open`),
 }
 
 // ---- formatting helpers
