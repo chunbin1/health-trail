@@ -129,6 +129,7 @@ type app struct {
 	cal      *calSync   // in the app only
 	token    string
 	port     string
+	openDir  string // copies of attachments opened from the window, in the app only
 }
 
 func newApp(dataDir, port string) *app {
@@ -141,22 +142,29 @@ func newApp(dataDir, port string) *app {
 	// phone access is hidden until it's reworked: a choice saved earlier no
 	// longer opens the app to the network (serve -lan still does, on purpose)
 	a.settings.LAN = false
-	// add_attachment reads files on this computer, so only a client on this
-	// computer gets it; the phone (with the token) gets the server without it
-	mcpLocal, mcpRemote := mcpserver.New(st, version, true), mcpserver.New(st, version, false)
 	a.srv = &server.Server{
 		Store: st,
 		UI:    uiFS(),
-		MCP: mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-			if server.FromThisComputer(r) {
-				return mcpLocal
-			}
-			return mcpRemote
-		}, nil),
-		Info: a.info,
+		MCP:   mcpHandler(st),
+		Info:  a.info,
 	}
 	a.listener = &listener{handler: &server.Guard{Token: token, Next: a.handler()}}
 	return a
+}
+
+// mcpHandler serves MCP over HTTP. add_attachment reads files on this
+// computer, so only a client on this computer gets it; the phone (with the
+// token) gets the server without it. "On this computer" is what the socket
+// says, so a tunnel that ends here (an SSH port forward) counts as this
+// computer: whoever can open one already has the Mac.
+func mcpHandler(st *store.Store) http.Handler {
+	local, remote := mcpserver.New(st, version, true), mcpserver.New(st, version, false)
+	return mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		if server.FromThisComputer(r) {
+			return local
+		}
+		return remote
+	}, nil)
 }
 
 // handler adds the settings route, which needs the listener, to the API.
@@ -229,6 +237,7 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 		writeJSON(w, map[string]string{"dir": dir}) // "" when cancelled
 	})
 	mux.HandleFunc("POST /api/attachments/{id}/open", a.openAttachmentHandler)
+	mux.HandleFunc("DELETE /api/attachments/{id}", a.deleteAttachmentHandler(h))
 	// whether macOS shows the reminders, and a way to its settings if not
 	mux.HandleFunc("GET /api/notifications", func(w http.ResponseWriter, r *http.Request) {
 		out := map[string]any{"allowed": nil}
@@ -417,6 +426,8 @@ func runApp(dataDir, port string) {
 	if dataDir != defaultDataDir() {
 		calTitle = "健康足迹（测试）"
 	}
+	a.openDir = openedDir(os.TempDir(), dataDir)
+	clearOpened(a.openDir) // what a crash or a force quit left behind
 	a.cal = newCalSync(a.st, &eventKit{}, dataDir, calTitle)
 	go a.cal.loop(ctx)
 	a.remind = &reminders{st: a.st, ns: notifications.New(), lang: a.settings.lang, synced: a.cal.syncing}
@@ -425,7 +436,7 @@ func runApp(dataDir, port string) {
 		Name:        "健康足迹",
 		Description: "个人健康档案",
 		Assets:      application.AssetOptions{Handler: a.windowHandler(func() *application.App { return wapp })},
-		OnShutdown:  func() { stopBackups(); a.backups.quit() },
+		OnShutdown:  func() { stopBackups(); a.backups.quit(); clearOpened(a.openDir) },
 		Services:    services(a.remind, dataDir),
 		// closing the window leaves the app in the menu bar (see shell)
 		Mac: application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: false},

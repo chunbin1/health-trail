@@ -69,7 +69,7 @@ export function BackupSettings() {
   }
 
   async function restore(name: string, time: string) {
-    if (!(await ask(t('恢复到 {time} 的备份？\n\n恢复前会先把当前数据另存一份（文件名以 before-restore 结尾），恢复错了可以从那份再恢复回来。', { time: fmtDate(time.slice(0, 16)) }), { ok: t('恢复') }))) return
+    if (!(await ask(t('恢复到 {time} 的备份？\n\n恢复前会先把当前数据另存一份（文件名以 before-restore 结尾），恢复错了可以从那份再恢复回来。', { time: fmtDate(time.slice(0, 16)) }), { ok: t('恢复'), danger: true }))) return
     setBusy(name)
     try {
       await api.restoreBackup(name)

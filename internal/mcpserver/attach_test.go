@@ -57,25 +57,63 @@ func TestAddAttachment(t *testing.T) {
 	f, _ := os.Create(big)
 	f.Truncate(store.MaxAttachment + 1)
 	f.Close()
+	// what a prompt injection would reach for: keys in a hidden folder,
+	// app data in ~/Library, a text file, a file without an extension, and
+	// a harmless-looking link to one of them
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	os.MkdirAll(filepath.Join(home, ".ssh"), 0o700)
+	key := filepath.Join(home, ".ssh", "id_ed25519")
+	os.WriteFile(key, []byte("-----BEGIN OPENSSH PRIVATE KEY-----"), 0o600)
+	os.WriteFile(filepath.Join(home, ".ssh", "photo.jpg"), []byte("\xff\xd8\xff"), 0o600)
+	os.MkdirAll(filepath.Join(home, "Library", "Messages"), 0o700)
+	os.WriteFile(filepath.Join(home, "Library", "Messages", "x.jpg"), []byte("\xff\xd8\xff"), 0o600)
+	notes := filepath.Join(dir, "passwords.txt")
+	os.WriteFile(notes, []byte("secret"), 0o600)
+	plain := filepath.Join(dir, "token")
+	os.WriteFile(plain, []byte("ghp_0123456789abcdef"), 0o600)
+	link := filepath.Join(dir, "报告.jpg")
+	os.Symlink(filepath.Join(home, ".ssh", "photo.jpg"), link)
 	for _, c := range []struct {
 		name string
 		args map[string]any
 		want string
 	}{
 		{"relative path", map[string]any{"path": "MR报告.pdf", "type": "reports", "id": rep["id"]}, "完整路径"},
-		{"missing file", map[string]any{"path": filepath.Join(dir, "nope.pdf"), "type": "reports", "id": rep["id"]}, "找不到文件"},
+		{"missing file", map[string]any{"path": filepath.Join(dir, "nope.pdf"), "type": "reports", "id": rep["id"]}, "找不到这个文件"},
 		{"a folder", map[string]any{"path": dir, "type": "reports", "id": rep["id"]}, "不是一个文件"},
 		{"too big", map[string]any{"path": big, "type": "reports", "id": rep["id"]}, "附件最大 50 MB"},
 		{"no such record", map[string]any{"path": pdf, "type": "reports", "id": 999}, "reports #999 不存在"},
 		{"no such type", map[string]any{"path": pdf, "type": "report", "id": rep["id"]}, "可用的有"},
+		{"a key", map[string]any{"path": "~/.ssh/id_ed25519", "type": "reports", "id": rep["id"]}, "隐藏"},
+		{"a picture in a hidden folder", map[string]any{"path": "~/.ssh/photo.jpg", "type": "reports", "id": rep["id"]}, "隐藏"},
+		{"app data", map[string]any{"path": "~/Library/Messages/x.jpg", "type": "reports", "id": rep["id"]}, "资源库"},
+		{"a link to a hidden folder", map[string]any{"path": link, "type": "reports", "id": rep["id"]}, "隐藏"},
+		{"plain text", map[string]any{"path": notes, "type": "reports", "id": rep["id"]}, "不能存 .txt 文件"},
+		{"no extension, not a picture", map[string]any{"path": plain, "type": "reports", "id": rep["id"]}, "没有扩展名"},
 	} {
 		out, isErr := call(t, cs, "add_attachment", c.args)
 		if !isErr || !strings.Contains(out, c.want) {
 			t.Errorf("%s: isErr=%v %s", c.name, isErr, out)
 		}
+		// the result goes into the conversation: no path of this computer
+		if strings.Contains(out, dir) || strings.Contains(out, home) {
+			t.Errorf("%s: the error names a path: %s", c.name, out)
+		}
 	}
-	if as, _ := st.Attachments("reports", rep["id"].(int64)); len(as) != 2 {
-		t.Errorf("a refused call saved something: %d attachments", len(as))
+	// iCloud Drive lives in ~/Library and is fine
+	icloud := filepath.Join(home, "Library", "Mobile Documents", "com~apple~CloudDocs")
+	os.MkdirAll(icloud, 0o700)
+	os.WriteFile(filepath.Join(icloud, "体检.pdf"), []byte("%PDF-1.4"), 0o600)
+	if out, isErr := call(t, cs, "add_attachment", map[string]any{"path": "~/Library/Mobile Documents/com~apple~CloudDocs/体检.pdf", "type": "reports", "id": rep["id"]}); isErr {
+		t.Errorf("iCloud Drive: %s", out)
+	}
+	// a display name can't change what the file is
+	if out, isErr := call(t, cs, "add_attachment", map[string]any{"path": pdf, "type": "reports", "id": rep["id"], "filename": "报告单.jpg"}); isErr || !strings.Contains(out, `"filename":"报告单.pdf"`) || !strings.Contains(out, "application/pdf") {
+		t.Errorf("renamed: %s", out)
+	}
+	if as, _ := st.Attachments("reports", rep["id"].(int64)); len(as) != 4 {
+		t.Errorf("a refused call saved something, or an allowed one didn't: %d attachments", len(as))
 	}
 }
 

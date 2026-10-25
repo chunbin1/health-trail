@@ -38,13 +38,15 @@ export function tell(message: string): Promise<void> {
 export function DialogHost() {
   const [queue, setQueue] = useState<Pending[]>([])
   const okRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     show = (p) => setQueue((q) => [...q, p])
     return () => { show = null }
   }, [])
   const cur = queue[0]
-  // Return confirms, but not a deletion: that one has to be clicked
-  useEffect(() => { if (cur && !cur.danger) okRef.current?.focus() }, [cur])
+  // Return answers with the focused button: OK for a plain question, Cancel
+  // for one that deletes or overwrites, so that one has to be clicked
+  useEffect(() => { (cur?.danger ? cancelRef : okRef).current?.focus() }, [cur])
   if (!cur) return null
   const done = (ok: boolean) => {
     cur.resolve(ok)
@@ -55,7 +57,7 @@ export function DialogHost() {
       <div className="modal-body" style={{ whiteSpace: 'pre-line' }}>{cur.message}</div>
       <div className="modal-foot">
         <span className="spacer" />
-        {cur.cancel && <button type="button" className="btn" onClick={() => done(false)}>{t('取消')}</button>}
+        {cur.cancel && <button type="button" ref={cancelRef} className="btn" onClick={() => done(false)}>{t('取消')}</button>}
         <button type="button" ref={okRef} className={'btn ' + (cur.danger ? 'danger' : 'primary')} onClick={() => done(true)}>{cur.ok}</button>
       </div>
     </Modal>
