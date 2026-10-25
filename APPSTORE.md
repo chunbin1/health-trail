@@ -16,7 +16,7 @@
 - Claude/Codex 从外面启动的 stdio MCP 也在沙盒里，系统会把 HOME 改到容器，默认数据目录自动落在 `~/Library/Containers/<bundle id>/Data/Library/Application Support/HealthVault`，和窗口是同一份数据，双向读写都通过。
 - 问题：沙盒里 MCP 读不了容器外的文件 → 已加「下载」只读权限（commit `18e974c`）。
 - 坑：在 `Contents/MacOS/` 里另放的可执行文件直接运行会 SIGTRAP（exit 133），主程序不会。
-- 坑：沙盒里没有 `network.client` 时窗口白屏（WKWebView 需要它），已加进 `build/appstore.entitlements`（LESSONS #29）。补上后用户确认测试版窗口显示正常。
+- 坑：沙盒里没有 `network.client` 时窗口白屏（WKWebView 需要它），已加进 `build/appstore.entitlements`（LESSONS #30）。补上后用户确认测试版窗口显示正常。
 
 ## 这次改了、还没提交的（「允许读取的文件夹」）
 

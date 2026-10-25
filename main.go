@@ -453,10 +453,9 @@ func runApp(dataDir, port string) {
 		// runs apart
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: instanceID(dataDir),
-			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+			OnSecondInstanceLaunch: func(d application.SecondInstanceData) {
 				if a.shell != nil {
-					win.Restore()
-					a.shell.show()
+					a.openLink(win, linkIn(d.Args))
 				}
 			},
 		},
@@ -484,6 +483,10 @@ func runApp(dataDir, port string) {
 			a.shell.show()
 		}
 		a.shell.refresh()
+	})
+	// a link from Calendar or Reminders, to the running app or one it starts
+	wapp.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
+		a.openLink(win, e.Context().URL())
 	})
 	if err := wapp.Run(); err != nil {
 		log.Fatal(err)
