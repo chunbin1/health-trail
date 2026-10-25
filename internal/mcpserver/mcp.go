@@ -80,7 +80,7 @@ func New(st *store.Store, version string, local bool) *mcp.Server {
 		Description: "某个检验项目的历次结果（从旧到新），含参考范围和标记。项目名先精确匹配，没有再模糊匹配（如 \"反应蛋白\"、\"白细胞\"）。"},
 		t.labTrend)
 	mcp.AddTool(s, &mcp.Tool{Name: "get_metric_trend", Annotations: ro,
-		Description: "某项身体数据在一段时间内的全部读数（从旧到新）。metric_type 可选：" + strings.Join(store.MetricTypes, "、") + "，以及用户自定义的指标（health_overview 的 metric_kinds）。血压的 value 是收缩压、value2 是舒张压。"},
+		Description: "某项身体数据在一段时间内的全部读数（从旧到新）。metric_type 可选：" + strings.Join(store.MetricTypes, "、") + "，以及用户自定义的指标（health_overview 的 metric_kinds）。血压的 value 是收缩压、value2 是舒张压。每条读数的 source 说明来源：metrics 是身体数据记录；lab_results 是同名、同单位的检验指标（化验单上的结果，只是一起列出，id 是检验指标的 id，要改就改那条检验指标）。"},
 		t.metricTrend)
 	mcp.AddTool(s, &mcp.Tool{Name: "checkin",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &no, IdempotentHint: true},

@@ -125,10 +125,15 @@ export function Metrics() {
         {rows && rows.length > 0 ? (
           <section className="card flush">
             <div className="list">
+              {/* a lab result of the same name is shown here, kept in its report */}
               {[...rows].reverse().slice(0, 100).map((r) => (
-                <div key={r.id} className="row-item no-ico" onClick={() => openRecord('metrics', r.id)}>
+                <div key={r.source + r.id} className="row-item no-ico" onClick={() => openRecord(r.source, r.id)}>
                   <div className="body"><span className="val" style={{ fontSize: 15 }}>{metricValue(r)}</span> <span className="muted small">{tx(r.unit)}</span></div>
-                  <span className="side">{r.context && <span className="tag">{r.context}</span>}<span className="nowrap num">{fmtDate(r.measured_at)}</span></span>
+                  <span className="side">
+                    {r.source === 'lab_results' && <span className="tag" title={r.report_title || undefined}>{t('化验单')}</span>}
+                    {r.context && <span className="tag">{r.context}</span>}
+                    <span className="nowrap num">{fmtDate(r.measured_at)}</span>
+                  </span>
                 </div>
               ))}
             </div>

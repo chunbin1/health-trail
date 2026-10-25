@@ -245,6 +245,44 @@ func TestCheckinLogsMetric(t *testing.T) {
 	}
 }
 
+// A lab result named like a metric shows in that metric's series and as its
+// latest value, without being copied; one in another unit stays out.
+func TestMetricSeriesWithLabs(t *testing.T) {
+	s := open(t)
+	if _, err := s.Create("metric_kinds", Record{"name": "尿酸", "unit": "μmol/L"}); err != nil {
+		t.Fatal(err)
+	}
+	home, _ := s.Create("metrics", Record{"measured_at": "2026-10-21 17:13", "metric_type": "尿酸", "value": 490})
+	lab, err := s.Create("lab_results", Record{"test_date": "2026-10-25", "item_name": "尿酸", "value_num": 576, "unit": "µmol/L", "ref_range": "208-428"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Create("lab_results", Record{"test_date": "2026-09-21", "item_name": "尿酸", "value_num": 10.3, "unit": "mg/dL"})
+	s.Create("lab_results", Record{"test_date": "2026-09-21", "item_name": "尿尿酸", "value_num": 2361, "unit": "µmol/L"})
+
+	pts, err := s.MetricSeries("尿酸", "", "")
+	if err != nil || len(pts) != 2 {
+		t.Fatalf("series = %v %v, want the home reading and the μmol/L lab result", pts, err)
+	}
+	if pts[0]["source"] != "metrics" || pts[0]["id"] != home["id"] || pts[1]["source"] != "lab_results" ||
+		pts[1]["id"] != lab["id"] || pts[1]["value"] != 576.0 || pts[1]["measured_at"] != "2026-10-25" || pts[1]["flag"] != "偏高" {
+		t.Errorf("series = %v", pts)
+	}
+	if pts, _ := s.MetricSeries("尿酸", "2026-10-22", ""); len(pts) != 1 || pts[0]["source"] != "lab_results" {
+		t.Errorf("series from 10-22 = %v, want only the lab result", pts)
+	}
+	if pts, _ := s.MetricSeries("尿酸", "", "2026-10-24"); len(pts) != 1 || pts[0]["source"] != "metrics" {
+		t.Errorf("series to 10-24 = %v, want only the home reading", pts)
+	}
+	o, err := s.Overview()
+	if err != nil || len(o.LatestMetrics) != 1 || o.LatestMetrics[0]["value"] != 576.0 {
+		t.Errorf("latest metrics = %v %v, want the lab result", o.LatestMetrics, err)
+	}
+	if o.Counts["metrics"] != 1 {
+		t.Errorf("metrics = %d, the lab result was copied", o.Counts["metrics"])
+	}
+}
+
 func TestCustomMetric(t *testing.T) {
 	s := open(t)
 	if _, err := s.Create("metrics", Record{"measured_at": "today", "metric_type": "尿酸", "value": 420}); err == nil ||

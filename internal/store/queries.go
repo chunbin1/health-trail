@@ -2,6 +2,8 @@ package store
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 )
@@ -24,6 +26,27 @@ type Overview struct {
 	MetricKinds      []Record                  `json:"metric_kinds"` // metrics the user added, with their units
 	TodayCheckins    []HabitDay                `json:"today_checkins"`
 	Counts           map[string]int            `json:"counts"`
+}
+
+// latestMetrics is the latest reading of each metric that has any, a lab
+// result of the same name included (see MetricSeries).
+func (s *Store) latestMetrics() ([]Record, error) {
+	kinds, err := s.customNames("metric_kinds")
+	if err != nil {
+		return nil, err
+	}
+	out := []Record{}
+	for _, m := range append(slices.Clone(MetricTypes), kinds...) {
+		rows, err := s.MetricSeries(m, "", "")
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) > 0 {
+			out = append(out, rows[len(rows)-1])
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i]["metric_type"].(string) < out[j]["metric_type"].(string) })
+	return out, nil
 }
 
 type HabitDay struct {
@@ -55,12 +78,11 @@ func (s *Store) Overview() (*Overview, error) {
 		JOIN (SELECT item_name, MAX(test_date || printf('%010d', id)) AS k FROM lab_results GROUP BY item_name) m
 		  ON l.item_name = m.item_name AND l.test_date || printf('%010d', l.id) = m.k
 		WHERE l.flag IN ('偏高','偏低','异常') ORDER BY l.test_date DESC, l.item_name`)
-	q(&o.LatestMetrics, `SELECT x.* FROM metrics x
-		JOIN (SELECT metric_type, MAX(measured_at || printf('%010d', id)) AS k FROM metrics GROUP BY metric_type) m
-		  ON x.metric_type = m.metric_type AND x.measured_at || printf('%010d', x.id) = m.k
-		ORDER BY x.metric_type`)
 	q(&o.MetricKinds, `SELECT * FROM metric_kinds ORDER BY id`)
 	if err != nil {
+		return nil, err
+	}
+	if o.LatestMetrics, err = s.latestMetrics(); err != nil {
 		return nil, err
 	}
 	o.TodayCheckins, err = s.HabitDays(today())
@@ -381,12 +403,77 @@ func (s *Store) LabTrend(name string) ([]Record, error) {
 		WHERE l.item_name LIKE ? ORDER BY l.item_name, l.test_date, l.id`, "%"+name+"%")
 }
 
-// MetricSeries returns one metric's readings in [from, to], oldest first.
+// MetricSeries returns one metric's readings in [from, to], oldest first:
+// the metric records (source "metrics") and, shown but not copied, the lab
+// results of the same name in the same unit (source "lab_results", id is the
+// lab result's), so a 尿酸 measured at the hospital shows next to the ones
+// measured at home.
 func (s *Store) MetricSeries(metricType, from, to string) ([]Record, error) {
 	rows, _, err := s.List("metrics", ListQuery{
 		Filters: map[string]any{"metric_type": metricType}, From: from, To: to, Asc: true, Limit: 1000,
 	})
-	return rows, err
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		r["source"] = "metrics"
+	}
+	labs, err := s.labReadings(metricType, from, to)
+	if err != nil || len(labs) == 0 {
+		return rows, err
+	}
+	rows = append(rows, labs...)
+	sort.SliceStable(rows, func(i, j int) bool {
+		return fmt.Sprint(rows[i]["measured_at"]) < fmt.Sprint(rows[j]["measured_at"])
+	})
+	return rows, nil
+}
+
+// labReadings are the lab results named like the metric, as metric readings.
+// A result in another unit (尿酸 in mg/dL against μmol/L) is left out rather
+// than drawn on the same scale.
+func (s *Store) labReadings(metricType, from, to string) ([]Record, error) {
+	cond, args := "", []any{metricType}
+	if from != "" {
+		cond += " AND l.test_date >= ?"
+		args = append(args, from)
+	}
+	if to != "" {
+		cond += " AND l.test_date <= ?"
+		args = append(args, to)
+	}
+	labs, err := s.query(`SELECT l.*, r.title AS report_title FROM lab_results l LEFT JOIN reports r ON r.id = l.report_id
+		WHERE l.item_name = ? AND l.value_num IS NOT NULL`+cond+` ORDER BY l.test_date, l.id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	want, _ := s.metricUnit(metricType).(string)
+	out := []Record{}
+	for _, l := range labs {
+		unit, _ := l["unit"].(string)
+		if want != "" && unit != "" && !sameUnit(want, unit) {
+			continue
+		}
+		if unit == "" {
+			unit = want
+		}
+		out = append(out, Record{
+			"source": "lab_results", "id": l["id"], "metric_type": metricType,
+			"measured_at": l["test_date"], "value": l["value_num"], "value2": nil, "unit": unit,
+			"flag": l["flag"], "ref_range": l["ref_range"], "report_id": l["report_id"], "report_title": l["report_title"],
+		})
+	}
+	return out, nil
+}
+
+// sameUnit tells μmol/L, µmol/L (the micro sign) and umol/L apart from
+// mg/dL, ignoring case and spaces.
+func sameUnit(a, b string) bool {
+	norm := func(u string) string {
+		u = strings.NewReplacer("μ", "u", "µ", "u", " ", "").Replace(u)
+		return strings.ToLower(u)
+	}
+	return norm(a) == norm(b)
 }
 
 type SearchHit struct {

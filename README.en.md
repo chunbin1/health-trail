@@ -14,7 +14,7 @@ Let Claude or Codex enter and analyze them for you. Your data never leaves your 
 [![Release](https://img.shields.io/github/v/release/chunbin1/health-trail?include_prereleases&label=release&color=111111)](https://github.com/chunbin1/health-trail/releases) [![CI](https://img.shields.io/github/actions/workflow/status/chunbin1/health-trail/ci.yml?label=CI&color=111111)](https://github.com/chunbin1/health-trail/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
 ![macOS](https://img.shields.io/badge/macOS_13+-000000?logo=apple&logoColor=white) ![MCP](https://img.shields.io/badge/MCP-15_tools-111111) ![SQLite](https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white)
 
-**[Download](https://github.com/chunbin1/health-trail/releases)** &nbsp;·&nbsp; **[Connect your AI](#connect-your-ai)** &nbsp;·&nbsp; **[Build from source](#build-from-source)** &nbsp;·&nbsp; **[Releasing](RELEASING.md)** (Chinese)
+**[Download](https://github.com/chunbin1/health-trail/releases)** &nbsp;·&nbsp; **[Connect your AI](#connect-your-ai)** &nbsp;·&nbsp; **[Build from source](#build-from-source)**
 
 <br>
 
@@ -69,7 +69,7 @@ Help me list the questions to ask the doctor at this follow-up
 | **Visits** | Hospital, department, doctor, diagnosis, doctor's advice |
 | **Medications** | Dose, frequency, the times of day you take it; tap once to log a dose, and the pill count adds up automatically |
 | **Reports** | Checkups, lab tests, imaging; each lab result is saved individually with its reference range as printed, and you can see the trend of any single result |
-| **Body metrics** | Weight, blood pressure, blood glucose, or any metric you add yourself |
+| **Body metrics** | Weight, blood pressure, blood glucose, or any metric you add yourself; a metric named like a lab test (such as uric acid) also shows that test's results from your lab reports |
 | **Appointments** | Follow-ups and tests, with the place and what to prepare (fasting, bring your last scans) |
 | **Check-ins** | "Weigh in after waking up", "Keep to my sleep schedule", with streaks and completion rates |
 

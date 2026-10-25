@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -141,12 +142,31 @@ func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT /api/settings", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
-			LAN  *bool   `json:"lan"`
-			Lang *string `json:"lang"`
+			LAN           *bool     `json:"lan"`
+			Lang          *string   `json:"lang"`
+			HiddenMetrics *[]string `json:"hidden_metrics"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, `{"error":"无效的请求"}`, http.StatusBadRequest)
 			return
+		}
+		if in.HiddenMetrics != nil {
+			hidden := []string{}
+			for _, m := range *in.HiddenMetrics {
+				if m = strings.TrimSpace(m); m != "" && !slices.Contains(hidden, m) {
+					hidden = append(hidden, m)
+				}
+			}
+			if len(hidden) > 200 {
+				http.Error(w, `{"error":"hidden_metrics 最多 200 项"}`, http.StatusBadRequest)
+				return
+			}
+			a.settings.mu.Lock()
+			a.settings.HiddenMetrics = hidden
+			a.settings.mu.Unlock()
+			if err := a.settings.save(); err != nil {
+				log.Printf("保存设置失败：%v", err)
+			}
 		}
 		if in.Lang != nil {
 			if *in.Lang != "zh" && *in.Lang != "en" {
@@ -332,6 +352,7 @@ func (a *app) info(r *http.Request) map[string]any {
 		"version":               Version,
 		"lan":                   a.settings.LAN,
 		"lang":                  a.settings.lang(),
+		"hidden_metrics":        a.settings.hiddenMetrics(),
 		"listening":             a.listener.addr(),
 		"listen_error":          a.listener.errText(),
 		"phone_urls":            phone,
