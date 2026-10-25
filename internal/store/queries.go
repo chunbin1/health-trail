@@ -50,11 +50,11 @@ func (s *Store) latestMetrics() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	// oldest first, so the last one of a metric is its latest; a reading
-	// on the day of a lab result counts as later, as in MetricSeries
+	// oldest first, so of two on a day the later one wins; a reading on
+	// the day of a lab result counts as later (it has a time), as in MetricSeries
 	for _, l := range labs {
 		m := l["metric_type"].(string)
-		if r, ok := latest[m]; !ok || fmt.Sprint(l["measured_at"]) > fmt.Sprint(r["measured_at"]) {
+		if r, ok := latest[m]; !ok || fmt.Sprint(l["measured_at"]) >= fmt.Sprint(r["measured_at"]) {
 			latest[m] = l
 		}
 	}
@@ -437,19 +437,21 @@ func (s *Store) MetricSeries(metricType, from, to string) ([]Record, error) {
 			return nil, invalid("to：%v", err)
 		}
 	}
-	// the newest ones when there are more, turned oldest first
+	// the newest ones when there are more (List takes 1000 at most), turned
+	// oldest first
 	const max = 1000
-	rows, _, err := s.List("metrics", ListQuery{
+	rows, total, err := s.List("metrics", ListQuery{
 		Filters: map[string]any{"metric_type": metricType}, From: from, To: to, Limit: max,
 	})
 	if err != nil {
 		return nil, err
 	}
+	cut := total > max
 	slices.Reverse(rows)
 	for _, r := range rows {
 		r["source"] = "metrics"
 	}
-	if len(rows) == max {
+	if cut {
 		// lab results only as far back as the readings reach
 		if d := fmt.Sprint(rows[0]["measured_at"])[:10]; d > from {
 			from = d
@@ -471,6 +473,9 @@ func (s *Store) MetricSeries(metricType, from, to string) ([]Record, error) {
 // the metric's unit is taken: one in another unit (尿酸 in mg/dL against
 // μmol/L), or where either unit is missing, would be drawn on the wrong scale.
 func (s *Store) labReadings(metricTypes []string, from, to string) ([]Record, error) {
+	if len(metricTypes) == 0 {
+		return []Record{}, nil
+	}
 	where := []string{"l.value_num IS NOT NULL", "l.item_name IN (" + strings.Repeat(",?", len(metricTypes))[1:] + ")"}
 	args := []any{}
 	for _, m := range metricTypes {
