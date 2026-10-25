@@ -25,7 +25,7 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   const r = data?.record
 
   async function remove() {
-    if (!r || !(await ask(t('删除这条{label}？{extra}此操作不可撤销。', { label: noun(e), extra: entityName === 'reports' ? t('报告里的所有指标也会一起删除。') : entityName === 'habits' ? t('它的所有打卡记录也会一起删除。') : '' }), { ok: t('删除'), danger: true }))) return
+    if (!r || !(await ask(t('删除这条{label}？{extra}此操作不可撤销。', { label: noun(e), extra: entityName === 'reports' ? t('报告里的所有指标也会一起删除。') : '' }), { ok: t('删除'), danger: true }))) return
     try {
       await api.remove(entityName, id)
       changed()
@@ -76,7 +76,8 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   const head = r && !locked && (
     <>
       <button className="btn sm" onClick={() => setEditing(true)}><Pencil size={14} />{t('编辑')}</button>
-      <IconButton label={t('删除')} className="danger" onClick={remove}><Trash2 size={16} /></IconButton>
+      {/* a check-in item is archived, never deleted: its check-ins stay */}
+      {entityName !== 'habits' && <IconButton label={t('删除')} className="danger" onClick={remove}><Trash2 size={16} /></IconButton>}
     </>
   )
 

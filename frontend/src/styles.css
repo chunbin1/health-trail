@@ -532,8 +532,10 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 .heat span.today { box-shadow: 0 0 0 1.5px var(--canvas), 0 0 0 3px var(--ink-3); }
 .habit-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .habit-row:last-child { border-bottom: 0; }
-/* the delete button keeps to the right edge, wherever the numbers end */
+/* the archive button keeps to the right edge, wherever the numbers end */
 .habit-row .push-end { margin-left: auto; }
+.archived-habits { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.archived-habit { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
 @media (max-width: 700px) { .habit-row { grid-template-columns: 1fr auto; } .habit-row .heat { grid-column: 1 / -1; } }
 .streak { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
 .streak svg { color: #f07a22; }

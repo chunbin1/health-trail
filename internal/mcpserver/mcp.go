@@ -66,7 +66,7 @@ func New(st *store.Store, version string, local bool) *mcp.Server {
 		t.update)
 	mcp.AddTool(s, &mcp.Tool{Name: "delete_record",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "永久删除一条记录（删除报告会连同其检验指标一起删除，删除打卡项会删除其打卡记录）。只在用户明确要求删除时使用。"},
+		Description: "永久删除一条记录（删除报告会连同其检验指标一起删除）。打卡项不能删除：用户不再打卡时，用 update_record 把它的 archived 设为 true（归档），打卡记录会保留。只在用户明确要求删除时使用。"},
 		t.delete)
 	mcp.AddTool(s, &mcp.Tool{Name: "add_lab_report",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &no},

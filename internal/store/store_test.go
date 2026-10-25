@@ -302,7 +302,10 @@ func TestCustomMetric(t *testing.T) {
 	}
 	s.Delete("metrics", mid)
 	s.Delete("metrics", own["id"].(int64))
-	s.Delete("habits", h["id"].(int64))
+	// a check-in item isn't deleted; it stops logging the metric instead
+	if _, err := s.Update("habits", h["id"].(int64), Record{"metric_type": ""}); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.Delete("metric_kinds", kid); err != nil {
 		t.Fatalf("delete unused: %v", err)
 	}
@@ -471,41 +474,44 @@ func TestOverviewAndTimeline(t *testing.T) {
 	}
 }
 
-// Deleting a check-in item takes its check-ins with it, and only its own;
-// a reading it logged to body metrics stays.
-func TestDeleteHabit(t *testing.T) {
+// A check-in item can't be deleted, so its check-ins stay; archiving takes
+// it off the page and back, and a new item can't take an archived one's name.
+func TestHabitsAreArchivedNotDeleted(t *testing.T) {
 	s := open(t)
-	weigh, err := s.Create("habits", Record{"name": "晨起称体重", "unit": "kg", "metric_type": "体重"})
+	walk, err := s.Create("habits", Record{"name": "散步"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	walk, _ := s.Create("habits", Record{"name": "散步"})
-	wid, kid := weigh["id"].(int64), walk["id"].(int64)
-	v := 61.5
-	if _, err := s.Checkin(wid, "today", &v, ""); err != nil {
+	id := walk["id"].(int64)
+	pastCheckin(t, s, id, time.Now().AddDate(0, 0, -1).Format("2006-01-02"), 1)
+	if _, err := s.Checkin(id, "today", nil, ""); err != nil {
 		t.Fatal(err)
 	}
-	pastCheckin(t, s, wid, time.Now().AddDate(0, 0, -1).Format("2006-01-02"), 61.8)
-	if _, err := s.Checkin(kid, "today", nil, ""); err != nil {
+	err = s.Delete("habits", id)
+	var ve *ValidationError
+	if !errors.As(err, &ve) || !strings.Contains(err.Error(), "archived") {
+		t.Fatalf("Delete(habit) = %v, want a ValidationError pointing at archived", err)
+	}
+	if err := s.Delete("habits", 999); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Delete(missing habit) = %v, want ErrNotFound", err)
+	}
+	if _, err := s.Update("habits", id, Record{"archived": true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Delete("habits", wid); err != nil {
+	today := time.Now().Format("2006-01-02")
+	if days, err := s.HabitDays(today); err != nil || len(days) != 0 {
+		t.Errorf("today after archiving = %+v %v", days, err)
+	}
+	if _, n, _ := s.List("checkins", ListQuery{Filters: map[string]any{"habit_id": id}}); n != 2 {
+		t.Errorf("check-ins of the archived item = %d, want 2", n)
+	}
+	if _, err := s.Create("habits", Record{"name": "散步"}); err == nil || !strings.Contains(err.Error(), "恢复") {
+		t.Errorf("a new item with an archived one's name: err = %v", err)
+	}
+	if _, err := s.Update("habits", id, Record{"archived": false}); err != nil {
 		t.Fatal(err)
 	}
-	count := func(entity string, f map[string]any) int {
-		_, n, err := s.List(entity, ListQuery{Filters: f})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return n
-	}
-	if n := count("checkins", map[string]any{"habit_id": wid}); n != 0 {
-		t.Errorf("check-ins left of the deleted item: %d", n)
-	}
-	if n := count("checkins", map[string]any{"habit_id": kid}); n != 1 {
-		t.Errorf("the other item's check-ins: %d, want 1", n)
-	}
-	if n := count("metrics", map[string]any{"metric_type": "体重"}); n != 1 {
-		t.Errorf("body metric readings after deleting the item: %d, want 1", n)
+	if days, _ := s.HabitDays(today); len(days) != 1 || days[0].Checkin == nil {
+		t.Errorf("today after restoring = %+v", days)
 	}
 }

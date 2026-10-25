@@ -534,6 +534,13 @@ func (s *Store) Delete(entityName string, id int64) error {
 	if err != nil {
 		return err
 	}
+	// a check-in item keeps its check-ins for good: it's archived, not deleted
+	if e.Name == "habits" {
+		if _, err := s.Get(e.Name, id); err != nil {
+			return err
+		}
+		return invalid("打卡项不能删除，这样它的打卡记录会一直保留。不再打卡的话，把它的 archived 改成 true（归档），以后还能改回来")
+	}
 	if e.Name == "checkins" {
 		cur, err := s.Get(e.Name, id)
 		if err != nil {
@@ -716,6 +723,9 @@ func dbErr(e *Entity, err error) error {
 	if strings.Contains(msg, "UNIQUE constraint failed") {
 		if e.Name == "checkins" {
 			return invalid("这个打卡项当天已经打过卡了")
+		}
+		if e.Name == "habits" {
+			return invalid("已经有一个同名的打卡项了；如果它已归档，可以在打卡页底部恢复它")
 		}
 		return invalid("%s已存在同名记录", e.Label)
 	}

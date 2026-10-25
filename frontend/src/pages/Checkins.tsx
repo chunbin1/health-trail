@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Bell, ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, Plus, Trash2 } from 'lucide-react'
+import { Archive, Bell, ChevronLeft, ChevronRight, CircleCheck, Circle, Flame, Plus } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, today, type HabitDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
-import { ask, tell } from '../components/Dialog'
+import { tell } from '../components/Dialog'
 import { Modal } from '../components/Modal'
 import { t, tr, tx } from '../i18n'
 import { openRecord, useApp, useLoad } from '../state'
@@ -102,17 +102,14 @@ export function Checkins() {
   const days = Array.from({ length: 30 }, (_, i) => addDays(from, i))
   const isToday = date === today()
 
-  // a habit and all its check-ins; archiving (in its details) keeps them
-  async function removeHabit(h: Rec) {
+  // A check-in item is never deleted, so its check-ins stay: archiving takes
+  // it off the day and the 30 days, and the list at the bottom brings it back.
+  async function setArchived(h: Rec, archived: boolean) {
     const name = `${h.icon || ''} ${h.name}`.trim()
-    const msg = t('删除打卡项「{name}」？它的所有打卡记录也会一起删除，此操作不可撤销。', { name })
-      + (h.metric_type ? t('已经记进身体数据的数值会保留。') : '')
-      + '\n\n' + t('只是不想再打卡的话，可以点它的名字，在详情里改成「已归档」，记录会保留。')
-    if (!(await ask(msg, { ok: t('删除'), danger: true }))) return
     try {
-      await api.remove('habits', h.id)
+      await api.update('habits', h.id, { archived })
       changed()
-      toast(t('已删除'))
+      toast(archived ? t('已归档「{name}」，打卡记录都在，可以在页面最下面恢复', { name }) : t('已恢复「{name}」', { name }))
     } catch (e: any) {
       tell(e.message)
     }
@@ -155,16 +152,20 @@ export function Checkins() {
                 <div className="row" style={{ flexWrap: 'nowrap', gap: 14 }}>
                   <span className="streak" title={t('当前连续天数')}><Flame size={14} />{t('{n} 天', { n: s.current_streak })}</span>
                   <span className="muted small nowrap num">{Math.round(s.completion_rate * 100)}%{s.total_value != null ? ` · ${fmtNum(s.total_value)}${tx(s.habit.unit) || ''}` : ''}</span>
-                  <IconButton label={t('删除打卡项')} small className="danger push-end" onClick={() => removeHabit(s.habit)}><Trash2 size={15} /></IconButton>
+                  <IconButton label={t('归档')} small className="push-end" onClick={() => setArchived(s.habit, true)}><Archive size={15} /></IconButton>
                 </div>
               </div>
             ))}
           </div>
         </section>
         {archived && archived.rows.length > 0 && (
-          <div className="small muted row">
-            {t('已归档：')}{archived.rows.map((h) => (
-              <a key={h.id} href="#" onClick={(e) => { e.preventDefault(); openRecord('habits', h.id) }}>{h.icon} {h.name}</a>
+          <div className="archived-habits small">
+            <span className="muted">{t('已归档：')}</span>
+            {archived.rows.map((h) => (
+              <span key={h.id} className="archived-habit">
+                <a href="#" onClick={(e) => { e.preventDefault(); openRecord('habits', h.id) }}>{h.icon} {h.name}</a>
+                <button className="btn sm ghost" onClick={() => setArchived(h, false)}>{t('恢复')}</button>
+              </span>
             ))}
           </div>
         )}
