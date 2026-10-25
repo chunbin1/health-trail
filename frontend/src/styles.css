@@ -518,6 +518,8 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 .habit.done { background: var(--accent-soft); }
 .habit.done .check { color: var(--accent); }
 .habit.done .state { color: var(--accent); }
+/* an archived item on a day it was done: history, not a button */
+.habit.archived { opacity: 0.7; cursor: default; }
 .habit:disabled { cursor: default; }
 .habit:disabled:hover { background: var(--surface-2); }
 .habit.done:disabled:hover { background: var(--accent-soft); }

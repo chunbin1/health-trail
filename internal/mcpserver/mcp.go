@@ -91,7 +91,7 @@ func New(st *store.Store, version string, local bool) *mcp.Server {
 		Description: "取消某天的打卡。"},
 		t.undoCheckin)
 	mcp.AddTool(s, &mcp.Tool{Name: "get_checkin_stats", Annotations: ro,
-		Description: "打卡统计：每个打卡项在一段时间内（默认最近 30 天）的完成天数、完成率、当前连续天数、区间内最长连续、数量合计和打卡日期。"},
+		Description: "打卡统计：每个打卡项在一段时间内（默认最近 30 天）的完成天数、完成率、当前连续天数、区间内最长连续、数量合计和打卡日期。已归档的打卡项只要在这段时间里打过卡也会列出（habit.archived 为 1）。"},
 		t.checkinStats)
 	if local {
 		mcp.AddTool(s, &mcp.Tool{Name: "add_attachment",
