@@ -2,12 +2,25 @@
 
 健康足迹不上 Mac App Store，发的是 Developer ID 签名、苹果公证过的 dmg。别人下载后双击就能打开，不会弹「无法验证开发者」。
 
-## 平时：打个标签就行
+## 平时：打个带说明的标签就行
+
+标签里写的说明，就是 Release 页面上的更新说明。先看看上个版本以来改了什么：
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git log --oneline $(git describe --tags --abbrev=0)..HEAD
 ```
+
+用大白话写成说明，打进标签再推送：
+
+```bash
+git tag -a v1.0.1 -m "健康足迹 1.0.1
+
+- 新增：日历里的链接能直接打开那条预约
+- 修复：……"
+git push origin v1.0.1
+```
+
+一定要用 `-a`（带说明的标签）：不带说明的话，Release 页面上只会显示最后一次提交的提交说明。也可以直接跟 Claude 说「发个 1.0.1」，它会先写好说明给你确认，再打标签。
 
 GitHub Actions（`.github/workflows/release.yml`）会跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，再跑一遍 MCP 端到端测试，最后建一个 GitHub Release 把 dmg 挂上去。版本号直接取标签：`v1.0.0` → `1.0.0`。
 
