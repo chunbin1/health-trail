@@ -1,4 +1,4 @@
-package main
+package calsync
 
 import (
 	"fmt"
@@ -92,7 +92,7 @@ func (f *fakeCal) remByURL(suffix string) (string, calReminder) {
 	return "", calReminder{}
 }
 
-func calTest(t *testing.T) (*store.Store, *fakeCal, *calSync) {
+func calTest(t *testing.T) (*store.Store, *fakeCal, *Sync) {
 	t.Helper()
 	data := t.TempDir()
 	st, err := store.Open(data)
@@ -101,7 +101,7 @@ func calTest(t *testing.T) (*store.Store, *fakeCal, *calSync) {
 	}
 	t.Cleanup(func() { st.Close() })
 	f := newFakeCal()
-	return st, f, newCalSync(st, f, data, "健康足迹")
+	return st, f, New(st, f, data, "健康足迹")
 }
 
 func TestCalendarSyncAppointments(t *testing.T) {
@@ -113,14 +113,14 @@ func TestCalendarSyncAppointments(t *testing.T) {
 
 	// refused access: nothing is turned on
 	f.grant = false
-	if err := c.set(false, true); err == nil || !strings.Contains(err.Error(), "日历") {
+	if err := c.Set(false, true); err == nil || !strings.Contains(err.Error(), "日历") {
 		t.Fatalf("denied: %v", err)
 	}
 	if c.load().Events {
 		t.Fatal("events on without access")
 	}
 	f.grant = true
-	if err := c.set(false, true); err != nil {
+	if err := c.Set(false, true); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.sync(now); err != nil {
@@ -175,7 +175,7 @@ func TestCalendarSyncAppointments(t *testing.T) {
 	_ = cancelled
 
 	// the app's own notifications step aside while syncing
-	if ev, rem := c.syncing(); !ev || rem {
+	if ev, rem := c.Syncing(); !ev || rem {
 		t.Errorf("syncing = %v %v", ev, rem)
 	}
 }
@@ -185,7 +185,7 @@ func TestCalendarSyncMedicines(t *testing.T) {
 	loc := time.Local
 	now := time.Date(2026, 10, 22, 7, 0, 0, 0, loc)
 	m, _ := st.Create("medications", store.Record{"name": "奥美拉唑", "dosage": "20mg", "frequency": "饭前", "status": "在用", "remind_times": "08:00, 20:00"})
-	if err := c.set(true, true); err != nil {
+	if err := c.Set(true, true); err != nil {
 		t.Fatal(err)
 	}
 	c.sync(now)
@@ -252,7 +252,7 @@ func TestCalendarSyncMedicines(t *testing.T) {
 	// turned off: what is still open goes
 	st.Update("medications", m["id"].(int64), store.Record{"status": "在用"})
 	c.sync(time.Date(2026, 10, 23, 15, 4, 0, 0, loc))
-	if err := c.set(true, false); err != nil {
+	if err := c.Set(true, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range f.rems {
@@ -260,7 +260,7 @@ func TestCalendarSyncMedicines(t *testing.T) {
 			t.Errorf("an open reminder stayed after turning off: %+v", r)
 		}
 	}
-	if _, rem := c.syncing(); rem {
+	if _, rem := c.Syncing(); rem {
 		t.Error("still syncing after turning off")
 	}
 }

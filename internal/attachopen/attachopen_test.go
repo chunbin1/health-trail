@@ -1,4 +1,4 @@
-package main
+package attachopen
 
 import (
 	"os"
@@ -25,12 +25,12 @@ func TestOpenAttachment(t *testing.T) {
 		return a["id"].(int64)
 	}
 	tmp := t.TempDir()
-	base := openedDir(tmp, "/data")
+	base := Dir(tmp, "/data")
 	var ran []string
 	run := func(args ...string) error { ran = args; return nil }
 
 	// a picture opens in its app, as a copy under its own name
-	revealed, err := openAttachment(st, add("报告单.JPG", "image/jpeg", "jpg bytes"), base, run)
+	revealed, err := Open(st, add("报告单.JPG", "image/jpeg", "jpg bytes"), base, run)
 	if err != nil || revealed || len(ran) != 1 {
 		t.Fatalf("revealed=%v err=%v ran=%v", revealed, err, ran)
 	}
@@ -43,7 +43,7 @@ func TestOpenAttachment(t *testing.T) {
 
 	// a file that `open` might run is only shown in the Finder
 	for _, name := range []string{"run.command", "noext", "page.html", ".jpg"} {
-		revealed, err = openAttachment(st, add(name, "image/png", "x"), base, run)
+		revealed, err = Open(st, add(name, "image/png", "x"), base, run)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func TestOpenAttachment(t *testing.T) {
 		}
 	}
 
-	if _, err := openAttachment(st, 999, base, run); err != store.ErrNotFound {
+	if _, err := Open(st, 999, base, run); err != store.ErrNotFound {
 		t.Errorf("missing attachment: %v", err)
 	}
 }
@@ -76,11 +76,11 @@ func TestOpenedCopiesGo(t *testing.T) {
 		return a["id"].(int64)
 	}
 	tmp := t.TempDir()
-	base, other := openedDir(tmp, "/data"), openedDir(tmp, "/test-data")
+	base, other := Dir(tmp, "/data"), Dir(tmp, "/test-data")
 	var ran []string
 	run := func(args ...string) error { ran = args; return nil }
 	open := func(id int64) string {
-		if _, err := openAttachment(st, id, base, run); err != nil {
+		if _, err := Open(st, id, base, run); err != nil {
 			t.Fatal(err)
 		}
 		return filepath.Dir(ran[0])
@@ -99,7 +99,7 @@ func TestOpenedCopiesGo(t *testing.T) {
 
 	// deleting an attachment removes its copies, not another's
 	ofB := open(b)
-	forgetOpened(base, a)
+	Forget(base, a)
 	if exists(first) || exists(second) || !exists(ofB) {
 		t.Errorf("after deleting %d: %v %v %v", a, exists(first), exists(second), exists(ofB))
 	}
@@ -112,7 +112,7 @@ func TestOpenedCopiesGo(t *testing.T) {
 	}
 	// quitting removes the rest, and an earlier version's, but not another
 	// data directory's (a test window's, say)
-	clearOpened(base)
+	Clear(base)
 	if exists(base) || exists(legacy) || !exists(other1) {
 		t.Errorf("clear: base %v legacy %v other %v", exists(base), exists(legacy), exists(other1))
 	}

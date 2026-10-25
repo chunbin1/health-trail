@@ -1,4 +1,4 @@
-package main
+package desktop
 
 import (
 	"encoding/json"
@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"github.com/lee/health-trail/internal/calsync"
 )
 
 // Clicking the link on an appointment in Calendar or a medicine in Reminders
@@ -18,10 +20,10 @@ import (
 // linkRoute is the window's route for a link (#/page/entity/id, as in
 // frontend/src/state.tsx), or "" when it isn't one of ours.
 func linkRoute(link string) string {
-	if !strings.HasPrefix(link, syncURL) {
+	if !strings.HasPrefix(link, calsync.URLPrefix) {
 		return ""
 	}
-	parts := strings.Split(strings.TrimPrefix(link, syncURL), "/")
+	parts := strings.Split(strings.TrimPrefix(link, calsync.URLPrefix), "/")
 	if len(parts) < 2 || !isID(parts[1]) {
 		return ""
 	}
@@ -57,7 +59,7 @@ func isStamp(s string) bool {
 // the link a copy started by it was opened with.
 func linkIn(args []string) string {
 	for _, s := range args {
-		if strings.HasPrefix(s, syncURL) {
+		if strings.HasPrefix(s, calsync.URLPrefix) {
 			return s
 		}
 	}

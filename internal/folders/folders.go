@@ -1,9 +1,9 @@
-package main
+// Package folders keeps the folders the person let the sandboxed app read.
+package folders
 
 import (
 	"encoding/json"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,18 +25,18 @@ type grant struct {
 	Bookmark []byte `json:"bookmark"`
 }
 
-type grants struct {
+type Grants struct {
 	path string
 	mu   sync.Mutex
 }
 
-func newGrants(dataDir string) *grants {
-	return &grants{path: filepath.Join(dataDir, "folders.json")}
+func New(dataDir string) *Grants {
+	return &Grants{path: filepath.Join(dataDir, "folders.json")}
 }
 
 // load and save are called with g.mu held: the window adds and removes
 // while the MCP side of the same process may be reading.
-func (g *grants) load() []grant {
+func (g *Grants) load() []grant {
 	out := []grant{}
 	if b, err := os.ReadFile(g.path); err == nil {
 		json.Unmarshal(b, &out)
@@ -44,7 +44,7 @@ func (g *grants) load() []grant {
 	return out
 }
 
-func (g *grants) save(list []grant) error {
+func (g *Grants) save(list []grant) error {
 	if list == nil {
 		list = []grant{} // [] in the file, not null
 	}
@@ -54,7 +54,7 @@ func (g *grants) save(list []grant) error {
 
 // open starts this process's access to every granted folder. A bookmark
 // macOS calls stale still works now and is made again, so it keeps working.
-func (g *grants) open() {
+func (g *Grants) Open() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	list, changed := g.load(), false
@@ -79,7 +79,7 @@ func (g *grants) open() {
 
 // add asks for a folder in the open dialog, which grants it, and keeps it.
 // It returns false when the dialog was cancelled.
-func (g *grants) add(wapp *application.App, title string) (bool, error) {
+func (g *Grants) Add(wapp *application.App, title string) (bool, error) {
 	dir, err := wapp.Dialog.OpenFile().SetTitle(title).
 		CanChooseDirectories(true).CanChooseFiles(false).
 		PromptForSingleSelection()
@@ -105,7 +105,7 @@ func (g *grants) add(wapp *application.App, title string) (bool, error) {
 // remove forgets a folder for the next launches. This process keeps reading
 // it until it quits: macOS has no way to drop a resolved bookmark's access
 // short of stopAccessingSecurityScopedResource, and the next start won't open it.
-func (g *grants) remove(dir string) error {
+func (g *Grants) Remove(dir string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	list := g.load()
@@ -118,7 +118,7 @@ func (g *grants) remove(dir string) error {
 	return g.save(kept)
 }
 
-func (g *grants) paths() []string {
+func (g *Grants) Paths() []string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	out := []string{}
@@ -130,49 +130,7 @@ func (g *grants) paths() []string {
 
 // sandboxed says the app runs in the App Sandbox: there the system points
 // the home folder at the app's container.
-func sandboxed() bool {
+func Sandboxed() bool {
 	home, _ := os.UserHomeDir()
 	return strings.Contains(home, "/Library/Containers/")
-}
-
-// folderRoutes are the window's: the open dialog pops up on the Mac, so a
-// device on the network may not open it, nor change what the app may read.
-func (a *app) folderRoutes(mux *http.ServeMux, wapp func() *application.App) {
-	mux.HandleFunc("GET /api/folders", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"sandboxed": sandboxed(), "folders": a.grants.paths()})
-	})
-	mux.HandleFunc("POST /api/folders", func(w http.ResponseWriter, r *http.Request) {
-		title := a.msg("选择允许读取的文件夹", "Choose a folder to allow")
-		if _, err := a.grants.add(wapp(), title); err != nil {
-			// macOS's message can name the folder; it goes to the log only
-			log.Printf("添加允许读取的文件夹失败：%v", err)
-			writeError(w, a.msg("没能添加这个文件夹，请换一个再试", "Couldn't add that folder; try another one"))
-			return
-		}
-		a.grants.open() // and this process may read it from now on
-		writeJSON(w, map[string]any{"sandboxed": sandboxed(), "folders": a.grants.paths()})
-	})
-	mux.HandleFunc("DELETE /api/folders", func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Path string `json:"path"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Path == "" {
-			writeError(w, "要说明移除哪个文件夹（path）")
-			return
-		}
-		if err := a.grants.remove(in.Path); err != nil {
-			log.Printf("移除允许读取的文件夹失败：%v", err)
-			writeError(w, a.msg("没能移除这个文件夹，请再试一次", "Couldn't remove that folder; try again"))
-			return
-		}
-		writeJSON(w, map[string]any{"sandboxed": sandboxed(), "folders": a.grants.paths()})
-	})
-}
-
-// msg is a message for the window, in its language.
-func (a *app) msg(zh, en string) string {
-	if a.settings.lang() == "en" {
-		return en
-	}
-	return zh
 }

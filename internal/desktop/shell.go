@@ -1,4 +1,4 @@
-package main
+package desktop
 
 import (
 	_ "embed"
@@ -8,7 +8,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-//go:embed build/tray.png
+//go:embed tray.png
 var trayIcon []byte
 
 // shell keeps the app running in the menu bar so reminders and backups go

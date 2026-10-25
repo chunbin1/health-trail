@@ -1,12 +1,9 @@
-package main
+// Package attachopen opens an attachment from the window in its Mac app.
+package attachopen
 
 import (
-	"errors"
 	"io"
-	"log"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -34,15 +31,16 @@ var viewable = map[string]bool{
 // the app starts and quits.
 const openedTTL = time.Hour
 
-// openedDir is where this app's copies go: one folder per data directory,
-// so a test window clearing its own never touches the real app's.
-func openedDir(tmp, dataDir string) string {
-	return filepath.Join(tmp, "health-trail-open", instanceID(dataDir))
+// Dir is where an app's copies go: one folder per app instance (the app
+// makes one per data directory), so a test window clearing its own never
+// touches the real app's.
+func Dir(tmp, instance string) string {
+	return filepath.Join(tmp, "health-trail-open", instance)
 }
 
-// clearOpened removes every copy this app made, and the copies an earlier
+// Clear removes every copy this app made, and the copies an earlier
 // version left straight in health-trail-open (one folder per attachment id).
-func clearOpened(base string) {
+func Clear(base string) {
 	os.RemoveAll(base)
 	parent := filepath.Dir(base)
 	entries, _ := os.ReadDir(parent)
@@ -53,8 +51,8 @@ func clearOpened(base string) {
 	}
 }
 
-// forgetOpened removes the copies of one attachment.
-func forgetOpened(base string, id int64) {
+// Forget removes the copies of one attachment.
+func Forget(base string, id int64) {
 	entries, _ := os.ReadDir(base)
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), strconv.FormatInt(id, 10)+"-") {
@@ -72,11 +70,11 @@ func sweepOpened(base string, now time.Time) {
 	}
 }
 
-// openAttachment copies an attachment out under its own name (so the app
+// Open copies an attachment out under its own name (so the app
 // shows that name, and an edit there can't change the record's copy) into
 // a fresh folder under base, and opens it, or shows it in the Finder when
 // it isn't viewable. run runs `open` with the given arguments.
-func openAttachment(st *store.Store, id int64, base string, run func(args ...string) error) (revealed bool, err error) {
+func Open(st *store.Store, id int64, base string, run func(args ...string) error) (revealed bool, err error) {
 	a, err := st.Attachment(id)
 	if err != nil {
 		return false, err
@@ -119,38 +117,4 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
-}
-
-// The page shows the message as is, so it names no path; the detail goes to
-// the log.
-func (a *app) openAttachmentHandler(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, "无效的附件 id")
-		return
-	}
-	revealed, err := openAttachment(a.st, id, a.openDir, func(args ...string) error {
-		return exec.Command("open", args...).Run()
-	})
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, "附件不存在")
-		return
-	}
-	if err != nil {
-		log.Printf("打开附件 %d：%v", id, err)
-		writeError(w, "打不开附件")
-		return
-	}
-	writeJSON(w, map[string]bool{"revealed": revealed})
-}
-
-// deleteAttachmentHandler deletes through the API, then the copies the
-// window opened of it.
-func (a *app) deleteAttachmentHandler(api http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		api.ServeHTTP(w, r)
-		if id, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err == nil {
-			forgetOpened(a.openDir, id)
-		}
-	}
 }

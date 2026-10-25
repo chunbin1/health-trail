@@ -62,7 +62,7 @@ appstore-test: bin
 	cp health-trail "$(TEST_APP)/Contents/MacOS/health-trail"
 	sed -e 's/__VERSION__/$(VERSION)/g' -e 's#<string>com.chunbin1.healthtrail</string>#<string>com.chunbin1.healthtrail.appstoretest</string>#' \
 		-e 's#<string>健康足迹</string>#<string>健康足迹测试版</string>#g' build/Info.plist > "$(TEST_APP)/Contents/Info.plist"
-	cp build/AppIcon.icns build/tray.png "$(TEST_APP)/Contents/Resources/" 2>/dev/null || true
+	cp build/AppIcon.icns "$(TEST_APP)/Contents/Resources/"
 	codesign --force --options runtime --entitlements build/appstore.entitlements --sign - "$(TEST_APP)"
 	@echo "built $(TEST_APP) — data: ~/Library/Containers/com.chunbin1.healthtrail.appstoretest"
 
