@@ -14,7 +14,7 @@ internal/desktop/        桌面 App 这一层
   app.go                 app 结构体、网络端口的 handler()、窗口专用的 windowHandler()、RunApp/RunServe/RunMCP/RunInfo
   listener.go            本地端口的监听、settings.json
   backups.go             备份的触发和接口（打包、恢复在 internal/backup）
-  updates.go             检查新版本（启动后和每天一次）、窗口里的「更新并重启」、菜单栏的新版本提示
+  updates.go             检查新版本（启动后、每 4 小时、窗口回到前台时）、窗口里的「更新并重启」、菜单栏的新版本提示
   folders.go, attachments.go  只给窗口用的接口：允许读取的文件夹、在 Mac 上打开 / 删除附件
   shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录

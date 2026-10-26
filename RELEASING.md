@@ -59,7 +59,7 @@ GitHub Actions（`.github/workflows/release.yml`）先查 AI 审阅，再跑测�
 
 ## App 里的自动更新
 
-Release 上除了 dmg，还有一个 `HealthTrail-<版本>.zip`：订了公证票据的同一个 .app。装好的 App 每天查一次 `releases/latest`（不含 pre-release，所以带连字符的测试标签不会推给用户），发现更新就在「设置 → 软件更新」和菜单栏里提示。点「更新并重启」后：先备份一次（设置了备份的话）→ 下载 zip → 校验大小和 SHA-256 → 检查是同一个团队的 Developer ID 签名、bundle id 一致、经过公证、版本号对得上 → 替换「应用程序」里的 App → 退出后重新打开。
+Release 上除了 dmg，还有一个 `HealthTrail-<版本>.zip`：订了公证票据的同一个 .app。装好的 App 每 4 小时查一次 `releases/latest`，窗口回到前台时距上次超过半小时也会查（不含 pre-release，所以带连字符的测试标签不会推给用户），发现更新就在「设置 → 软件更新」和菜单栏里提示。点「更新并重启」后：先备份一次（设置了备份的话）→ 下载 zip → 校验大小和 SHA-256 → 检查是同一个团队的 Developer ID 签名、bundle id 一致、经过公证、版本号对得上 → 替换「应用程序」里的 App → 退出后重新打开。
 
 - **仓库必须是公开的**：App 不带令牌，私有仓库的 Release 它读不到（显示「还没有找到发布的版本」）。
 - 1.0.0 的 Release 没有 zip，App 会显示新版本，但只能点「打开下载页面」手动装。

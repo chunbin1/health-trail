@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestUpdateRoutes(t *testing.T) {
@@ -64,7 +67,7 @@ func TestUpdateRoutes(t *testing.T) {
 		t.Errorf("404 = %v", st)
 	}
 
-	// switching the daily check off is kept in settings.json
+	// switching the regular check off is kept in settings.json
 	if _, out = call("PUT", "/api/update", `{"auto":false}`); out["auto"] != false || u.settings.autoUpdate() {
 		t.Errorf("auto off = %v", out)
 	}
@@ -72,4 +75,72 @@ func TestUpdateRoutes(t *testing.T) {
 	if !strings.Contains(string(raw), `"no_update_check": true`) || loadSettings(dir).autoUpdate() {
 		t.Errorf("settings.json = %s", raw)
 	}
+}
+
+// Checks come every few hours, and on opening the window after a while.
+func TestUpdateDue(t *testing.T) {
+	now := time.Date(2026, 10, 26, 15, 0, 0, 0, time.Local)
+	for _, c := range []struct {
+		ago    time.Duration
+		onOpen bool
+		want   bool
+	}{
+		{3 * time.Hour, false, false},
+		{4 * time.Hour, false, true},
+		{29 * time.Minute, true, false},
+		{30 * time.Minute, true, true},
+	} {
+		if got := due(now, now.Add(-c.ago), c.onOpen); got != c.want {
+			t.Errorf("last %v ago, on open %v: due = %v, want %v", c.ago, c.onOpen, got, c.want)
+		}
+	}
+	// never checked yet: due either way
+	if !due(now, time.Time{}, false) || !due(now, time.Time{}, true) {
+		t.Error("no check yet is not due")
+	}
+}
+
+// The window coming up checks when a check is due, not again soon after,
+// and not at all with the checks switched off.
+func TestUpdateCheckOnOpen(t *testing.T) {
+	var asked atomic.Int32
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked.Add(1)
+		fmt.Fprint(w, `{"tag_name":"v`+Version+`","assets":[]}`)
+	}))
+	defer gh.Close()
+	u := newUpdates(loadSettings(t.TempDir()))
+	u.url, u.app = gh.URL, ""
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go u.loop(ctx)
+	wait := func(want int32) {
+		t.Helper()
+		for i := 0; i < 100 && asked.Load() < want; i++ {
+			time.Sleep(20 * time.Millisecond)
+		}
+		time.Sleep(100 * time.Millisecond) // and no more than that
+		if got := asked.Load(); got != want {
+			t.Fatalf("asked GitHub %d times, want %d", got, want)
+		}
+	}
+	u.windowOpened() // none yet: due
+	wait(1)
+	u.windowOpened() // just checked
+	u.windowOpened()
+	wait(1)
+
+	u.mu.Lock()
+	u.state.CheckedAt = time.Now().Add(-31 * time.Minute).Format(stamp)
+	u.mu.Unlock()
+	u.settings.mu.Lock()
+	u.settings.NoUpdateCheck = true
+	u.settings.mu.Unlock()
+	u.windowOpened() // due, but switched off
+	wait(1)
+	u.settings.mu.Lock()
+	u.settings.NoUpdateCheck = false
+	u.settings.mu.Unlock()
+	u.windowOpened()
+	wait(2)
 }
