@@ -227,15 +227,16 @@ var AppointmentTypes = []string{"检查", "复诊", "门诊", "体检", "其他"
 var RemindBefore = []string{"15 分钟", "30 分钟", "1 小时", "2 小时", "1 天", "不提醒"}
 
 // MetricTypes are the body metrics the app knows a default unit for.
-var MetricTypes = []string{"体重", "血压", "心率", "血糖", "体温", "血氧", "腰围", "睡眠时长", "步数"}
+var MetricTypes = []string{"体重", "身高", "血压", "心率", "血糖", "体温", "血氧", "腰围", "睡眠时长", "步数"}
 
 // HabitMetricTypes are the metrics a habit can log with its check-in: those
 // measured as a single number (not 血压, which needs two).
 var HabitMetricTypes = []string{"体重", "心率", "血糖", "体温", "血氧", "腰围", "睡眠时长", "步数"}
 
 var MetricUnits = map[string]string{
-	"体重": "kg", "血压": "mmHg", "心率": "次/分", "血糖": "mmol/L", "体温": "°C",
+	"体重": "kg", "身高": "cm", "血压": "mmHg", "心率": "次/分", "血糖": "mmol/L", "体温": "°C",
 	"血氧": "%", "腰围": "cm", "睡眠时长": "小时", "步数": "步",
+	BMI: "kg/m²",
 }
 
 func EntityByName(name string) *Entity {

@@ -204,8 +204,13 @@ func (s *Store) customOption(f Field, v string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// a BMI of the person's own, made before BMI was worked out, still takes
+	// its readings
 	if slices.Contains(names, v) {
 		return v, nil
+	}
+	if f.Custom == "metric_kinds" && strings.EqualFold(v, BMI) {
+		return nil, errBMI
 	}
 	ce := EntityByName(f.Custom)
 	have := "还没有"
@@ -293,10 +298,25 @@ func (s *Store) prepare(e *Entity, r Record) {
 	}
 }
 
-// check refuses what the fields allow but the app doesn't.
-func check(e *Entity, r Record) error {
-	if name, _ := r["name"].(string); e.Name == "metric_kinds" && slices.Contains(MetricTypes, name) {
+var errBMI = fmt.Errorf("BMI 不用记，由体重和身高自动算出：记体重（kg）和身高（cm）就行")
+
+// check refuses what the fields allow but the app doesn't; prev is the
+// record before an update (nil for a new one).
+func check(e *Entity, r, prev Record) error {
+	// a metric of the person's own named like one the app came to know later
+	// (身高, BMI) keeps its name and can still be edited
+	name, _ := r["name"].(string)
+	renamed := prev == nil || prev["name"] != name
+	if e.Name == "metric_kinds" && renamed && slices.Contains(MetricTypes, name) {
 		return invalid("「%s」已经是内置的指标，直接选它就行，不用新建", name)
+	}
+	if e.Name == "metric_kinds" && renamed && strings.EqualFold(strings.TrimSpace(name), BMI) {
+		return invalid("%v", errBMI)
+	}
+	// its readings are the built-in metric's now: a new name or unit would
+	// carry them all off (renameMetric)
+	if old, _ := prev["name"].(string); e.Name == "metric_kinds" && slices.Contains(MetricTypes, old) && (renamed || r["unit"] != prev["unit"]) {
+		return invalid("「%s」现在是内置的指标，这个同名的自建指标不能改名字和单位（它的读数都算内置的「%s」）；不需要它的话可以直接删掉，读数会留着", old, old)
 	}
 	return nil
 }
@@ -310,7 +330,7 @@ func (s *Store) build(e *Entity, in Record) (Record, error) {
 	if err := required(e, r); err != nil {
 		return nil, err
 	}
-	if err := check(e, r); err != nil {
+	if err := check(e, r, nil); err != nil {
 		return nil, err
 	}
 	ts := now()
@@ -453,7 +473,7 @@ func (s *Store) Update(entityName string, id int64, patch Record) (Record, error
 	if err := required(e, merged); err != nil {
 		return nil, err
 	}
-	if err := check(e, merged); err != nil {
+	if err := check(e, merged, cur); err != nil {
 		return nil, err
 	}
 	if err := editable(e, merged); err != nil {
@@ -514,7 +534,11 @@ func (s *Store) inUse(e *Entity, id int64) error {
 		return err
 	}
 	var metrics, habits int
-	s.DB.QueryRow("SELECT COUNT(*) FROM metrics WHERE metric_type = ?", cur["name"]).Scan(&metrics)
+	// one named like a built-in metric: its readings stay, under that one
+	// (a habit still needs it: not every built-in can be a habit's)
+	if name, _ := cur["name"].(string); !slices.Contains(MetricTypes, name) {
+		s.DB.QueryRow("SELECT COUNT(*) FROM metrics WHERE metric_type = ?", cur["name"]).Scan(&metrics)
+	}
 	s.DB.QueryRow("SELECT COUNT(*) FROM habits WHERE metric_type = ?", cur["name"]).Scan(&habits)
 	if metrics+habits == 0 {
 		return nil

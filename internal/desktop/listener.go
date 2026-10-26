@@ -3,10 +3,14 @@ package desktop
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -78,8 +82,19 @@ type settings struct {
 	Lang string     `json:"lang,omitempty"` // UI language: "" (Chinese) or "en"
 	// looking for updates by itself is on unless switched off
 	NoUpdateCheck bool `json:"no_update_check,omitempty"`
-	// body metrics left off the 今天 page; a metric is shown unless listed
+	// body metrics left off the 今天 page, from before Lists (read into
+	// Lists["today_metrics"] until that is chosen)
 	HiddenMetrics []string `json:"hidden_metrics,omitempty"`
+	// how the person arranged a list in the UI, by the list's name (as
+	// today_metrics, metrics_page); a list not in it is as the page has it
+	Lists map[string]listChoice `json:"lists,omitempty"`
+}
+
+// listChoice is one list arranged: its items in the order chosen (any not
+// in Order come after, as the page has them) and the ones turned off.
+type listChoice struct {
+	Order  []string `json:"order"`
+	Hidden []string `json:"hidden"`
 }
 
 func (s *settings) lang() string {
@@ -96,10 +111,17 @@ func (s *settings) msg(zh, en string) string {
 	return zh
 }
 
-func (s *settings) hiddenMetrics() []string {
+func (s *settings) lists() map[string]listChoice {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]string{}, s.HiddenMetrics...)
+	out := map[string]listChoice{}
+	for k, l := range s.Lists {
+		out[k] = listChoice{append([]string{}, l.Order...), append([]string{}, l.Hidden...)}
+	}
+	if _, ok := out["today_metrics"]; !ok && len(s.HiddenMetrics) > 0 {
+		out["today_metrics"] = listChoice{Order: []string{}, Hidden: append([]string{}, s.HiddenMetrics...)}
+	}
+	return out
 }
 
 func (s *settings) autoUpdate() bool {
@@ -114,6 +136,37 @@ func loadSettings(dir string) *settings {
 		json.Unmarshal(b, s)
 	}
 	return s
+}
+
+var listName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
+
+// mergeLists is the lists with the ones in puts replaced, each cleaned
+// (names trimmed, each once), or an error saying what is wrong.
+func (s *settings) mergeLists(puts map[string]listChoice) (map[string]listChoice, error) {
+	out := s.lists()
+	clean := func(in []string) []string {
+		names := []string{}
+		for _, m := range in {
+			if m = strings.TrimSpace(m); m != "" && !slices.Contains(names, m) {
+				names = append(names, m)
+			}
+		}
+		return names
+	}
+	for k, l := range puts {
+		if !listName.MatchString(k) {
+			return nil, fmt.Errorf("lists 的名字 %q 只能用小写字母、数字和下划线，字母开头，最多 40 个字符", k)
+		}
+		l.Order, l.Hidden = clean(l.Order), clean(l.Hidden)
+		if len(l.Order) > 200 || len(l.Hidden) > 200 {
+			return nil, fmt.Errorf("lists.%s 的 order 和 hidden 各最多 200 项", k)
+		}
+		out[k] = l
+	}
+	if len(out) > 20 {
+		return nil, fmt.Errorf("lists 最多 20 个")
+	}
+	return out, nil
 }
 
 func (s *settings) save() error {

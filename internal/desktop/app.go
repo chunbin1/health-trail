@@ -16,7 +16,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"syscall"
 
@@ -142,27 +141,27 @@ func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT /api/settings", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
-			LAN           *bool     `json:"lan"`
-			Lang          *string   `json:"lang"`
-			HiddenMetrics *[]string `json:"hidden_metrics"`
+			LAN   *bool                 `json:"lan"`
+			Lang  *string               `json:"lang"`
+			Lists map[string]listChoice `json:"lists"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, `{"error":"无效的请求"}`, http.StatusBadRequest)
 			return
 		}
-		if in.HiddenMetrics != nil {
-			hidden := []string{}
-			for _, m := range *in.HiddenMetrics {
-				if m = strings.TrimSpace(m); m != "" && !slices.Contains(hidden, m) {
-					hidden = append(hidden, m)
-				}
-			}
-			if len(hidden) > 200 {
-				http.Error(w, `{"error":"hidden_metrics 最多 200 项"}`, http.StatusBadRequest)
+		if len(in.Lists) > 0 {
+			lists, err := a.settings.mergeLists(in.Lists)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
 			a.settings.mu.Lock()
-			a.settings.HiddenMetrics = hidden
+			a.settings.Lists = lists
+			if _, ok := in.Lists["today_metrics"]; ok {
+				a.settings.HiddenMetrics = nil // carried into the list
+			}
 			a.settings.mu.Unlock()
 			if err := a.settings.save(); err != nil {
 				log.Printf("保存设置失败：%v", err)
@@ -352,7 +351,7 @@ func (a *app) info(r *http.Request) map[string]any {
 		"version":               Version,
 		"lan":                   a.settings.LAN,
 		"lang":                  a.settings.lang(),
-		"hidden_metrics":        a.settings.hiddenMetrics(),
+		"lists":                 a.settings.lists(),
 		"listening":             a.listener.addr(),
 		"listen_error":          a.listener.errText(),
 		"phone_urls":            phone,

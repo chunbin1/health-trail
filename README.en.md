@@ -69,7 +69,7 @@ Help me list the questions to ask the doctor at this follow-up
 | **Visits** | Hospital, department, doctor, diagnosis, doctor's advice |
 | **Medications** | Dose, frequency, the times of day you take it; tap once to log a dose, and the pill count adds up automatically |
 | **Reports** | Checkups, lab tests, imaging; each lab result is saved individually with its reference range as printed, and you can see the trend of any single result |
-| **Body metrics** | Weight, blood pressure, blood glucose, or any metric you add yourself; a metric named like a lab test (such as uric acid) also shows that test's results from your lab reports |
+| **Body metrics** | Weight, blood pressure, blood glucose, or any metric you add yourself; a metric named like a lab test (such as uric acid) also shows that test's results from your lab reports; log your height once and BMI is worked out from every weigh-in; metrics can be dragged into order, and ones you rarely use left off the page |
 | **Appointments** | Follow-ups and tests, with the place and what to prepare (fasting, bring your last scans) |
 | **Check-ins** | "Weigh in after waking up", "Keep to my sleep schedule", with streaks and completion rates |
 

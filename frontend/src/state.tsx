@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api, type Entity, type Rec, type Schema } from './api'
+import { api, type Entity, type ListChoice, type Rec, type Schema } from './api'
 import { DialogHost } from './components/Dialog'
 import { t, tx, type Lang } from './i18n'
 
@@ -112,10 +112,35 @@ export function useMetricKinds() {
     return {
       loaded: !!data,
       kinds,
-      types: [...schema.metric_types, ...kinds.map((k) => k.name as string)],
+      // BMI next to the height it's worked out with
+      types: [...new Set([...schema.metric_types.flatMap((m) => (m === '身高' ? [m, ...schema.metric_derived] : [m])), ...kinds.map((k) => k.name as string)])],
+      derived: schema.metric_derived,
       units: { ...schema.metric_units, ...Object.fromEntries(kinds.map((k) => [k.name, k.unit || ''])) } as Record<string, string>,
     }
   }, [schema, data])
+}
+
+// useListChoice is how the person arranged a list (settings.json, by name):
+// names in that order, those not in it after as given, and which are shown.
+// Before any choice, shownByDefault decides. loaded is false until it's known.
+export function useListChoice(name: string, names: string[], shownByDefault: (n: string) => boolean = () => true) {
+  const { toast } = useApp()
+  const { data: info } = useLoad(() => api.info(), [])
+  const [mine, setMine] = useState<ListChoice | null>()
+  const saved = mine !== undefined ? mine : info?.lists?.[name] ?? null
+  const rank = new Map((saved?.order || []).map((n, i) => [n, i]))
+  const at = (n: string) => rank.get(n) ?? rank.size + names.indexOf(n)
+  const ordered = [...names].sort((a, b) => at(a) - at(b))
+  return {
+    loaded: info !== undefined,
+    ordered,
+    shown: (n: string) => (saved ? !saved.hidden.includes(n) : shownByDefault(n)),
+    save(order: string[], hidden: string[]) {
+      const c = { order, hidden }
+      setMine(c)
+      api.setList(name, c).catch((e) => toast(e.message))
+    },
+  }
 }
 
 // Records a ref field may point at, for selects and for showing names.

@@ -13,19 +13,19 @@ func today() string { return time.Now().Format("2006-01-02") }
 // Overview is the state of things now: what is ongoing, what is recent and
 // what is out of range. It is the dashboard, and Claude's first read.
 type Overview struct {
-	Today            string                    `json:"today"`
-	ActiveConditions []Record                  `json:"active_conditions"`
-	CurrentMeds      []Record                  `json:"current_medications"`
-	RecentVisits     []Record                  `json:"recent_visits"`
-	UpcomingFollowUp []Record                  `json:"upcoming_follow_ups"`
-	Appointments     []Record                  `json:"upcoming_appointments"` // not done yet, from a week ago on
-	MedsToday        []MedDay                  `json:"meds_today"`            // medicines with remind_times, and which times are taken
-	RecentSymptoms   []Record                  `json:"recent_symptoms"`
-	AbnormalLabs     []Record                  `json:"abnormal_labs_latest"`
-	LatestMetrics    []Record                  `json:"latest_metrics"`
-	MetricKinds      []Record                  `json:"metric_kinds"` // metrics the user added, with their units
-	TodayCheckins    []HabitDay                `json:"today_checkins"`
-	Counts           map[string]int            `json:"counts"`
+	Today            string         `json:"today"`
+	ActiveConditions []Record       `json:"active_conditions"`
+	CurrentMeds      []Record       `json:"current_medications"`
+	RecentVisits     []Record       `json:"recent_visits"`
+	UpcomingFollowUp []Record       `json:"upcoming_follow_ups"`
+	Appointments     []Record       `json:"upcoming_appointments"` // not done yet, from a week ago on
+	MedsToday        []MedDay       `json:"meds_today"`            // medicines with remind_times, and which times are taken
+	RecentSymptoms   []Record       `json:"recent_symptoms"`
+	AbnormalLabs     []Record       `json:"abnormal_labs_latest"`
+	LatestMetrics    []Record       `json:"latest_metrics"`
+	MetricKinds      []Record       `json:"metric_kinds"` // metrics the user added, with their units
+	TodayCheckins    []HabitDay     `json:"today_checkins"`
+	Counts           map[string]int `json:"counts"`
 }
 
 // latestMetrics is the latest reading of each metric that has any, a lab
@@ -46,7 +46,7 @@ func (s *Store) latestMetrics() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	labs, err := s.labReadings(append(slices.Clone(MetricTypes), kinds...), "", "")
+	labs, err := s.labReadings(append(slices.Clone(MetricTypes), append(kinds, BMI)...), "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -58,11 +58,30 @@ func (s *Store) latestMetrics() ([]Record, error) {
 			latest[m] = l
 		}
 	}
+	if w, ok := latest["体重"]; ok {
+		hs, err := s.heights()
+		if err != nil {
+			return nil, err
+		}
+		// newer than one recorded under a BMI of the person's own, or one
+		// printed on a report, unless it's from that report's weight
+		cur := latest[BMI]
+		sameReport := cur != nil && cur["source"] == "lab_results" && cur["report_id"] != nil && cur["report_id"] == w["report_id"]
+		if b := bmiOf(w, hs); b != nil && !sameReport && (cur == nil || fmt.Sprint(b["measured_at"]) >= fmt.Sprint(cur["measured_at"])) {
+			latest[BMI] = b
+		}
+	}
 	out := make([]Record, 0, len(latest))
 	for _, r := range latest {
 		out = append(out, r)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i]["metric_type"].(string) < out[j]["metric_type"].(string) })
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i]["metric_type"].(string), out[j]["metric_type"].(string)
+		if ra, rb := metricRank(a), metricRank(b); ra != rb {
+			return ra < rb
+		}
+		return a < b
+	})
 	return out, nil
 }
 
@@ -376,13 +395,13 @@ func (s *Store) streak(habitID int64) (int, error) {
 }
 
 type LabItem struct {
-	Name     string   `json:"item_name"`
-	Count    int      `json:"count"`
-	Latest   string   `json:"latest_date"`
-	Value    *float64 `json:"latest_value"`
-	Unit     *string  `json:"unit"`
-	Flag     *string  `json:"latest_flag"`
-	Panel    *string  `json:"panel"`
+	Name   string   `json:"item_name"`
+	Count  int      `json:"count"`
+	Latest string   `json:"latest_date"`
+	Value  *float64 `json:"latest_value"`
+	Unit   *string  `json:"unit"`
+	Flag   *string  `json:"latest_flag"`
+	Panel  *string  `json:"panel"`
 }
 
 // LabItems lists every lab item ever measured with its latest result:
@@ -426,6 +445,14 @@ func (s *Store) LabTrend(name string) ([]Record, error) {
 // the lab result's), so a 尿酸 measured at the hospital shows next to the ones
 // measured at home.
 func (s *Store) MetricSeries(metricType, from, to string) ([]Record, error) {
+	if strings.EqualFold(metricType, BMI) {
+		return s.bmiSeries(from, to)
+	}
+	return s.recordedSeries(metricType, from, to)
+}
+
+// recordedSeries is MetricSeries of what was recorded (and lab results).
+func (s *Store) recordedSeries(metricType, from, to string) ([]Record, error) {
 	var err error
 	if from != "" {
 		if from, err = normalizeDate(from); err != nil {
@@ -505,11 +532,15 @@ func (s *Store) labReadings(metricTypes []string, from, to string) ([]Record, er
 		if want := units[name]; want == "" || unit == "" || !sameUnit(want, unit) {
 			continue
 		}
-		out = append(out, Record{
+		r := Record{
 			"source": "lab_results", "id": l["id"], "metric_type": name,
 			"measured_at": l["test_date"], "value": l["value_num"], "value2": nil, "unit": unit,
 			"flag": l["flag"], "ref_range": l["ref_range"], "report_id": l["report_id"], "report_title": l["report_title"],
-		})
+		}
+		if v, ok := l["value_num"].(float64); ok && name == BMI {
+			r["category"] = bmiCategory(v)
+		}
+		out = append(out, r)
 	}
 	return out, nil
 }
@@ -518,17 +549,17 @@ func (s *Store) labReadings(metricTypes []string, from, to string) ([]Record, er
 // mg/dL, ignoring case and spaces.
 func sameUnit(a, b string) bool {
 	norm := func(u string) string {
-		u = strings.NewReplacer("μ", "u", "µ", "u", " ", "").Replace(u)
+		u = strings.NewReplacer("μ", "u", "µ", "u", " ", "", "²", "2", "^2", "2").Replace(u)
 		return strings.ToLower(u)
 	}
 	return norm(a) == norm(b)
 }
 
 type SearchHit struct {
-	Type  string `json:"type"`
-	Label string `json:"type_label"`
+	Type  string   `json:"type"`
+	Label string   `json:"type_label"`
 	Rows  []Record `json:"rows"`
-	Total int    `json:"total"`
+	Total int      `json:"total"`
 }
 
 // Search looks for text in every kind of record.
@@ -565,10 +596,10 @@ func (s *Store) Related(entityName string, id int64) (Record, error) {
 	}
 	out := Record{"record": r}
 	children := map[string][][2]string{
-		"conditions": {{"symptoms", "condition_id"}, {"visits", "condition_id"}, {"medications", "condition_id"}, {"appointments", "condition_id"}},
-		"visits":     {{"medications", "visit_id"}, {"reports", "visit_id"}},
-		"reports":    {{"lab_results", "report_id"}},
-		"habits":     {{"checkins", "habit_id"}},
+		"conditions":  {{"symptoms", "condition_id"}, {"visits", "condition_id"}, {"medications", "condition_id"}, {"appointments", "condition_id"}},
+		"visits":      {{"medications", "visit_id"}, {"reports", "visit_id"}},
+		"reports":     {{"lab_results", "report_id"}},
+		"habits":      {{"checkins", "habit_id"}},
 		"medications": {{"doses", "medication_id"}},
 	}
 	for _, c := range children[entityName] {
