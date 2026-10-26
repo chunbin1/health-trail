@@ -133,10 +133,11 @@ func (u *updates) check(ctx context.Context) {
 	case update.Newer(r.Version, Version):
 		if u.state.Latest == nil || u.state.Latest.Version != r.Version {
 			log.Printf("有新版本：%s（当前 %s）", r.Version, Version)
+			u.state.Failed = "" // that was about the version before
 		}
 		u.state.Latest = r
 	default:
-		u.state.Latest = nil
+		u.state.Latest, u.state.Failed = nil, ""
 	}
 	u.mu.Unlock()
 	if u.changed != nil {

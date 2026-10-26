@@ -82,13 +82,13 @@ func TestUpdateRoutes(t *testing.T) {
 // shows only the first, so a check that can't reach GitHub after a newer
 // version was found doesn't look like the update failed.
 func TestUpdateInstallErrorApart(t *testing.T) {
-	up := true
+	up, release := true, "99.0.0"
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !up {
 			http.Error(w, "down", http.StatusBadGateway)
 			return
 		}
-		fmt.Fprint(w, `{"tag_name":"v99.0.0","assets":[]}`)
+		fmt.Fprintf(w, `{"tag_name":"v%s","assets":[]}`, release)
 	}))
 	defer gh.Close()
 	u := newUpdates(loadSettings(t.TempDir()))
@@ -118,6 +118,18 @@ func TestUpdateInstallErrorApart(t *testing.T) {
 	u.check(context.Background())
 	if !strings.Contains(u.state.Failed, "备份") {
 		t.Errorf("a check cleared the install error: %+v", u.state)
+	}
+	// and so does one finding the same version again
+	up = true
+	u.check(context.Background())
+	if !strings.Contains(u.state.Failed, "备份") {
+		t.Errorf("the same version again cleared the install error: %+v", u.state)
+	}
+	// a newer version than the one that failed starts clean
+	release = "99.0.1"
+	u.check(context.Background())
+	if u.state.Latest == nil || u.state.Latest.Version != "99.0.1" || u.state.Failed != "" {
+		t.Errorf("a newer version kept the old install error: %+v", u.state)
 	}
 }
 
