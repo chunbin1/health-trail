@@ -169,6 +169,11 @@ WKWebView 只有在 App 实现了对应的 WKUIDelegate 方法时才会显示 JS
 
 ## 工作习惯
 
+### 37. 判断 CI「符合预期」要看 PR 页面上列出的检查，不能只看 `gh pr checks` 的最新一次
+同一个工作流被两种事件触发（`pull_request` 和 `pull_request_review`），GitHub 在 PR 页面上按「名字 + 事件」各列一条，各自只显示自己最新的一次。发审阅那次变绿了，开 PR 那次的红叉还一直挂着，PR 显示「Some checks were not successful」。`gh pr checks` 把几次都列出来，看起来像「旧的失败、新的成功」，很容易误判成没事。判断前在 PR 页面（或 `statusCheckRollup` 里按事件分组）看每条检查当前的状态。
+- 证据：2026-10-26，PR #11 的 AI 审阅通过后，我说两个红的是「旧的、符合预期」；用户截图显示 PR 页面上「AI 审阅 (pull_request)」一直是失败。改成发审阅那次顺手重跑 pull_request 那次。
+- 出现：1
+
 ### 7. 依赖前一步结果的 shell 命令用 `&&` 串起来，并检查输出
 用 `;` 或换行连接时，前一步失败（比如 `cd` 到不存在的目录），后面的步骤照样会执行，最后看到的「测试通过 / 失败」其实针对的是旧代码。
 - 证据：2026-10-18，`cd health-vault && sed … ; go test` 中 `cd` 失败（当时已经在这个目录里），`sed` 没有执行，`go test` 却跑了，报出的失败是修复之前的状态。

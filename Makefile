@@ -86,12 +86,16 @@ dmg: ui
 	codesign --force --sign "$(DEV_ID)" "$(DMG)"
 	@echo "built $(DMG)"
 
+# stapling fetches the ticket from Apple and sometimes loses the connection
+# (v1.4.1: "The network connection was lost"): try a few times
+STAPLE = staple() { for i in 1 2 3 4 5; do xcrun stapler staple "$$1" && return; [ $$i = 5 ] || sleep 20; done; return 1; }; staple
+
 notarize: dmg
 	xcrun notarytool submit "$(DMG)" $(NOTARY_AUTH) --wait
-	xcrun stapler staple "$(DMG)"
+	$(STAPLE) "$(DMG)"
 	spctl --assess --type open --context context:primary-signature -v "$(DMG)"
 	# the in-app update installs the same app, with its ticket stapled on
-	xcrun stapler staple "$(DIST)/root/$(APP)"
+	$(STAPLE) "$(DIST)/root/$(APP)"
 	spctl --assess --type execute -v "$(DIST)/root/$(APP)"
 	ditto -c -k --keepParent "$(DIST)/root/$(APP)" "$(ZIP)"
 
