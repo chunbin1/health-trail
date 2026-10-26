@@ -14,8 +14,9 @@ import (
 	"github.com/lee/health-trail/internal/update"
 )
 
-// updates looks for a newer release on GitHub (at start and once a day,
-// unless switched off, and when asked) and installs it when the person
+// updates looks for a newer release on GitHub (at start, every few hours
+// and when the window comes up, unless switched off, and when asked) and
+// installs it when the person
 // clicks: a backup first, then the new copy in place of this one, then a
 // relaunch. Window only: an install over the network would restart the app
 // under the person.
@@ -29,6 +30,7 @@ type updates struct {
 	changed  func(*updates) // the menu bar follows what's found
 	checked  sync.Once      // whether this copy can replace itself, asked once
 	checkErr error
+	opened   chan struct{} // the window came up: a check if the last is a while ago
 	mu       sync.Mutex
 	state    updateState
 }
@@ -44,7 +46,7 @@ type updateState struct {
 }
 
 func newUpdates(s *settings) *updates {
-	u := &updates{settings: s, url: update.LatestURL, client: &http.Client{Timeout: 10 * time.Minute}, app: update.Bundle()}
+	u := &updates{settings: s, url: update.LatestURL, client: &http.Client{Timeout: 10 * time.Minute}, app: update.Bundle(), opened: make(chan struct{}, 1)}
 	if v := os.Getenv("HEALTH_TRAIL_UPDATE_URL"); v != "" {
 		u.url = v
 	}
@@ -52,24 +54,53 @@ func newUpdates(s *settings) *updates {
 	return u
 }
 
-// loop checks a little after start, then whenever a day has passed since
-// the last check (the Mac may have slept through the ticks).
+// How often it looks by itself: GitHub answers 60 requests an hour without
+// a token, so this stays far below that.
+const (
+	checkEvery   = 4 * time.Hour    // in the background
+	checkOnOpen  = 30 * time.Minute // when the window comes up
+	checkLooking = 10 * time.Minute // how soon a check missed in sleep is made up
+)
+
+// due says whether a check is due, the last one made at last (zero if
+// none yet); onOpen for the window coming up.
+func due(now, last time.Time, onOpen bool) bool {
+	if onOpen {
+		return now.Sub(last) >= checkOnOpen
+	}
+	return now.Sub(last) >= checkEvery
+}
+
+// loop checks a little after start, then every few hours (looking often,
+// as the Mac may have slept through the time), and when the window comes
+// up after a while.
 func (u *updates) loop(ctx context.Context) {
 	timer := time.NewTimer(20 * time.Second)
 	defer timer.Stop()
 	for {
+		onOpen := false
 		select {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
+			timer.Reset(checkLooking)
+		case <-u.opened:
+			onOpen = true
 		}
 		u.mu.Lock()
 		last, _ := time.ParseInLocation(stamp, u.state.CheckedAt, time.Local)
 		u.mu.Unlock()
-		if u.settings.autoUpdate() && time.Since(last) >= 24*time.Hour {
+		if u.settings.autoUpdate() && due(time.Now(), last, onOpen) {
 			u.check(ctx)
 		}
-		timer.Reset(time.Hour)
+	}
+}
+
+// windowOpened tells the loop the window came up (or to the front).
+func (u *updates) windowOpened() {
+	select {
+	case u.opened <- struct{}{}:
+	default:
 	}
 }
 

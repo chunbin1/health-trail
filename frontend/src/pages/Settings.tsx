@@ -185,7 +185,7 @@ function Updates() {
       <div className="sync-row">
         <div style={{ flex: 1, minWidth: 0 }}>
           <div>{t('自动检查更新')}</div>
-          <div className="small muted">{t('每天向 GitHub 查一次有没有新版本，只问版本号，不会发送任何健康数据。')}</div>
+          <div className="small muted">{t('每隔几个小时、打开窗口时向 GitHub 查有没有新版本，只问版本号，不会发送任何健康数据。')}</div>
         </div>
         <Switch checked={s.auto} onChange={(v) => { setCur({ ...s, auto: v }); run(() => api.setAutoUpdate(v)) }} label={t('自动检查更新')} />
       </div>

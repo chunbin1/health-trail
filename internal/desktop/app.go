@@ -473,6 +473,8 @@ func RunApp(dataDir, port string) {
 	a.updates.backup = a.backups.beforeUpdate
 	a.updates.quit = wapp.Quit
 	a.updates.changed = func(u *updates) { a.shell.setUpdate(u.latest()) }
+	// opened, or brought to the front: a new version shows up there soon
+	win.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) { a.updates.windowOpened() })
 	go a.updates.loop(ctx)
 	wapp.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		// opened at login: reminders and backups run, the window waits for a click

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUpdateRoutes(t *testing.T) {
@@ -64,12 +65,35 @@ func TestUpdateRoutes(t *testing.T) {
 		t.Errorf("404 = %v", st)
 	}
 
-	// switching the daily check off is kept in settings.json
+	// switching the regular check off is kept in settings.json
 	if _, out = call("PUT", "/api/update", `{"auto":false}`); out["auto"] != false || u.settings.autoUpdate() {
 		t.Errorf("auto off = %v", out)
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if !strings.Contains(string(raw), `"no_update_check": true`) || loadSettings(dir).autoUpdate() {
 		t.Errorf("settings.json = %s", raw)
+	}
+}
+
+// Checks come every few hours, and on opening the window after a while.
+func TestUpdateDue(t *testing.T) {
+	now := time.Date(2026, 10, 26, 15, 0, 0, 0, time.Local)
+	for _, c := range []struct {
+		ago    time.Duration
+		onOpen bool
+		want   bool
+	}{
+		{3 * time.Hour, false, false},
+		{4 * time.Hour, false, true},
+		{29 * time.Minute, true, false},
+		{30 * time.Minute, true, true},
+	} {
+		if got := due(now, now.Add(-c.ago), c.onOpen); got != c.want {
+			t.Errorf("last %v ago, on open %v: due = %v, want %v", c.ago, c.onOpen, got, c.want)
+		}
+	}
+	// never checked yet: due either way
+	if !due(now, time.Time{}, false) || !due(now, time.Time{}, true) {
+		t.Error("no check yet is not due")
 	}
 }
