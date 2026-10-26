@@ -8,23 +8,40 @@
 
 A review counts when the repository owner posted it on the PR (and did not
 dismiss it), its first line is `## AI 审阅（<the head commit, 7 or more
-characters>…`, and its 结论 line is 「结论：没有必须修的问题，可以合。」 (的问题 may go)
+characters>…`, and its 结论 line says it can be merged with nothing to fix
+first: 「结论：没有必须修的问题，可以合。」 (的问题 may go), or 「结论：可以合」 with
+at most a note in brackets after it, as another reviewing agent writes it
 (see RELEASING.md for the format). A push after the review needs a new one.
 Uses `gh api`; the repository is $GITHUB_REPOSITORY, or the one gh finds here.
 Exits 0 when it passes, 1 with the reason when it does not.
 """
 import json, os, re, subprocess, sys
 
-# the one 结论 that lets a PR through, bold or not; anything after it on the
-# line is the reviewer's comment
-PASS = re.compile(r"\**\s*结论[：:]\s*没有必须修(的问题)?，可以合[。.]?\s*(\*\*|$)")
+# The 结论 lines that let a PR through, bold or not. The long one says there
+# is nothing to fix, so the reviewer's comment may follow the closing **:
+PASS = re.compile(r"\**\s*结论[：:]\s*没有必须修(的问题)?，可以合并?[。.]?\s*(\*\*|$)")
+# The short one, as another reviewing agent writes it, says only 可以合 (or
+# 可以合并), so the line has to end there, but for one note in brackets that
+# says there is nothing to fix first: 「可以合**（Comment；无挡合并项）」. Only
+# those notes (NOTE), not any note without a condition in it: no list of
+# conditions is ever complete (「需补一个测试」「待 CI 通过」「Must-fix 1 条」).
+SHORT = re.compile(r"\**\s*结论[：:]\s*可以合并?[。.]?\s*(\*\*)?\s*(?:[（(]([^（()）]*)[)）])?\s*(\*\*)?\s*$")
+NOTE = re.compile(r"\s*(?:(?:Comment|Approve)\s*[；;，,]\s*)?"
+                  r"无\s*(?:挡合并项|必须修(?:的问题)?|Must-fix|阻塞项)\s*[。.]?\s*", re.I)
+# a 结论 line: one that starts with 结论 once marks and underscores are gone
+# (「**结论**：」「结论（增量）：」「### 结论」). The first one is the review's,
+# even when it isn't a passing one: a 结论 further down doesn't count.
+CONCLUSION = re.compile(r"[\W_]*结论")
 
 
 def passes(body):
-    """The review's 结论 line is the passing one."""
+    """The review's 结论 line is a passing one."""
     for line in body.splitlines():
-        if re.match(r"\W*结论[：:]", line):
-            return bool(PASS.match(line))
+        if CONCLUSION.match(line):
+            if PASS.match(line):
+                return True
+            m = SHORT.match(line)
+            return bool(m) and (m.group(2) is None or bool(NOTE.fullmatch(m.group(2))))
     return False
 
 
@@ -77,7 +94,7 @@ class Gate:
                 if passes(r["body"]):
                     print(f"通过：PR #{number} 的 {head[:7]} 有 AI 审阅，结论可以合（{r['html_url']}）")
                     return
-                fail(f"PR #{number} 的 {head[:7]} 最近一次 AI 审阅结论不是「没有必须修的问题，可以合」：{r['html_url']}")
+                fail(f"PR #{number} 的 {head[:7]} 最近一次 AI 审阅结论不是「没有必须修的问题，可以合」或「可以合」（写法见 RELEASING.md）：{r['html_url']}")
         fail(f"PR #{number} 最新的提交 {head[:7]} 还没审过（审阅之后又推了提交）。再审一次，标题写这个提交号。")
 
     def commit(self, sha, prerelease=False):

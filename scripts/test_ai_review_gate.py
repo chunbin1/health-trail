@@ -12,7 +12,15 @@ class Passes(unittest.TestCase):
                      "**结论：没有必须修的问题，可以合。** 修复思路对：只认 IB Gateway。",  # cb-quant #48
                      "结论：没有必须修的问题，可以合",
                      "**结论：没有必须修，可以合。**",  # cb-quant, shorter
-                     "**结论: 没有必须修的问题，可以合。**"]:
+                     "**结论: 没有必须修的问题，可以合。**",
+                     "**结论：可以合**（Comment；无挡合并项）",  # another reviewing agent, PR #13
+                     "**结论：可以合**",
+                     "结论：可以合（无挡合并项）",
+                     "**结论：可以合（无挡合并项）**",
+                     "**结论：没有必须修的问题，可以合并。**",
+                     "**结论：可以合。**",
+                     "结论：可以合（无必须修的问题）",
+                     "**结论：可以合**（Approve, 无阻塞项）"]:
             self.assertTrue(passes(body), body)
 
     def test_anything_else(self):
@@ -22,12 +30,44 @@ class Passes(unittest.TestCase):
                      "**结论：有两处必须修，修完就可以合**",
                      "**结论：暂不可合；修好后可以合**",
                      "**结论：没有必须修的问题，可以合吗？**",
+                     "**结论：可以合吗？**",
+                     "**结论：可以合，但要先修 install_error 那处**",
+                     "**结论：修完就可以合**",
+                     "**结论：不可以合**",
+                     "**结论：暂不可合**（有一处必须修）",
+                     # the short 可以合 with a condition after it or in its note
+                     "**结论：可以合**，但要先修 install_error 那处",
+                     "**结论：可以合** 修完再合",
+                     "**结论：可以合。** 先修完两处再合",
+                     "**结论：可以合**（修完必须修第 1 条之后）",
+                     "结论：可以合（但有一处必须修）",
+                     "结论：可以合（前提是先修好下面的必须修）",
+                     "结论：可以合（x）但先修 y",
+                     "结论：可以合。（修完再合）",
+                     "结论：可以合(吗？)",
+                     "结论：可以合 (pending CI)",
+                     "**结论：可以合**（a）（b）",
+                     "结论：可以合【修完再合】",
+                     # a note is one of the fixed few, not any without a condition
+                     "**结论：可以合**（需补一个测试）",
+                     "**结论：可以合**（待 CI 通过）",
+                     "**结论：可以合**（有挡合并项）",
+                     "**结论：可以合**（Must-fix 1 条）",
+                     "**结论：可以合**（Request changes）",
+                     "**结论：可以合**（未验证）",
+                     "**结论：可以合**（ifCI绿）",
+                     "**结论：可以合**（Comment）",
+                     "结论：可以合（Verified on macOS）",
                      "没有结论行，可以合",
                      ""]:
             self.assertFalse(passes(body), body)
 
     def test_only_the_first_conclusion(self):
         self.assertFalse(passes("**结论：有必须修的问题，先别合。**\n\n结论：没有必须修的问题，可以合。"))
+        # however the 结论 line is marked up, it isn't one to look past
+        for first in ["**结论**：先别合", "__结论__：先别合", "*结论*：先别合", "**结论（增量）**：先别合",
+                      "结论（d44192d）：先别合", "### 结论\n先别合"]:
+            self.assertFalse(passes(first + "\n\n结论：可以合"), first)
 
 
 class Names(unittest.TestCase):
