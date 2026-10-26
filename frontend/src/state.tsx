@@ -112,7 +112,9 @@ export function useMetricKinds() {
     return {
       loaded: !!data,
       kinds,
-      types: [...schema.metric_types, ...kinds.map((k) => k.name as string)],
+      // BMI next to the height it's worked out with
+      types: [...new Set([...schema.metric_types.flatMap((m) => (m === '身高' ? [m, ...schema.metric_derived] : [m])), ...kinds.map((k) => k.name as string)])],
+      derived: schema.metric_derived,
       units: { ...schema.metric_units, ...Object.fromEntries(kinds.map((k) => [k.name, k.unit || ''])) } as Record<string, string>,
     }
   }, [schema, data])

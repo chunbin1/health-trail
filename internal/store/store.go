@@ -200,6 +200,9 @@ func (s *Store) convert(f Field, v any) (any, error) {
 // customOption accepts the name of a row of f.Custom for an enum that is
 // open to the user's own values (a metric they added).
 func (s *Store) customOption(f Field, v string) (any, error) {
+	if f.Custom == "metric_kinds" && strings.EqualFold(v, BMI) {
+		return nil, errBMI
+	}
 	names, err := s.customNames(f.Custom)
 	if err != nil {
 		return nil, err
@@ -293,10 +296,15 @@ func (s *Store) prepare(e *Entity, r Record) {
 	}
 }
 
+var errBMI = fmt.Errorf("BMI 不用记，由体重和身高自动算出：记体重（kg）和身高（cm）就行")
+
 // check refuses what the fields allow but the app doesn't.
 func check(e *Entity, r Record) error {
 	if name, _ := r["name"].(string); e.Name == "metric_kinds" && slices.Contains(MetricTypes, name) {
 		return invalid("「%s」已经是内置的指标，直接选它就行，不用新建", name)
+	}
+	if name, _ := r["name"].(string); e.Name == "metric_kinds" && strings.EqualFold(strings.TrimSpace(name), BMI) {
+		return invalid("%v", errBMI)
 	}
 	return nil
 }

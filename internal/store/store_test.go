@@ -633,3 +633,72 @@ func TestHabitsAreArchivedNotDeleted(t *testing.T) {
 		t.Errorf("check-ins of 喝水 = %d, want 1", n)
 	}
 }
+
+// BMI comes from each weight and the height of the time, and isn't recorded.
+func TestBMI(t *testing.T) {
+	s := open(t)
+	s.Create("metrics", Record{"measured_at": "2026-10-01 08:00", "metric_type": "体重", "value": 100})
+	if pts, err := s.MetricSeries(BMI, "", ""); err != nil || len(pts) != 0 {
+		t.Fatalf("no height: series = %v %v, want none", pts, err)
+	}
+	if o, _ := s.Overview(); len(o.LatestMetrics) != 1 {
+		t.Errorf("no height: latest = %v, want the weight only", o.LatestMetrics)
+	}
+	// a height measured later counts for the weights before it too
+	s.Create("metrics", Record{"measured_at": "2026-10-10 08:00", "metric_type": "身高", "value": 179})
+	s.Create("metrics", Record{"measured_at": "2026-10-20 08:00", "metric_type": "体重", "value": 186.6, "unit": "斤"})
+	// a new height counts from then on; 1.80 in cm is taken as metres
+	s.Create("metrics", Record{"measured_at": "2026-10-22 08:00", "metric_type": "身高", "value": 1.80})
+	w, _ := s.Create("metrics", Record{"measured_at": "2026-10-25 09:32", "metric_type": "体重", "value": 93.3})
+	// a unit it can't turn into kg is left out
+	s.Create("metrics", Record{"measured_at": "2026-10-23 08:00", "metric_type": "体重", "value": 93000, "unit": "g"})
+
+	pts, err := s.MetricSeries(BMI, "", "")
+	if err != nil || len(pts) != 3 {
+		t.Fatalf("series = %v %v, want 3", pts, err)
+	}
+	for i, want := range []struct {
+		v        float64
+		cat      string
+		heightCM float64
+	}{{31.2, "肥胖", 179}, {29.1, "肥胖", 179}, {28.8, "肥胖", 180}} {
+		if p := pts[i]; p["value"] != want.v || p["category"] != want.cat || p["height_cm"] != want.heightCM || p["unit"] != "kg/m²" {
+			t.Errorf("point %d = %v, want %v", i, p, want)
+		}
+	}
+	if pts[2]["source"] != "metrics" || pts[2]["id"] != w["id"] {
+		t.Errorf("last point = %v, want the weight #%v it is from", pts[2], w["id"])
+	}
+	if pts, _ := s.MetricSeries(BMI, "2026-10-21", ""); len(pts) != 1 || pts[0]["value"] != 28.8 {
+		t.Errorf("series from 10-21 = %v", pts)
+	}
+	o, err := s.Overview()
+	var latest Record
+	for _, m := range o.LatestMetrics {
+		if m["metric_type"] == BMI {
+			latest = m
+		}
+	}
+	if err != nil || latest == nil || latest["value"] != 28.8 || latest["measured_at"] != "2026-10-25 09:32" {
+		t.Errorf("latest BMI = %v %v, want 28.8 of 10-25", latest, err)
+	}
+
+	for _, in := range []Record{
+		{"measured_at": "today", "metric_type": "BMI", "value": 29},
+		{"measured_at": "today", "metric_type": "bmi", "value": 29},
+	} {
+		if _, err := s.Create("metrics", in); err == nil || !strings.Contains(err.Error(), "自动算出") {
+			t.Errorf("recording %v: err = %v, want told it's worked out", in["metric_type"], err)
+		}
+	}
+	for v, want := range map[float64]string{18.4: "偏瘦", 18.5: "正常", 23.9: "正常", 24: "超重", 27.9: "超重", 28: "肥胖"} {
+		if got := bmiCategory(v); got != want {
+			t.Errorf("BMI %v is %s, want %s", v, got, want)
+		}
+	}
+	for _, name := range []string{"BMI", " bmi ", "身高"} {
+		if _, err := s.Create("metric_kinds", Record{"name": name}); err == nil {
+			t.Errorf("metric kind %q was made", name)
+		}
+	}
+}

@@ -131,10 +131,11 @@ func idParam(r *http.Request) (int64, error) {
 
 func (s *Server) schema(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
-		"entities":     store.Entities,
-		"metric_types": store.MetricTypes,
-		"metric_units": store.MetricUnits,
-		"en":           map[string]any{"text": store.English, "nouns": store.EnglishNouns},
+		"entities":       store.Entities,
+		"metric_types":   store.MetricTypes,
+		"metric_derived": store.DerivedMetrics,
+		"metric_units":   store.MetricUnits,
+		"en":             map[string]any{"text": store.English, "nouns": store.EnglishNouns},
 	})
 }
 

@@ -144,6 +144,7 @@ var English = map[string]string{
 	"情境":     "Context",
 	"如：空腹、餐后 2 小时、晨起": "e.g. fasting, 2 h after a meal, on waking",
 	"体重":   "Weight",
+	"身高":   "Height",
 	"血压":   "Blood pressure",
 	"心率":   "Heart rate",
 	"血糖":   "Blood glucose",
@@ -155,6 +156,10 @@ var English = map[string]string{
 	"次/分":  "bpm",
 	"小时":   "h",
 	"步":    "steps",
+	// BMI's bands (bmiCategory)
+	"偏瘦": "Underweight",
+	"超重": "Overweight",
+	"肥胖": "Obese",
 
 	// habits
 	"如：吃药、运动、早睡":     "e.g. take meds, exercise, sleep early",

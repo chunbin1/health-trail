@@ -80,6 +80,9 @@ type settings struct {
 	NoUpdateCheck bool `json:"no_update_check,omitempty"`
 	// body metrics left off the 今天 page; a metric is shown unless listed
 	HiddenMetrics []string `json:"hidden_metrics,omitempty"`
+	// the metrics the 身体数据 page keeps under 更多; nil until chosen, when
+	// the page picks for itself
+	PageHidden *[]string `json:"metrics_page_hidden,omitempty"`
 }
 
 func (s *settings) lang() string {
@@ -100,6 +103,16 @@ func (s *settings) hiddenMetrics() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string{}, s.HiddenMetrics...)
+}
+
+// pageHidden is nil until the person has chosen.
+func (s *settings) pageHidden() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.PageHidden == nil {
+		return nil
+	}
+	return append([]string{}, (*s.PageHidden)...)
 }
 
 func (s *settings) autoUpdate() bool {

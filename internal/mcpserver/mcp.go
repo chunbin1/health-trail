@@ -24,6 +24,7 @@ const instructions = `这是用户本人的个人健康档案（单人）。所�
 - 要按时吃的药，把每天吃的时刻填进 medications 的 remind_times（如 "08:00, 20:00"）：到点还没记吃药，用户的电脑会提醒。只说了"一天两次"没说几点时，问用户平时几点吃，不要自己定。health_overview 的 meds_today 是今天每个时刻吃了没有。
 - 用户说要去做检查、复诊、体检等（以后的安排），用 add_record 记一条 appointments：scheduled_at 填日期和时刻；只说了"下午""明早"时问清几点，不要猜。地点填 place，空腹、带资料等要求填 preparation。会在前一天晚上 8 点和开始前（remind_before，默认 1 小时）提醒。health_overview 的 upcoming_appointments 是还没去的预约。
 - 预约过后用户讲了就诊或检查结果：照常新建 visits 或 reports（报告用 add_lab_report），再用 update_record 把那条预约的 status 改成"已完成"，visit_id 或 report_id 填新记录的 id。取消了就把 status 改成"已取消"。
+- 用户说身高、体重，用 add_record 记 metrics：身高记 metric_type "身高"（cm），体重记 "体重"（kg）。BMI 会自动算出来（health_overview 的 latest_metrics、get_metric_trend 的 "BMI"），不要单独记 BMI。
 - 化验/体检报告（包括用户发来的截图或 PDF）用 add_lab_report 一次写入：每个指标一行，结果原样填（如 "111.87↑"），参考范围原样填（如 "0-6"），偏高偏低会自动判断。写入后把识别出的条目复述给用户核对。
 - 不要编造数据；看不清的数值问用户，不要猜。
 - 你可以帮助整理、对比、发现趋势、准备就医问题，但不能替代医生诊断；涉及用药调整或明显异常时，建议用户咨询医生。
@@ -80,7 +81,7 @@ func New(st *store.Store, version string, local bool) *mcp.Server {
 		Description: "某个检验项目的历次结果（从旧到新），含参考范围和标记。项目名先精确匹配，没有再模糊匹配（如 \"反应蛋白\"、\"白细胞\"）。"},
 		t.labTrend)
 	mcp.AddTool(s, &mcp.Tool{Name: "get_metric_trend", Annotations: ro,
-		Description: "某项身体数据在一段时间内的全部读数（从旧到新）。metric_type 可选：" + strings.Join(store.MetricTypes, "、") + "，以及用户自定义的指标（health_overview 的 metric_kinds）。血压的 value 是收缩压、value2 是舒张压。每条读数的 source 说明来源：metrics 是身体数据记录；lab_results 是同名、同单位的检验指标（化验单上的结果，只是一起列出，id 是检验指标的 id，要改就改那条检验指标）。"},
+		Description: "某项身体数据在一段时间内的全部读数（从旧到新）。metric_type 可选：" + strings.Join(store.MetricTypes, "、") + "，以及用户自定义的指标（health_overview 的 metric_kinds），还有 BMI。血压的 value 是收缩压、value2 是舒张压。每条读数的 source 说明来源：metrics 是身体数据记录；lab_results 是同名、同单位的检验指标（化验单上的结果，只是一起列出，id 是检验指标的 id，要改就改那条检验指标）。BMI 不是记下来的：每次体重配上当时的身高（那之前最近一次的身高，没有就用最早的一次）自动算出，category 是按中国成人标准的分档（偏瘦 <18.5、正常 18.5–23.9、超重 24–27.9、肥胖 ≥28），source 和 id 是那条体重的。"},
 		t.metricTrend)
 	mcp.AddTool(s, &mcp.Tool{Name: "checkin",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &no, IdempotentHint: true},

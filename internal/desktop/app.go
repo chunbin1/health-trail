@@ -145,24 +145,35 @@ func (a *app) handler() http.Handler {
 			LAN           *bool     `json:"lan"`
 			Lang          *string   `json:"lang"`
 			HiddenMetrics *[]string `json:"hidden_metrics"`
+			PageHidden    *[]string `json:"metrics_page_hidden"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, `{"error":"无效的请求"}`, http.StatusBadRequest)
 			return
 		}
-		if in.HiddenMetrics != nil {
+		for _, l := range []struct {
+			name string
+			in   *[]string
+			set  func([]string)
+		}{
+			{"hidden_metrics", in.HiddenMetrics, func(h []string) { a.settings.HiddenMetrics = h }},
+			{"metrics_page_hidden", in.PageHidden, func(h []string) { a.settings.PageHidden = &h }},
+		} {
+			if l.in == nil {
+				continue
+			}
 			hidden := []string{}
-			for _, m := range *in.HiddenMetrics {
+			for _, m := range *l.in {
 				if m = strings.TrimSpace(m); m != "" && !slices.Contains(hidden, m) {
 					hidden = append(hidden, m)
 				}
 			}
 			if len(hidden) > 200 {
-				http.Error(w, `{"error":"hidden_metrics 最多 200 项"}`, http.StatusBadRequest)
+				http.Error(w, `{"error":"`+l.name+` 最多 200 项"}`, http.StatusBadRequest)
 				return
 			}
 			a.settings.mu.Lock()
-			a.settings.HiddenMetrics = hidden
+			l.set(hidden)
 			a.settings.mu.Unlock()
 			if err := a.settings.save(); err != nil {
 				log.Printf("保存设置失败：%v", err)
@@ -353,6 +364,7 @@ func (a *app) info(r *http.Request) map[string]any {
 		"lan":                   a.settings.LAN,
 		"lang":                  a.settings.lang(),
 		"hidden_metrics":        a.settings.hiddenMetrics(),
+		"metrics_page_hidden":   a.settings.pageHidden(),
 		"listening":             a.listener.addr(),
 		"listen_error":          a.listener.errText(),
 		"phone_urls":            phone,

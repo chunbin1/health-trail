@@ -43,6 +43,9 @@ export function setLang(l: Lang, schema?: Schema) {
   }
   document.documentElement.lang = l === 'en' ? 'en' : 'zh-CN'
   document.title = t('健康足迹')
+  // the name an iPhone gives it on the home screen
+  document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', t('健康足迹'))
+  document.querySelector('link[rel="manifest"]')?.setAttribute('href', l === 'en' ? '/manifest.en.webmanifest' : '/manifest.webmanifest')
 }
 
 type Plural = readonly [one: string, other: string]
@@ -315,6 +318,16 @@ const EN = {
   '修改这个指标': 'Edit this metric',
   '舒张压': 'Diastolic',
   '记一笔': 'Log a reading',
+  '选择直接显示的指标': 'Choose the metrics to show',
+  '更多 {n}': '{n} more',
+  '关掉的指标收进「更多」，记录都还在。': 'Metrics turned off move under "more"; their readings stay.',
+  '自动计算': 'Worked out for you',
+  'BMI = 体重（kg）÷ 身高（m）的平方。每次记体重，都按那时的身高算一次，不用单独记。': 'BMI = weight (kg) ÷ height (m) squared. Each weight you log is worked out with your height at the time, so there is nothing to log here.',
+  '中国成人标准：低于 18.5 偏瘦，18.5–23.9 正常，24–27.9 超重，28 及以上肥胖。': 'Chinese adult standard: under 18.5 underweight, 18.5–23.9 normal, 24–27.9 overweight, 28 and over obese.',
+  '身高 {n}': 'Height {n}',
+  '先记一次身高': 'Log your height first',
+  '记体重': 'Log weight',
+  '记一次身高，就能按体重算出 BMI': 'Log your height once, and BMI is worked out from your weight',
   '数值': 'Value',
   '情境': 'Context',
   '如 空腹、晨起': 'e.g. fasting, on waking',

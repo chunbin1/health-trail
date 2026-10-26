@@ -40,7 +40,8 @@ Go SDK 会**并发**处理同一连接上的请求。把整个请求文件一次
 ### 24. 改 bundle id 等于换了一个新 App：通知、登录项这些系统授权都要重新给，改完要确认提醒还能弹
 macOS 按 bundle id 记通知权限。改名时 bundle id 从 com.health-vault.app 换成 com.chunbin1.healthtrail，新 id 没有通知权限，提醒就静默失效了；而当时的代码在启动时问一次权限，没给就直接放弃，界面上什么也不显示。现在 App 每 30 秒重新检查一次，没有权限时「今天」和「设置」页顶上会提示。以后改 bundle id、签名身份之后，启动一次，看日志里有没有「没有通知权限」。
 - 证据：2026-10-22，做菜单栏常驻时启动测试窗口，日志里有 `Notifications are not allowed for this application`，才发现改名之后提醒一直没在工作。
-- 出现：1
+- 证据：2026-10-26，用户问「今天的预约为啥没进日历」。从仓库里临时签名的 App 换成 /Applications 里 Developer ID 签名的 App 后，macOS 认成了新 App，日历和提醒事项的权限回到「还没问过」；后台同步只检查、不请求，`calendar-sync.json` 的 last_error 一直在报错，用户没注意到设置页的提示。换签名身份（不只是 bundle id）之后，也要打开设置页，看「同步到 iPhone」有没有报错、要不要点「允许访问」。
+- 出现：2
 
 ### 23. 加新的记录类型时，grep 一个老类型名，找出 schema 之外手写的类型列表
 schema.go 是唯一来源，但还有几处是手写的：MCP `add_record` 的 `type` 参数说明（结构体 tag，不能从 schema 生成）、`search_records` 的说明、前端导航和「更多」列表、`CHILD_LABELS`。漏了不会报错，Claude 只是不知道可以用这个类型。加类型时搜一个现有类型名（如 `metric_kinds`、`'medications'`），逐个补上。
