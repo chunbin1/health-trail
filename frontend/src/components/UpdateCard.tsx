@@ -15,10 +15,16 @@ export function UpdateCard({ status }: { status: UpdateStatus | null }) {
   const [cur, setCur] = useState<UpdateStatus | null>(null)
   const [err, setErr] = useState('')
   const [, setClosed] = useState('')
-  useEffect(() => setCur(null), [status])
+  // a newer status from the app replaces what this card last heard,
+  // including a request it had turned down
+  useEffect(() => {
+    setCur(null)
+    setErr('')
+  }, [status])
   const s = cur || status
   const st = s?.state
-  const running = !!st && (st.checking || !!st.phase)
+  // a check under way doesn't hold up the button: installing goes ahead
+  const running = !!st?.phase
   useEffect(() => {
     if (!running) return
     const id = setInterval(() => api.updateStatus().then(setCur, () => {}), 700)
@@ -31,7 +37,7 @@ export function UpdateCard({ status }: { status: UpdateStatus | null }) {
   async function install() {
     if (running) return
     setErr('')
-    setCur({ ...s!, state: { ...st!, phase: 'backup', error: '' } })
+    setCur({ ...s!, state: { ...st!, phase: 'backup', error: '', install_error: '' } })
     try {
       setCur(await api.installUpdate())
       // Settings, if it is open, follows along
@@ -43,7 +49,9 @@ export function UpdateCard({ status }: { status: UpdateStatus | null }) {
   }
   const pct = st.total ? Math.floor(((st.done || 0) * 100) / st.total) : 0
   const phase = st.phase === 'backup' ? t('正在备份…') : st.phase === 'download' ? (st.total ? t('正在下载 {pct}%', { pct }) : t('正在下载…')) : st.phase === 'restart' ? t('正在重启…') : ''
-  const error = err || st.error
+  // only why an install didn't finish: a check that couldn't reach GitHub
+  // leaves the version found, and isn't an update that failed
+  const error = err || st.install_error
   return (
     <div className="update-card" role="status">
       <div className="update-card-head">

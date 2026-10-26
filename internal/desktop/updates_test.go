@@ -3,6 +3,7 @@ package desktop
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -74,6 +75,49 @@ func TestUpdateRoutes(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if !strings.Contains(string(raw), `"no_update_check": true`) || loadSettings(dir).autoUpdate() {
 		t.Errorf("settings.json = %s", raw)
+	}
+}
+
+// A failed install and a failed check are told apart: the sidebar card
+// shows only the first, so a check that can't reach GitHub after a newer
+// version was found doesn't look like the update failed.
+func TestUpdateInstallErrorApart(t *testing.T) {
+	up := true
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !up {
+			http.Error(w, "down", http.StatusBadGateway)
+			return
+		}
+		fmt.Fprint(w, `{"tag_name":"v99.0.0","assets":[]}`)
+	}))
+	defer gh.Close()
+	u := newUpdates(loadSettings(t.TempDir()))
+	u.url, u.app = gh.URL, ""
+	u.check(context.Background())
+	if u.state.Latest == nil || u.state.Error != "" {
+		t.Fatalf("after a check = %+v", u.state)
+	}
+
+	up = false
+	u.check(context.Background())
+	if u.state.Latest == nil || u.state.Error == "" || u.state.Failed != "" {
+		t.Errorf("a check that fails is an install error: %+v", u.state)
+	}
+
+	u.backup = func() error { return errors.New("disk full") }
+	u.state.Phase = "backup"
+	u.run(u.state.Latest)
+	if u.state.Phase != "" || !strings.Contains(u.state.Failed, "备份") {
+		t.Errorf("a failed install = %+v", u.state)
+	}
+	raw, _ := json.Marshal(u.status())
+	if !strings.Contains(string(raw), `"install_error":"`) {
+		t.Errorf("status = %s", raw)
+	}
+	// the next check keeps why the install failed
+	u.check(context.Background())
+	if !strings.Contains(u.state.Failed, "备份") {
+		t.Errorf("a check cleared the install error: %+v", u.state)
 	}
 }
 

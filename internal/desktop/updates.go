@@ -39,7 +39,8 @@ type updateState struct {
 	CheckedAt string          `json:"checked_at,omitempty"` // YYYY-MM-DD HH:MM:SS
 	Checking  bool            `json:"checking"`
 	Latest    *update.Release `json:"latest,omitempty"` // only when newer than this build
-	Error     string          `json:"error,omitempty"`
+	Error     string          `json:"error,omitempty"`         // of the last check
+	Failed    string          `json:"install_error,omitempty"` // why the last install didn't finish
 	Phase     string          `json:"phase,omitempty"` // backup, download, install, restart
 	Done      int64           `json:"done,omitempty"`  // of the download
 	Total     int64           `json:"total,omitempty"`
@@ -186,7 +187,7 @@ func (u *updates) install() error {
 		u.mu.Unlock()
 		return errors.New(u.settings.msg("现在没有可以安装的新版本", "There's no update to install right now"))
 	}
-	u.state.Phase, u.state.Error, u.state.Done, u.state.Total = "backup", "", 0, r.ZipSize
+	u.state.Phase, u.state.Error, u.state.Failed, u.state.Done, u.state.Total = "backup", "", "", 0, r.ZipSize
 	u.mu.Unlock()
 	go u.run(r)
 	return nil
@@ -196,7 +197,7 @@ func (u *updates) run(r *update.Release) {
 	fail := func(msg string, err error) {
 		log.Printf("更新到 %s 失败：%v", r.Version, err)
 		u.mu.Lock()
-		u.state.Phase, u.state.Error = "", msg
+		u.state.Phase, u.state.Failed = "", msg
 		u.mu.Unlock()
 	}
 	if u.backup != nil {

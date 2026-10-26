@@ -152,7 +152,7 @@ function Updates() {
   async function install() {
     const r = st!.latest
     if (running || !r || !(await ask(t('更新到 {version}？\n\n设置了备份的话，会先备份一次数据；然后下载新版本、检查签名，替换后重新打开健康足迹。', { version: r.version }), { ok: t('更新并重启') }))) return
-    setCur({ ...s!, state: { ...st!, phase: 'backup', error: '' } })
+    setCur({ ...s!, state: { ...st!, phase: 'backup', error: '', install_error: '' } })
     await run(api.installUpdate)
     // the card in the sidebar follows along
     window.dispatchEvent(new Event('update-checked'))
@@ -189,7 +189,7 @@ function Updates() {
           {s.why_not && s.installable && !phase && <div className="small muted" style={{ marginTop: 8 }}>{s.why_not}</div>}
         </div>
       )}
-      {(err || st.error) && <div className="error" style={{ marginBottom: 12 }}>{err || st.error}</div>}
+      {(err || st.install_error || st.error) && <div className="error" style={{ marginBottom: 12 }}>{err || st.install_error || st.error}</div>}
       <div className="sync-row">
         <div style={{ flex: 1, minWidth: 0 }}>
           <div>{t('自动检查更新')}</div>
