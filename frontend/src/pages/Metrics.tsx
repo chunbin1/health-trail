@@ -78,7 +78,7 @@ export function Metrics() {
   return (
     <>
       <div className="page-head">
-        <div className="titles"><h1>{t('身体数据')}<IconButton small label={t('选择直接显示的指标')} onClick={() => setChoosing(true)}><SlidersHorizontal size={16} /></IconButton></h1><div className="sub">{t('体重、血压、血糖等日常测量')}</div></div>
+        <div className="titles"><h1>{t('身体数据')}</h1><div className="sub">{t('体重、血压、血糖等日常测量')}</div></div>
       </div>
       {/* drawn once it's known which are shown, so nothing jumps */}
       <div className="pills" style={{ marginBottom: 18, minHeight: 34 }}>
@@ -86,7 +86,11 @@ export function Metrics() {
           {shown.map((m) => (
             <button key={m} className={'pill' + (m === type ? ' on' : '')} onClick={() => setType(m)}>{tx(m)}</button>
           ))}
-          <button className="pill" onClick={() => setAddingKind(true)}><Plus size={13} />{t('新指标')}</button>
+          {/* kept together so a wrap never splits them */}
+          <span className="pills nowrap">
+            <button className="pill" onClick={() => setAddingKind(true)}><Plus size={13} />{t('新指标')}</button>
+            <button className="pill icon" onClick={() => setChoosing(true)} aria-label={t('选择直接显示的指标')} title={t('选择直接显示的指标')}><SlidersHorizontal size={14} /></button>
+          </span>
         </>}
       </div>
       <div className="stack">
