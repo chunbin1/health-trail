@@ -17,18 +17,29 @@ Exits 0 when it passes, 1 with the reason when it does not.
 """
 import json, os, re, subprocess, sys
 
-# the 结论 that lets a PR through, bold or not: 可以合 (or 可以合并) right at the
-# start, or after 没有必须修(的问题)，, and nothing after it but the end, the
-# closing ** (the reviewer's comment may follow) or a note in brackets.
-# 「修完就可以合」「可以合，但……」「可以合吗」 don't start or end that way.
-PASS = re.compile(r"\**\s*结论[：:]\s*(没有必须修(的问题)?，)?可以合并?[。.]?\s*(\*\*|[（(]|$)")
+# The 结论 lines that let a PR through, bold or not. The long one says there
+# is nothing to fix, so the reviewer's comment may follow the closing **:
+PASS = re.compile(r"\**\s*结论[：:]\s*没有必须修(的问题)?，可以合并?[。.]?\s*(\*\*|$)")
+# The short one, as another reviewing agent writes it, says only 可以合 (or
+# 可以合并), so the line has to end there, but for one note in brackets with
+# no condition in it: 「可以合**（Comment；无挡合并项）」, not 「可以合** 修完再合」
+# or 「可以合（但先修 X）」. A note that only looks like a condition fails too.
+SHORT = re.compile(r"\**\s*结论[：:]\s*可以合并?[。.]?\s*(\*\*)?\s*(?:[（(]([^（()）]*)[)）])?\s*(\*\*)?\s*$")
+CONDITION = re.compile(r"修|但|先|再|后|前提|除非|条件|不|否|暂|等|吗|[?？]"
+                       r"|\b(pending|but|after|until|unless|if|once|wait)\b", re.I)
+# a 结论 line, 「**结论**：」 too: the first one is the review's, even when
+# it isn't a passing one (a 结论 further down doesn't count)
+CONCLUSION = re.compile(r"\W*结论(\*\*)?\s*[：:]")
 
 
 def passes(body):
-    """The review's 结论 line is the passing one."""
+    """The review's 结论 line is a passing one."""
     for line in body.splitlines():
-        if re.match(r"\W*结论[：:]", line):
-            return bool(PASS.match(line))
+        if CONCLUSION.match(line):
+            if PASS.match(line):
+                return True
+            m = SHORT.match(line)
+            return bool(m) and not CONDITION.search(m.group(2) or "")
     return False
 
 

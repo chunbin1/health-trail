@@ -17,7 +17,9 @@ class Passes(unittest.TestCase):
                      "**结论：可以合**",
                      "结论：可以合（无挡合并项）",
                      "**结论：可以合（无挡合并项）**",
-                     "**结论：没有必须修的问题，可以合并。**"]:
+                     "**结论：没有必须修的问题，可以合并。**",
+                     "**结论：可以合。**",
+                     "结论：可以合（Verified on macOS）"]:  # "if" inside a word isn't one
             self.assertTrue(passes(body), body)
 
     def test_anything_else(self):
@@ -32,12 +34,27 @@ class Passes(unittest.TestCase):
                      "**结论：修完就可以合**",
                      "**结论：不可以合**",
                      "**结论：暂不可合**（有一处必须修）",
+                     # the short 可以合 with a condition after it or in its note
+                     "**结论：可以合**，但要先修 install_error 那处",
+                     "**结论：可以合** 修完再合",
+                     "**结论：可以合。** 先修完两处再合",
+                     "**结论：可以合**（修完必须修第 1 条之后）",
+                     "结论：可以合（但有一处必须修）",
+                     "结论：可以合（前提是先修好下面的必须修）",
+                     "结论：可以合（x）但先修 y",
+                     "结论：可以合。（修完再合）",
+                     "结论：可以合(吗？)",
+                     "结论：可以合 (pending CI)",
+                     "**结论：可以合**（a）（b）",
+                     "结论：可以合【修完再合】",
                      "没有结论行，可以合",
                      ""]:
             self.assertFalse(passes(body), body)
 
     def test_only_the_first_conclusion(self):
         self.assertFalse(passes("**结论：有必须修的问题，先别合。**\n\n结论：没有必须修的问题，可以合。"))
+        # 「**结论**：」 is the 结论 line too, not one to look past
+        self.assertFalse(passes("**结论**：先别合\n\n结论：可以合"))
 
 
 class Names(unittest.TestCase):
