@@ -195,6 +195,7 @@ func (u *updates) install() error {
 }
 
 func (u *updates) run(r *update.Release) {
+	r = u.freshest(r)
 	fail := func(msg string, err error) {
 		log.Printf("更新到 %s 失败：%v", r.Version, err)
 		u.mu.Lock()
@@ -228,6 +229,27 @@ func (u *updates) run(r *update.Release) {
 		return
 	}
 	u.quit()
+}
+
+// freshest asks GitHub once more just before installing. The version found
+// may be hours old: with a newer one out since, installing what was found
+// would bring the versions one at a time, one restart each. When GitHub
+// can't be asked, the one found is still newer than this build.
+func (u *updates) freshest(r *update.Release) *update.Release {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	n, err := update.Latest(ctx, u.client, u.url)
+	if err != nil || !update.Newer(n.Version, r.Version) || !n.Installable() {
+		return r
+	}
+	log.Printf("安装前又查到更新的版本：%s（原来找到的是 %s）", n.Version, r.Version)
+	u.mu.Lock()
+	u.state.Latest, u.state.Total = n, n.ZipSize
+	u.mu.Unlock()
+	if u.changed != nil {
+		u.changed(u)
+	}
+	return n
 }
 
 func (u *updates) setPhase(p string) {

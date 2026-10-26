@@ -133,6 +133,52 @@ func TestUpdateInstallErrorApart(t *testing.T) {
 	}
 }
 
+// Installing asks GitHub again first: a version released since the last
+// check is the one installed, not the older one found then.
+func TestUpdateInstallsFreshest(t *testing.T) {
+	up, release := true, "99.0.0"
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !up {
+			http.Error(w, "down", http.StatusBadGateway)
+			return
+		}
+		fmt.Fprintf(w, `{"tag_name":"v%[1]s","assets":[{"name":"HealthTrail-%[1]s.zip","browser_download_url":"https://example.invalid/u.zip","size":3}]}`, release)
+	}))
+	defer gh.Close()
+	u := newUpdates(loadSettings(t.TempDir()))
+	u.url, u.app = gh.URL, ""
+	changed := 0
+	u.changed = func(*updates) { changed++ }
+	u.check(context.Background())
+	// the backup is the first step after asking again: it says which
+	// version is about to be installed, and stops there
+	var installing string
+	u.backup = func() error {
+		installing = u.state.Latest.Version
+		return errors.New("stop here")
+	}
+
+	release = "99.0.2"
+	changed = 0
+	u.run(u.state.Latest)
+	if installing != "99.0.2" || u.state.Latest.Version != "99.0.2" || changed != 1 {
+		t.Errorf("released since the check: installing %q, found %q, menu told %d times", installing, u.state.Latest.Version, changed)
+	}
+
+	// GitHub can't be asked: the version found is installed
+	up = false
+	u.run(u.state.Latest)
+	if installing != "99.0.2" {
+		t.Errorf("GitHub down: installing %q", installing)
+	}
+	// GitHub answers with an older one (a release pulled): not gone back to
+	up, release = true, "99.0.1"
+	u.run(u.state.Latest)
+	if installing != "99.0.2" {
+		t.Errorf("older answer: installing %q", installing)
+	}
+}
+
 // Checks come every few hours, and on opening the window after a while.
 func TestUpdateDue(t *testing.T) {
 	now := time.Date(2026, 10, 26, 15, 0, 0, 0, time.Local)
