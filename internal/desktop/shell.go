@@ -3,6 +3,7 @@ package desktop
 import (
 	_ "embed"
 	"log"
+	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -28,6 +29,9 @@ type shell struct {
 	newer    string
 	atLogin  *application.MenuItem
 	quitItem *application.MenuItem
+	// refresh rebuilds the menu; one at a time, as the start, a language
+	// switch and an update check can each ask for it at once
+	mu sync.Mutex
 }
 
 func newShell(wapp *application.App, win *application.WebviewWindow, lang func() string, onHide func()) *shell {
@@ -90,16 +94,20 @@ func (s *shell) setAutostart(on bool) error {
 
 // setUpdate shows the newer version found in the menu, or hides it (nil).
 func (s *shell) setUpdate(r *update.Release) {
+	s.mu.Lock()
 	s.newer = ""
 	if r != nil {
 		s.newer = r.Version
 	}
+	s.mu.Unlock()
 	s.refresh()
 }
 
 // refresh puts the menu in the UI's language and shows whether the app
 // opens at login (which can also change in System Settings).
 func (s *shell) refresh() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	en := s.lang() == "en"
 	pick := func(zh, e string) string {
 		if en {
