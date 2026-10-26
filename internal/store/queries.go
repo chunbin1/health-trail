@@ -63,8 +63,11 @@ func (s *Store) latestMetrics() ([]Record, error) {
 		if err != nil {
 			return nil, err
 		}
-		// newer than one recorded under a BMI of the person's own
-		if b := bmiOf(w, hs); b != nil && (latest[BMI] == nil || fmt.Sprint(b["measured_at"]) >= fmt.Sprint(latest[BMI]["measured_at"])) {
+		// newer than one recorded under a BMI of the person's own, or one
+		// printed on a report, unless it's from that report's weight
+		cur := latest[BMI]
+		sameReport := cur != nil && cur["source"] == "lab_results" && cur["report_id"] != nil && cur["report_id"] == w["report_id"]
+		if b := bmiOf(w, hs); b != nil && !sameReport && (cur == nil || fmt.Sprint(b["measured_at"]) >= fmt.Sprint(cur["measured_at"])) {
 			latest[BMI] = b
 		}
 	}

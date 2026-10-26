@@ -115,7 +115,8 @@ func bmiOf(w Record, heights []Record) Record {
 		"from":   "体重",
 		"source": w["source"], "id": w["id"], "metric_type": BMI, "measured_at": w["measured_at"],
 		"value": v, "value2": nil, "unit": "kg/m²", "category": bmiCategory(v),
-		"weight_kg": math.Round(kg*10) / 10, "height_cm": math.Round(m * 100), "context": w["context"], "report_title": w["report_title"],
+		"weight_kg": math.Round(kg*10) / 10, "height_cm": math.Round(m * 100), "context": w["context"],
+		"report_id": w["report_id"], "report_title": w["report_title"],
 	}
 }
 
@@ -163,13 +164,20 @@ func (s *Store) bmiSeries(from, to string) ([]Record, error) {
 		}
 		out = append(out, own...)
 	}
-	// a lab result comes once, though a BMI of the person's own takes it too
+	// a lab result comes once, though a BMI of the person's own takes it too;
+	// and a report that prints its BMI isn't worked out again from its weight
 	seen := map[string]bool{}
+	printed := map[any]bool{}
+	for _, r := range out {
+		if r["source"] == "lab_results" && r["from"] == nil && r["report_id"] != nil {
+			printed[r["report_id"]] = true
+		}
+	}
 	out = slices.DeleteFunc(out, func(r Record) bool {
 		k := fmt.Sprint(r["source"], r["id"], r["from"])
 		dup := seen[k]
 		seen[k] = true
-		return dup
+		return dup || r["from"] != nil && r["source"] == "lab_results" && printed[r["report_id"]]
 	})
 	sort.SliceStable(out, func(i, j int) bool { return fmt.Sprint(out[i]["measured_at"]) < fmt.Sprint(out[j]["measured_at"]) })
 	return out, nil

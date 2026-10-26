@@ -533,12 +533,12 @@ func (s *Store) inUse(e *Entity, id int64) error {
 	if err != nil {
 		return err
 	}
-	// one named like a built-in metric: its readings stay, under that one
-	if name, _ := cur["name"].(string); slices.Contains(MetricTypes, name) {
-		return nil
-	}
 	var metrics, habits int
-	s.DB.QueryRow("SELECT COUNT(*) FROM metrics WHERE metric_type = ?", cur["name"]).Scan(&metrics)
+	// one named like a built-in metric: its readings stay, under that one
+	// (a habit still needs it: not every built-in can be a habit's)
+	if name, _ := cur["name"].(string); !slices.Contains(MetricTypes, name) {
+		s.DB.QueryRow("SELECT COUNT(*) FROM metrics WHERE metric_type = ?", cur["name"]).Scan(&metrics)
+	}
 	s.DB.QueryRow("SELECT COUNT(*) FROM habits WHERE metric_type = ?", cur["name"]).Scan(&habits)
 	if metrics+habits == 0 {
 		return nil

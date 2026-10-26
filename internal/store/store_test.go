@@ -806,3 +806,66 @@ func TestBMIHeightOnTheDayOfALabWeight(t *testing.T) {
 		t.Errorf("series = %v, want the height of that day, 179", pts)
 	}
 }
+
+// A 体检 report with height, weight and BMI gives one BMI that day: the one
+// printed, not one worked out again from its weight.
+func TestBMIPrintedOnAReportComesOnce(t *testing.T) {
+	s := open(t)
+	rep, err := s.Create("reports", Record{"report_date": "2026-10-25", "title": "体检", "report_type": "体检"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bmi Record
+	for _, r := range []Record{
+		{"item_name": "身高", "value_num": 175, "unit": "cm"},
+		{"item_name": "体重", "value_num": 70, "unit": "kg"},
+		{"item_name": "BMI", "value_num": 22.9, "unit": "kg/m²"},
+	} {
+		r["report_id"], r["test_date"] = rep["id"], "2026-10-25"
+		if bmi, err = s.Create("lab_results", r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// a weighing at home that day is still worked out
+	s.Create("metrics", Record{"measured_at": "2026-10-25 21:00", "metric_type": "体重", "value": 71})
+	pts, err := s.MetricSeries(BMI, "", "")
+	if err != nil || len(pts) != 2 || pts[0]["id"] != bmi["id"] || pts[0]["from"] != nil || pts[1]["source"] != "metrics" || pts[1]["value"] != 23.2 {
+		t.Errorf("series = %v %v, want the printed 22.9 and the home 23.2", pts, err)
+	}
+	o, _ := s.Overview()
+	for _, m := range o.LatestMetrics {
+		if m["metric_type"] == BMI && m["value"] != 23.2 {
+			t.Errorf("latest BMI = %v, want the home weighing's", m)
+		}
+	}
+	// without the home weighing, the latest is the printed one
+	s2 := open(t)
+	rep2, _ := s2.Create("reports", Record{"report_date": "2026-10-25", "title": "体检"})
+	for _, r := range []Record{{"item_name": "身高", "value_num": 175, "unit": "cm"}, {"item_name": "体重", "value_num": 70, "unit": "kg"}, {"item_name": "BMI", "value_num": 22.8, "unit": "kg/m²"}} {
+		r["report_id"], r["test_date"] = rep2["id"], "2026-10-25"
+		s2.Create("lab_results", r)
+	}
+	o2, _ := s2.Overview()
+	for _, m := range o2.LatestMetrics {
+		if m["metric_type"] == BMI && (m["value"] != 22.8 || m["source"] != "lab_results") {
+			t.Errorf("latest BMI = %v, want the printed 22.8", m)
+		}
+	}
+}
+
+// An own 身高 a check-in item logs to can't be deleted: 身高 isn't one a
+// habit may log, so the item would be left with a choice it can't save.
+func TestOwnHeightUsedByAHabit(t *testing.T) {
+	s := open(t)
+	if _, err := s.DB.Exec(`INSERT INTO metric_kinds (name, unit, created_at, updated_at) VALUES ('身高', 'cm', '2026-01-01 00:00', '2026-01-01 00:00')`); err != nil {
+		t.Fatal(err)
+	}
+	var kind int64
+	s.DB.QueryRow(`SELECT id FROM metric_kinds WHERE name = '身高'`).Scan(&kind)
+	if _, err := s.Create("habits", Record{"name": "量身高", "metric_type": "身高"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete("metric_kinds", kind); err == nil || !strings.Contains(err.Error(), "打卡项") {
+		t.Errorf("deleting it: err = %v, want told a check-in item uses it", err)
+	}
+}
