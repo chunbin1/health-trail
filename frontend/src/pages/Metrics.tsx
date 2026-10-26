@@ -87,9 +87,9 @@ export function Metrics() {
             <button key={m} className={'pill' + (m === type ? ' on' : '')} onClick={() => setType(m)}>{tx(m)}</button>
           ))}
           {/* kept together so a wrap never splits them */}
-          <span className="pills nowrap">
+          <span className="pill-group">
             <button className="pill" onClick={() => setAddingKind(true)}><Plus size={13} />{t('新指标')}</button>
-            <button className="pill icon" onClick={() => setChoosing(true)} aria-label={t('选择直接显示的指标')} title={t('选择直接显示的指标')}><SlidersHorizontal size={14} /></button>
+            <button type="button" className="pill icon" onClick={() => setChoosing(true)} aria-label={t('选择直接显示的指标')} title={t('选择直接显示的指标')}><SlidersHorizontal size={14} /></button>
           </span>
         </>}
       </div>

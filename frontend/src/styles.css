@@ -314,7 +314,8 @@ select.input {
 @media (max-width: 760px) { .seg button { padding: 0 9px; } }
 
 .pills { display: flex; gap: 6px; flex-wrap: wrap; }
-.pills.nowrap { flex-wrap: nowrap; }
+/* buttons that wrap as one */
+.pill-group { display: flex; gap: 6px; }
 .pill {
   height: 32px; padding: 0 14px; border-radius: 16px; border: 0; cursor: pointer;
   background: var(--surface); box-shadow: var(--shadow); font-size: 13px; color: var(--ink-2);
