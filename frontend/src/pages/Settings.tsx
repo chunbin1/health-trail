@@ -151,7 +151,7 @@ function Updates() {
   }
   async function install() {
     const r = st!.latest
-    if (running || !r || !(await ask(t('更新到 {version}？\n\n设置了备份的话，会先备份一次数据；然后下载新版本、检查签名，替换后重新打开健康足迹。', { version: r.version }), { ok: t('更新并重启') }))) return
+    if (running || !r || !(await ask(t('更新到最新版本？\n\n设置了备份的话，会先备份一次数据；然后下载最新的版本、检查签名，替换后重新打开健康足迹。'), { ok: t('更新并重启') }))) return
     setCur({ ...s!, state: { ...st!, phase: 'backup', error: '', install_error: '' } })
     await run(api.installUpdate)
     // the card in the sidebar follows along

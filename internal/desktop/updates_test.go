@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lee/health-trail/internal/update"
 )
 
 func TestUpdateRoutes(t *testing.T) {
@@ -176,6 +178,38 @@ func TestUpdateInstallsFreshest(t *testing.T) {
 	u.run(u.state.Latest)
 	if installing != "99.0.2" {
 		t.Errorf("older answer: installing %q", installing)
+	}
+}
+
+// A check that started before an install and comes back during it doesn't
+// take back the version the install found by asking again.
+func TestUpdateLateCheckDuringInstall(t *testing.T) {
+	asked, answer := make(chan bool), make(chan bool)
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked <- true
+		if !<-answer {
+			http.Error(w, "down", http.StatusBadGateway)
+			return
+		}
+		fmt.Fprint(w, `{"tag_name":"v99.0.0","assets":[]}`)
+	}))
+	defer gh.Close()
+	u := newUpdates(loadSettings(t.TempDir()))
+	u.url, u.app = gh.URL, ""
+	for _, up := range []bool{true, false} {
+		u.state.Phase = "" // the install before is over
+		done := make(chan bool)
+		go func() { u.check(context.Background()); done <- true }()
+		<-asked
+		// meanwhile an install starts and finds 99.0.2
+		u.mu.Lock()
+		u.state.Phase, u.state.Latest = "download", &update.Release{Version: "99.0.2"}
+		u.mu.Unlock()
+		answer <- up
+		<-done
+		if u.state.Latest == nil || u.state.Latest.Version != "99.0.2" {
+			t.Errorf("GitHub up %v: the late check took the version back to %+v", up, u.state.Latest)
+		}
 	}
 }
 

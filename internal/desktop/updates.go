@@ -123,7 +123,12 @@ func (u *updates) check(ctx context.Context) {
 	u.state.Checking = false
 	u.state.CheckedAt = time.Now().Format(stamp)
 	u.state.Error = ""
+	// a check that started before an install and comes back during it:
+	// the install asked GitHub again (freshest), so an older answer doesn't
+	// take back the version shown
+	installing := u.state.Phase != "" && u.state.Latest != nil
 	switch {
+	case installing && (err != nil || !update.Newer(r.Version, u.state.Latest.Version)):
 	case err != nil:
 		log.Printf("检查更新失败：%v", err)
 		u.state.Error = u.settings.msg("没能连上 GitHub 检查更新，请稍后再试", "Couldn't reach GitHub to check for updates; try again later")
