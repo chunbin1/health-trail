@@ -483,7 +483,8 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 
 .hello { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
 .hello .titles { margin-right: auto; }
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.hello h1 { display: flex; align-items: center; gap: 8px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 900px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .stat {
   background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 14px 16px;
