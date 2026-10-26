@@ -48,14 +48,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -I scripts/ai_review_gate.py pr ${{ github.event.pull_request.number }}
-      # whether this review passed or not, so both checks say the same
+      # whether this review passed or not, so both checks say the same; not
+      # when a newer review cancelled this run: that one re-runs it instead
       - name: Re-run the check from the PR event
-        if: always() && github.event_name == 'pull_request_review'
+        if: ${{ !cancelled() && github.event_name == 'pull_request_review' }}
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           id=$(gh run list -R "$GITHUB_REPOSITORY" -w ai-review.yml -e pull_request -c "$SHA" -L 1 --json databaseId -q '.[0].databaseId')
           if [ -z "$id" ]; then echo "::notice::没有找到 $SHA 的 pull_request 那次检查"; exit 0; fi
-          gh run watch "$id" -R "$GITHUB_REPOSITORY" > /dev/null || true
+          # the job has 5 minutes; a PR-event run still queued after 3 is re-run as it is
+          timeout 180 gh run watch "$id" -R "$GITHUB_REPOSITORY" > /dev/null || true
           gh run rerun "$id" -R "$GITHUB_REPOSITORY" || echo "::warning::没能重跑 pull_request 那次检查（run $id）"
