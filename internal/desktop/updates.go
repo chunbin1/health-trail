@@ -39,7 +39,8 @@ type updateState struct {
 	CheckedAt string          `json:"checked_at,omitempty"` // YYYY-MM-DD HH:MM:SS
 	Checking  bool            `json:"checking"`
 	Latest    *update.Release `json:"latest,omitempty"` // only when newer than this build
-	Error     string          `json:"error,omitempty"`
+	Error     string          `json:"error,omitempty"`         // of the last check
+	Failed    string          `json:"install_error,omitempty"` // why the last install didn't finish
 	Phase     string          `json:"phase,omitempty"` // backup, download, install, restart
 	Done      int64           `json:"done,omitempty"`  // of the download
 	Total     int64           `json:"total,omitempty"`
@@ -122,7 +123,12 @@ func (u *updates) check(ctx context.Context) {
 	u.state.Checking = false
 	u.state.CheckedAt = time.Now().Format(stamp)
 	u.state.Error = ""
+	// a check that started before an install and comes back during it:
+	// the install asked GitHub again (freshest), so an older answer doesn't
+	// take back the version shown
+	installing := u.state.Phase != "" && u.state.Latest != nil
 	switch {
+	case installing && (err != nil || !update.Newer(r.Version, u.state.Latest.Version)):
 	case err != nil:
 		log.Printf("检查更新失败：%v", err)
 		u.state.Error = u.settings.msg("没能连上 GitHub 检查更新，请稍后再试", "Couldn't reach GitHub to check for updates; try again later")
@@ -132,10 +138,11 @@ func (u *updates) check(ctx context.Context) {
 	case update.Newer(r.Version, Version):
 		if u.state.Latest == nil || u.state.Latest.Version != r.Version {
 			log.Printf("有新版本：%s（当前 %s）", r.Version, Version)
+			u.state.Failed = "" // that was about the version before
 		}
 		u.state.Latest = r
 	default:
-		u.state.Latest = nil
+		u.state.Latest, u.state.Failed = nil, ""
 	}
 	u.mu.Unlock()
 	if u.changed != nil {
@@ -186,17 +193,18 @@ func (u *updates) install() error {
 		u.mu.Unlock()
 		return errors.New(u.settings.msg("现在没有可以安装的新版本", "There's no update to install right now"))
 	}
-	u.state.Phase, u.state.Error, u.state.Done, u.state.Total = "backup", "", 0, r.ZipSize
+	u.state.Phase, u.state.Error, u.state.Failed, u.state.Done, u.state.Total = "backup", "", "", 0, r.ZipSize
 	u.mu.Unlock()
 	go u.run(r)
 	return nil
 }
 
 func (u *updates) run(r *update.Release) {
+	r = u.freshest(r)
 	fail := func(msg string, err error) {
 		log.Printf("更新到 %s 失败：%v", r.Version, err)
 		u.mu.Lock()
-		u.state.Phase, u.state.Error = "", msg
+		u.state.Phase, u.state.Failed = "", msg
 		u.mu.Unlock()
 	}
 	if u.backup != nil {
@@ -226,6 +234,27 @@ func (u *updates) run(r *update.Release) {
 		return
 	}
 	u.quit()
+}
+
+// freshest asks GitHub once more just before installing. The version found
+// may be hours old: with a newer one out since, installing what was found
+// would bring the versions one at a time, one restart each. When GitHub
+// can't be asked, the one found is still newer than this build.
+func (u *updates) freshest(r *update.Release) *update.Release {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	n, err := update.Latest(ctx, u.client, u.url)
+	if err != nil || !update.Newer(n.Version, r.Version) || !n.Installable() {
+		return r
+	}
+	log.Printf("安装前又查到更新的版本：%s（原来找到的是 %s）", n.Version, r.Version)
+	u.mu.Lock()
+	u.state.Latest, u.state.Total = n, n.ZipSize
+	u.mu.Unlock()
+	if u.changed != nil {
+		u.changed(u)
+	}
+	return n
 }
 
 func (u *updates) setPhase(p string) {

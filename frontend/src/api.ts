@@ -178,7 +178,8 @@ export interface UpdateStatus {
     checked_at?: string
     checking: boolean
     latest?: UpdateRelease // only when newer than this build
-    error?: string
+    error?: string // of the last check
+    install_error?: string // why the last install didn't finish
     phase?: 'backup' | 'download' | 'restart'
     done?: number
     total?: number
