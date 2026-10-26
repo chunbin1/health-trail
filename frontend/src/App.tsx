@@ -35,16 +35,19 @@ const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string 
   },
 ]
 // Whether the Mac app has found a newer version: asked at start, when the
-// window comes back, on each page change and every half hour (the app checks GitHub itself; this
+// window comes back, when the app has just checked ("update-checked"), on
+// each page change and every half hour (the app checks GitHub itself; this
 // only reads what it found). Outside the app the API isn't there.
 function useNewerVersion(page: string) {
   const { data, reload } = useLoad(() => api.updateStatus().catch(() => null), [page])
   useEffect(() => {
     const id = setInterval(reload, 30 * 60_000)
     window.addEventListener('focus', reload)
+    window.addEventListener('update-checked', reload)
     return () => {
       clearInterval(id)
       window.removeEventListener('focus', reload)
+      window.removeEventListener('update-checked', reload)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

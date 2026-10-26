@@ -128,7 +128,7 @@ const EN = {
   '正在重启…': 'Restarting…',
   '更新到 {version}？\n\n设置了备份的话，会先备份一次数据；然后下载新版本、检查签名，替换后重新打开健康足迹。': 'Update to {version}?\n\nIf backups are set up, your data is backed up first; then the new version is downloaded, its signature checked, and Health Trail reopens.',
   '自动检查更新': 'Check for updates automatically',
-  '每隔几个小时、打开窗口时向 GitHub 查有没有新版本，只问版本号，不会发送任何健康数据。': 'Asks GitHub every few hours, and when you open the window, whether there’s a new version; only the version is asked for, never any health data.',
+  '每隔几个小时、窗口回到前台时向 GitHub 查有没有新版本，只问版本号，不会发送任何健康数据。': 'Asks GitHub every few hours, and when the window comes to the front, whether there’s a new version; only the version is asked for, never any health data.',
   '设置 · 有新版本': 'Settings · update available',
   'Mac 没有允许健康足迹发通知，吃药、预约和打卡提醒都不会弹出。': 'Your Mac doesn’t allow Health Trail’s notifications, so no medication, appointment or check-in reminder will show.',
   '打开通知设置': 'Open Notification Settings',

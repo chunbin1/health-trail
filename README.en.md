@@ -188,7 +188,7 @@ A single Go program provides the window (Wails v3, the system WebView + React), 
 
 ## Privacy and security
 
-- **Your data stays on your computer**: by default in `~/Library/Application Support/HealthVault`; you can move it with the `-data` flag or the `HEALTH_TRAIL_DATA` environment variable. The app itself uploads nothing and collects no usage statistics. Its only network access is checking GitHub for a new version every few hours and when you open the window (it only asks for the version number, and you can turn this off in Settings → Software update).
+- **Your data stays on your computer**: by default in `~/Library/Application Support/HealthVault`; you can move it with the `-data` flag or the `HEALTH_TRAIL_DATA` environment variable. The app itself uploads nothing and collects no usage statistics. Its only network access is checking GitHub for a new version every few hours and when the window comes to the front, if the last check was over half an hour ago (it only asks for the version number, and you can turn this off in Settings → Software update).
 - **The AI sees the records it reads**: when an AI reads records, their content is sent to its provider for processing (Claude to Anthropic, Codex to OpenAI). Which AI you use and what you let it read is up to you.
 - **The local server is open to this Mac only**: by default it listens only on `127.0.0.1`; other websites in your browser can't read or write your data, and the server rejects DNS rebinding and cross-site requests.
 - **Attachments never run as web pages**: only images, PDFs and plain text open directly in the page; every other type is returned as a download.

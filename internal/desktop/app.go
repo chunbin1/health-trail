@@ -472,7 +472,11 @@ func RunApp(dataDir, port string) {
 	a.shell = newShell(wapp, win, a.settings.lang, a.backups.windowClosed)
 	a.updates.backup = a.backups.beforeUpdate
 	a.updates.quit = wapp.Quit
-	a.updates.changed = func(u *updates) { a.shell.setUpdate(u.latest()) }
+	a.updates.changed = func(u *updates) {
+		a.shell.setUpdate(u.latest())
+		// the window asked when it came up, maybe before this check was done
+		win.ExecJS(`window.dispatchEvent(new Event("update-checked"))`)
+	}
 	// opened, or brought to the front: a new version shows up there soon
 	win.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) { a.updates.windowOpened() })
 	go a.updates.loop(ctx)

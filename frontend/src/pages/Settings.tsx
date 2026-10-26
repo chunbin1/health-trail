@@ -128,6 +128,12 @@ function Updates() {
     const id = setInterval(() => api.updateStatus().then(setCur, () => {}), 700)
     return () => clearInterval(id)
   }, [running])
+  // a check the app made by itself (the window coming up) shows here too
+  useEffect(() => {
+    const on = () => api.updateStatus().then(setCur, () => {})
+    window.addEventListener('update-checked', on)
+    return () => window.removeEventListener('update-checked', on)
+  }, [])
   if (error || !s || !st) return null
 
   async function run(f: () => Promise<UpdateStatus>) {
@@ -185,7 +191,7 @@ function Updates() {
       <div className="sync-row">
         <div style={{ flex: 1, minWidth: 0 }}>
           <div>{t('自动检查更新')}</div>
-          <div className="small muted">{t('每隔几个小时、打开窗口时向 GitHub 查有没有新版本，只问版本号，不会发送任何健康数据。')}</div>
+          <div className="small muted">{t('每隔几个小时、窗口回到前台时向 GitHub 查有没有新版本，只问版本号，不会发送任何健康数据。')}</div>
         </div>
         <Switch checked={s.auto} onChange={(v) => { setCur({ ...s, auto: v }); run(() => api.setAutoUpdate(v)) }} label={t('自动检查更新')} />
       </div>

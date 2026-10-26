@@ -104,7 +104,8 @@ func (u *updates) windowOpened() {
 	}
 }
 
-// check asks GitHub once; a check already under way is waited for.
+// check asks GitHub once; while a check or an install is under way it does
+// nothing.
 func (u *updates) check(ctx context.Context) {
 	u.mu.Lock()
 	if u.state.Checking || u.state.Phase != "" {
