@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { Check, ChevronRight, Plus, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, MONTHS, nowLocal, today, type MedDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
@@ -39,6 +39,23 @@ function timelineTitle(type: string, title: string) {
   return tx(title)
 }
 
+// The cards on this page, in their first order. The person reorders them
+// and turns them off (useListChoice 'today_cards'); wide ones take a whole
+// row, and the others pair up two to a row in the order they come, one
+// left alone taking the row by itself.
+const CARDS: { key: string; label: Key; wide?: boolean }[] = [
+  { key: 'stats', label: '数字概览', wide: true },
+  { key: 'checkins', label: '今日打卡', wide: true },
+  { key: 'meds_today', label: '今天的用药' },
+  { key: 'appointments', label: '接下来的预约' },
+  { key: 'labs', label: '需要留意的指标' },
+  { key: 'conditions', label: '进行中的健康问题' },
+  { key: 'medications', label: '在用药物' },
+  { key: 'follow_ups', label: '待复诊' },
+  { key: 'metrics', label: '身体数据', wide: true },
+  { key: 'timeline', label: '最近记录', wide: true },
+]
+
 export function Overview() {
   const { entity, toast } = useApp()
   const { data: o, error } = useLoad(() => api.overview(), [])
@@ -57,6 +74,8 @@ export function Overview() {
   const list = useListChoice('today_metrics', o?.latest_metrics.map((m) => m.metric_type) || [])
   const tiles = list.ordered.filter(list.shown).map((n) => o!.latest_metrics.find((m) => m.metric_type === n)!)
   const [choosing, setChoosing] = useState(false)
+  const cards = useListChoice('today_cards', CARDS.map((c) => c.key))
+  const [arranging, setArranging] = useState(false)
   const d = new Date()
 
   if (error) return <div className="error">{error}</div>
@@ -64,12 +83,145 @@ export function Overview() {
   const empty = Object.values(o.counts).every((n) => n === 0)
   const done = o.today_checkins.filter((h) => h.checkin).length
 
+  // each card, or null when it has nothing to show and is left off
+  const card: Record<string, ReactNode> = {
+    stats: (
+      <div className="stats">
+        <Stat kind="conditions" href="#/conditions" n={o.active_conditions.length} label={t('进行中的健康问题')} />
+        <Stat kind="medications" href="#/medications" n={o.current_medications.length} label={t('在用药物')} />
+        <Stat kind="lab_results" href="#/reports?tab=trends" n={o.abnormal_labs_latest.length} label={t('异常指标')} warn={o.abnormal_labs_latest.length > 0} />
+        <a className="stat" href="#/checkins" style={kindStyle('checkins')}>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <KindIcon kind="checkins" />
+            <Ring value={done} total={o.today_checkins.length} size={30} />
+          </div>
+          <div><div className="n">{done}<small>/{o.today_checkins.length}</small></div><div className="k">{t('今日打卡')}</div></div>
+        </a>
+      </div>
+    ),
+    checkins: (
+      <section className="card">
+        <div className="card-head"><h2>{t('今日打卡')}</h2><a href="#/checkins" className="card-link">{t('管理')}<ChevronRight size={14} /></a></div>
+        <HabitGrid days={o.today_checkins} date={o.today} />
+      </section>
+    ),
+    meds_today: o.meds_today.length > 0 && <MedsToday days={o.meds_today} />,
+    appointments: (
+      <Panel title={t('接下来的预约')} rows={o.upcoming_appointments} kind="appointments" more="#/appointments"
+        empty={t('没有待去的预约。跟 AI 说「下周三下午 3 点做胃镜」就能记下，到时间前会提醒')}
+        render={(r) => <>
+          <div className="body">
+            <div className="title">{r.title}</div>
+            <div className="meta">{[fmtDate(r.scheduled_at), r.place].filter(Boolean).join(' · ')}</div>
+          </div>
+          <When at={r.scheduled_at} />
+        </>} />
+    ),
+    labs: (
+      <section className="card">
+        <div className="card-head">
+          <h2>{t('需要留意的指标')}</h2>
+          <a href="#/reports?tab=trends" className="card-link">{t('趋势')}<ChevronRight size={14} /></a>
+        </div>
+        {o.abnormal_labs_latest.length === 0
+          ? <Empty compact>{t('各项指标最近一次的结果都在参考范围内')}</Empty>
+          : (
+            <table className="data">
+              <tbody>
+                {o.abnormal_labs_latest.slice(0, 7).map((r) => (
+                  <tr key={r.id} className="clickable" onClick={() => openRecord('lab_results', r.id)}>
+                    <td><div>{r.item_name}</div><div className="muted small">{fmtDate(r.test_date)}</div></td>
+                    <td className="num" style={{ textAlign: 'right' }}><LabValue r={{ ...r, unit: null }} /></td>
+                    <td style={{ width: '38%' }}><RangeBar value={r.value_num} low={r.ref_low} high={r.ref_high} flag={r.flag} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        {o.abnormal_labs_latest.length > 7 && <a href="#/reports?tab=trends" className="muted small" style={{ display: 'inline-block', marginTop: 8 }}>{t('还有 {n} 项', { n: o.abnormal_labs_latest.length - 7 })}</a>}
+      </section>
+    ),
+    conditions: (
+      <Panel title={t('进行中的健康问题')} rows={o.active_conditions} kind="conditions" more="#/conditions" empty={t('没有进行中的健康问题')}
+        render={(r) => <><div className="body title">{r.name}</div>{r.status && <span className="tag k" style={kindStyle('conditions')}>{tx(r.status)}</span>}</>} />
+    ),
+    medications: (
+      <Panel title={t('在用药物')} rows={o.current_medications} kind="medications" more="#/medications" empty={t('没有在用的药物')}
+        render={(r) => <>
+          <div className="body">
+            <div className="title">{r.name}</div>
+            <div className="meta">{[r.dosage, r.frequency].filter(Boolean).join(' · ')}</div>
+            {r.last_taken && <div className="meta">{t('上次 {date} · {total}', { date: fmtDate(r.last_taken), total: t('共 {n} 颗', { n: fmtNum(r.taken_total) }) })}</div>}
+          </div>
+          <TakeDose med={r} />
+        </>} />
+    ),
+    follow_ups: o.upcoming_follow_ups.length > 0 && (
+      <Panel title={t('待复诊')} rows={o.upcoming_follow_ups} kind="visits" empty=""
+        render={(r) => <><div className="body"><div className="title">{fmtDate(r.follow_up_date)}</div><div className="meta">{recTitle(entity('visits'), r)}</div></div></>} />
+    ),
+    metrics: o.latest_metrics.length > 0 && (
+      <section className="card">
+        <div className="card-head">
+          <h2>{t('身体数据')}<IconButton small label={t('选择首页显示的指标')} onClick={() => setChoosing(true)}><SlidersHorizontal size={14} /></IconButton></h2>
+          <a href="#/metrics" className="card-link">{t('全部')}<ChevronRight size={14} /></a>
+        </div>
+        {list.loaded && tiles.length === 0 && (
+          <div className="row muted small" style={{ gap: 8 }}>{t('首页没有选中的指标。')}<button className="btn ghost sm" onClick={() => setChoosing(true)}>{t('选择指标')}</button></div>
+        )}
+        <div className="tiles">
+          {list.loaded && tiles.map((m) => (
+            <div key={m.metric_type} className="tile" style={kindStyle('metrics')}
+              onClick={() => (location.hash = '/metrics?type=' + encodeURIComponent(m.metric_type))}>
+              <div className="k">{tx(m.metric_type)}</div>
+              <div className="v">{metricValue(m)}<small>{tx(m.unit)}</small></div>
+              <Sparkline values={series?.[m.metric_type] || []} />
+              <div className="d">{fmtDate(m.measured_at)}{m.source === 'lab_results' && ` · ${t('化验单')}`}{m.category && ` · ${tx(m.category)}`}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+    ),
+    timeline: (
+      <section className="card">
+        <div className="card-head"><h2>{t('最近记录')}</h2></div>
+        {timeline?.length === 0 && <Empty compact>{t('还没有记录')}</Empty>}
+        <div className="list timeline">
+          {timeline?.map((it) => (
+            <div key={it.type + it.id} className="row-item" onClick={() => openRecord(it.type, it.id)}>
+              <KindIcon kind={it.type} size="sm" />
+              <div className="body title" style={{ fontWeight: 500 }}>{timelineTitle(it.type, it.title)}</div>
+              <span className="side"><span className="tag">{tx(entity(it.type)?.label)}</span><span className="nowrap" style={{ minWidth: 70, textAlign: 'right' }}>{fmtDate(it.date.slice(0, 10))}</span></span>
+            </div>
+          ))}
+        </div>
+      </section>
+    ),
+  }
+  const wide = new Set(CARDS.filter((c) => c.wide).map((c) => c.key))
+  const rows: ReactNode[] = []
+  let half: string | null = null
+  for (const k of cards.ordered.filter(cards.shown)) {
+    if (!card[k]) continue
+    if (!wide.has(k) && half) {
+      rows.push(<div key={half} className="grid-2">{card[half]}{card[k]}</div>)
+      half = null
+    } else if (!wide.has(k)) {
+      half = k
+    } else {
+      if (half) rows.push(<Fragment key={half}>{card[half]}</Fragment>)
+      half = null
+      rows.push(<Fragment key={k}>{card[k]}</Fragment>)
+    }
+  }
+  if (half) rows.push(<Fragment key={half}>{card[half]}</Fragment>)
+
   return (
     <>
       <div className="hello">
         <div className="titles">
           <div className="sub">{todayLine(d)}</div>
-          <h1>{greeting()}</h1>
+          <h1>{greeting()}<IconButton small label={t('调整首页')} onClick={() => setArranging(true)}><SlidersHorizontal size={15} /></IconButton></h1>
         </div>
         <div className="row">
           {QUICK.map(([k, label]) => (
@@ -89,119 +241,16 @@ export function Overview() {
         </div>
       )}
 
-      <div className="stats">
-        <Stat kind="conditions" href="#/conditions" n={o.active_conditions.length} label={t('进行中的健康问题')} />
-        <Stat kind="medications" href="#/medications" n={o.current_medications.length} label={t('在用药物')} />
-        <Stat kind="lab_results" href="#/reports?tab=trends" n={o.abnormal_labs_latest.length} label={t('异常指标')} warn={o.abnormal_labs_latest.length > 0} />
-        <a className="stat" href="#/checkins" style={kindStyle('checkins')}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <KindIcon kind="checkins" />
-            <Ring value={done} total={o.today_checkins.length} size={30} />
-          </div>
-          <div><div className="n">{done}<small>/{o.today_checkins.length}</small></div><div className="k">{t('今日打卡')}</div></div>
-        </a>
-      </div>
+      {cards.loaded && CARDS.every((c) => !cards.shown(c.key)) && (
+        <div className="row muted small" style={{ gap: 8 }}>{t('首页没有选中的模块。')}<button className="btn ghost sm" onClick={() => setArranging(true)}>{t('选择模块')}</button></div>
+      )}
+      {cards.loaded && <div className="stack">{rows}</div>}
 
-      <div className="stack">
-        <section className="card">
-          <div className="card-head"><h2>{t('今日打卡')}</h2><a href="#/checkins" className="card-link">{t('管理')}<ChevronRight size={14} /></a></div>
-          <HabitGrid days={o.today_checkins} date={o.today} />
-        </section>
-
-        <div className={o.meds_today.length ? 'grid-2' : 'stack'}>
-          {o.meds_today.length > 0 && <MedsToday days={o.meds_today} />}
-          <Panel title={t('接下来的预约')} rows={o.upcoming_appointments} kind="appointments" more="#/appointments"
-            empty={t('没有待去的预约。跟 AI 说「下周三下午 3 点做胃镜」就能记下，到时间前会提醒')}
-            render={(r) => <>
-              <div className="body">
-                <div className="title">{r.title}</div>
-                <div className="meta">{[fmtDate(r.scheduled_at), r.place].filter(Boolean).join(' · ')}</div>
-              </div>
-              <When at={r.scheduled_at} />
-            </>} />
-        </div>
-
-        <div className="grid-2">
-          <section className="card">
-            <div className="card-head">
-              <h2>{t('需要留意的指标')}</h2>
-              <a href="#/reports?tab=trends" className="card-link">{t('趋势')}<ChevronRight size={14} /></a>
-            </div>
-            {o.abnormal_labs_latest.length === 0
-              ? <Empty compact>{t('各项指标最近一次的结果都在参考范围内')}</Empty>
-              : (
-                <table className="data">
-                  <tbody>
-                    {o.abnormal_labs_latest.slice(0, 7).map((r) => (
-                      <tr key={r.id} className="clickable" onClick={() => openRecord('lab_results', r.id)}>
-                        <td><div>{r.item_name}</div><div className="muted small">{fmtDate(r.test_date)}</div></td>
-                        <td className="num" style={{ textAlign: 'right' }}><LabValue r={{ ...r, unit: null }} /></td>
-                        <td style={{ width: '38%' }}><RangeBar value={r.value_num} low={r.ref_low} high={r.ref_high} flag={r.flag} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            {o.abnormal_labs_latest.length > 7 && <a href="#/reports?tab=trends" className="muted small" style={{ display: 'inline-block', marginTop: 8 }}>{t('还有 {n} 项', { n: o.abnormal_labs_latest.length - 7 })}</a>}
-          </section>
-
-          <div className="stack" style={{ gap: 16 }}>
-            <Panel title={t('进行中的健康问题')} rows={o.active_conditions} kind="conditions" more="#/conditions" empty={t('没有进行中的健康问题')}
-              render={(r) => <><div className="body title">{r.name}</div>{r.status && <span className="tag k" style={kindStyle('conditions')}>{tx(r.status)}</span>}</>} />
-            <Panel title={t('在用药物')} rows={o.current_medications} kind="medications" more="#/medications" empty={t('没有在用的药物')}
-              render={(r) => <>
-                <div className="body">
-                  <div className="title">{r.name}</div>
-                  <div className="meta">{[r.dosage, r.frequency].filter(Boolean).join(' · ')}</div>
-                  {r.last_taken && <div className="meta">{t('上次 {date} · {total}', { date: fmtDate(r.last_taken), total: t('共 {n} 颗', { n: fmtNum(r.taken_total) }) })}</div>}
-                </div>
-                <TakeDose med={r} />
-              </>} />
-            {o.upcoming_follow_ups.length > 0 && (
-              <Panel title={t('待复诊')} rows={o.upcoming_follow_ups} kind="visits" empty=""
-                render={(r) => <><div className="body"><div className="title">{fmtDate(r.follow_up_date)}</div><div className="meta">{recTitle(entity('visits'), r)}</div></div></>} />
-            )}
-          </div>
-        </div>
-
-        {o.latest_metrics.length > 0 && (
-          <section className="card">
-            <div className="card-head">
-              <h2>{t('身体数据')}<IconButton small label={t('选择首页显示的指标')} onClick={() => setChoosing(true)}><SlidersHorizontal size={14} /></IconButton></h2>
-              <a href="#/metrics" className="card-link">{t('全部')}<ChevronRight size={14} /></a>
-            </div>
-            {list.loaded && tiles.length === 0 && (
-              <div className="row muted small" style={{ gap: 8 }}>{t('首页没有选中的指标。')}<button className="btn ghost sm" onClick={() => setChoosing(true)}>{t('选择指标')}</button></div>
-            )}
-            <div className="tiles">
-              {list.loaded && tiles.map((m) => (
-                <div key={m.metric_type} className="tile" style={kindStyle('metrics')}
-                  onClick={() => (location.hash = '/metrics?type=' + encodeURIComponent(m.metric_type))}>
-                  <div className="k">{tx(m.metric_type)}</div>
-                  <div className="v">{metricValue(m)}<small>{tx(m.unit)}</small></div>
-                  <Sparkline values={series?.[m.metric_type] || []} />
-                  <div className="d">{fmtDate(m.measured_at)}{m.source === 'lab_results' && ` · ${t('化验单')}`}{m.category && ` · ${tx(m.category)}`}</div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section className="card">
-          <div className="card-head"><h2>{t('最近记录')}</h2></div>
-          {timeline?.length === 0 && <Empty compact>{t('还没有记录')}</Empty>}
-          <div className="list timeline">
-            {timeline?.map((it) => (
-              <div key={it.type + it.id} className="row-item" onClick={() => openRecord(it.type, it.id)}>
-                <KindIcon kind={it.type} size="sm" />
-                <div className="body title" style={{ fontWeight: 500 }}>{timelineTitle(it.type, it.title)}</div>
-                <span className="side"><span className="tag">{tx(entity(it.type)?.label)}</span><span className="nowrap" style={{ minWidth: 70, textAlign: 'right' }}>{fmtDate(it.date.slice(0, 10))}</span></span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
+      {arranging && (
+        <ArrangeList title={t('调整首页')} icon={<SlidersHorizontal size={18} />}
+          items={cards.ordered.map((k) => ({ key: k, label: t(CARDS.find((c) => c.key === k)!.label) }))} shown={cards.shown} onChange={cards.save}
+          note={t('拖动左边的把手调整顺序；窗口够宽时，窄的模块按顺序两个一行。关掉的模块只是不在首页显示；没有内容的模块（比如没有待复诊）也不显示。')} onClose={() => setArranging(false)} />
+      )}
       {choosing && (
         <ArrangeList title={t('选择首页显示的指标')} icon={<KindIcon kind="metrics" />}
           items={list.ordered.map((n) => ({ key: n, label: tx(n) }))} shown={list.shown} onChange={list.save}
