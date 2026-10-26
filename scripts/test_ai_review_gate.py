@@ -12,7 +12,12 @@ class Passes(unittest.TestCase):
                      "**结论：没有必须修的问题，可以合。** 修复思路对：只认 IB Gateway。",  # cb-quant #48
                      "结论：没有必须修的问题，可以合",
                      "**结论：没有必须修，可以合。**",  # cb-quant, shorter
-                     "**结论: 没有必须修的问题，可以合。**"]:
+                     "**结论: 没有必须修的问题，可以合。**",
+                     "**结论：可以合**（Comment；无挡合并项）",  # another reviewing agent, PR #13
+                     "**结论：可以合**",
+                     "结论：可以合（无挡合并项）",
+                     "**结论：可以合（无挡合并项）**",
+                     "**结论：没有必须修的问题，可以合并。**"]:
             self.assertTrue(passes(body), body)
 
     def test_anything_else(self):
@@ -22,6 +27,11 @@ class Passes(unittest.TestCase):
                      "**结论：有两处必须修，修完就可以合**",
                      "**结论：暂不可合；修好后可以合**",
                      "**结论：没有必须修的问题，可以合吗？**",
+                     "**结论：可以合吗？**",
+                     "**结论：可以合，但要先修 install_error 那处**",
+                     "**结论：修完就可以合**",
+                     "**结论：不可以合**",
+                     "**结论：暂不可合**（有一处必须修）",
                      "没有结论行，可以合",
                      ""]:
             self.assertFalse(passes(body), body)
