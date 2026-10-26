@@ -702,3 +702,70 @@ func TestBMI(t *testing.T) {
 		}
 	}
 }
+
+// A metric of the person's own named BMI or 身高, made before the app knew
+// them, keeps its readings in sight and can still be edited.
+func TestOwnBMIAndHeightKeptAfterUpgrade(t *testing.T) {
+	s := open(t)
+	// as an older version made them: no check refused these names then
+	for _, q := range []string{
+		`INSERT INTO metric_kinds (name, unit, created_at, updated_at) VALUES ('BMI', 'kg/m²', '2026-01-01 00:00', '2026-01-01 00:00')`,
+		`INSERT INTO metric_kinds (name, unit, created_at, updated_at) VALUES ('身高', 'cm', '2026-01-01 00:00', '2026-01-01 00:00')`,
+		`INSERT INTO metrics (measured_at, metric_type, value, unit, created_at, updated_at) VALUES ('2026-01-05 08:00', 'BMI', 27.5, 'kg/m²', '2026-01-05 08:00', '2026-01-05 08:00')`,
+	} {
+		if _, err := s.DB.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pts, err := s.MetricSeries("BMI", "", "")
+	if err != nil || len(pts) != 1 || pts[0]["value"] != 27.5 || pts[0]["from"] != nil {
+		t.Fatalf("own BMI readings = %v %v, want the 27.5 recorded", pts, err)
+	}
+	if pts, _ := s.MetricSeries("bmi", "", ""); len(pts) != 1 {
+		t.Errorf("trend of bmi = %v, want the same as BMI", pts)
+	}
+	if _, err := s.Update("metrics", pts[0]["id"].(int64), Record{"metric_type": "BMI", "value": 27.4}); err != nil {
+		t.Errorf("editing an own BMI reading: %v", err)
+	}
+	// a weight and height now: the worked-out BMI joins, and is the latest
+	hs, _ := s.Create("metrics", Record{"measured_at": "2026-10-25", "metric_type": "身高", "value": 179})
+	if _, err := s.Create("lab_results", Record{"test_date": "2026-10-25", "item_name": "体重", "value_num": 93.3, "unit": "kg"}); err != nil {
+		t.Fatal(err)
+	}
+	if pts, _ := s.MetricSeries("BMI", "", ""); len(pts) != 2 || pts[0]["value"] != 27.4 || pts[1]["value"] != 29.1 || pts[1]["from"] != "体重" {
+		t.Errorf("series = %v, want the own 27.4 then the worked-out 29.1", pts)
+	}
+	o, _ := s.Overview()
+	var order []string
+	for _, m := range o.LatestMetrics {
+		order = append(order, m["metric_type"].(string))
+		if m["metric_type"] == BMI && m["value"] != 29.1 {
+			t.Errorf("latest BMI = %v, want the worked-out 29.1", m)
+		}
+	}
+	if strings.Join(order, " ") != "体重 身高 BMI" {
+		t.Errorf("今天 tiles in order %v, want 体重 身高 BMI", order)
+	}
+	// the own 身高 kind can be edited, not renamed into another built-in
+	var kind int64
+	s.DB.QueryRow(`SELECT id FROM metric_kinds WHERE name = '身高'`).Scan(&kind)
+	if _, err := s.Update("metric_kinds", kind, Record{"notes": "量过两次"}); err != nil {
+		t.Errorf("editing the own 身高 kind: %v", err)
+	}
+	if _, err := s.Update("metric_kinds", kind, Record{"name": "体重"}); err == nil {
+		t.Error("the own 身高 kind was renamed to 体重")
+	}
+	_ = hs
+}
+
+// A height measured on the day of a lab weight (which has a day only) is
+// the one for it.
+func TestBMIHeightOnTheDayOfALabWeight(t *testing.T) {
+	s := open(t)
+	s.Create("metrics", Record{"measured_at": "2026-01-01 08:00", "metric_type": "身高", "value": 170})
+	s.Create("metrics", Record{"measured_at": "2026-10-25 09:00", "metric_type": "身高", "value": 179})
+	s.Create("lab_results", Record{"test_date": "2026-10-25", "item_name": "体重", "value_num": 93.3, "unit": "kg"})
+	if pts, _ := s.MetricSeries(BMI, "", ""); len(pts) != 1 || pts[0]["height_cm"] != 179.0 {
+		t.Errorf("series = %v, want the height of that day, 179", pts)
+	}
+}

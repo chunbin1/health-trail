@@ -63,7 +63,8 @@ func (s *Store) latestMetrics() ([]Record, error) {
 		if err != nil {
 			return nil, err
 		}
-		if b := bmiOf(w, hs); b != nil {
+		// newer than one recorded under a BMI of the person's own
+		if b := bmiOf(w, hs); b != nil && (latest[BMI] == nil || fmt.Sprint(b["measured_at"]) >= fmt.Sprint(latest[BMI]["measured_at"])) {
 			latest[BMI] = b
 		}
 	}
@@ -71,7 +72,13 @@ func (s *Store) latestMetrics() ([]Record, error) {
 	for _, r := range latest {
 		out = append(out, r)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i]["metric_type"].(string) < out[j]["metric_type"].(string) })
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i]["metric_type"].(string), out[j]["metric_type"].(string)
+		if ra, rb := metricRank(a), metricRank(b); ra != rb {
+			return ra < rb
+		}
+		return a < b
+	})
 	return out, nil
 }
 
@@ -435,9 +442,14 @@ func (s *Store) LabTrend(name string) ([]Record, error) {
 // the lab result's), so a 尿酸 measured at the hospital shows next to the ones
 // measured at home.
 func (s *Store) MetricSeries(metricType, from, to string) ([]Record, error) {
-	if metricType == BMI {
+	if strings.EqualFold(metricType, BMI) {
 		return s.bmiSeries(from, to)
 	}
+	return s.recordedSeries(metricType, from, to)
+}
+
+// recordedSeries is MetricSeries of what was recorded (and lab results).
+func (s *Store) recordedSeries(metricType, from, to string) ([]Record, error) {
 	var err error
 	if from != "" {
 		if from, err = normalizeDate(from); err != nil {

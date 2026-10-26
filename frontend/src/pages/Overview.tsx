@@ -3,12 +3,12 @@ import { Check, ChevronRight, Plus, SlidersHorizontal, Sparkles } from 'lucide-r
 import { addDays, api, fmtDate, fmtNum, metricValue, MONTHS, nowLocal, today, type MedDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { tell } from '../components/Dialog'
-import { MetricChooser } from '../components/MetricChooser'
+import { ArrangeList } from '../components/ArrangeList'
 import { Modal } from '../components/Modal'
 import { NotifyWarning } from '../components/NotifyWarning'
 import { LabValue, TakeDose } from '../components/RecordDrawer'
 import { isEN, noun, t, tr, tx, type Key } from '../i18n'
-import { openRecord, recTitle, useApp, useLoad } from '../state'
+import { openRecord, recTitle, useApp, useListChoice, useLoad } from '../state'
 import { Empty, IconButton, KindIcon, RangeBar, Ring, Sparkline, kindStyle } from '../ui'
 import { HabitGrid } from './Checkins'
 
@@ -54,9 +54,8 @@ export function Overview() {
   }, [types])
   const [adding, setAdding] = useState<string | null>(null)
   // the body metrics to leave off this page, kept in settings.json
-  const { data: info } = useLoad(() => api.info(), [])
-  const [hidden, setHidden] = useState<string[] | null>(null)
-  const hide = hidden ?? info?.hidden_metrics ?? []
+  const list = useListChoice('today_metrics', o?.latest_metrics.map((m) => m.metric_type) || [])
+  const tiles = list.ordered.filter(list.shown).map((n) => o!.latest_metrics.find((m) => m.metric_type === n)!)
   const [choosing, setChoosing] = useState(false)
   const d = new Date()
 
@@ -171,11 +170,11 @@ export function Overview() {
               <h2>{t('身体数据')}<IconButton small label={t('选择首页显示的指标')} onClick={() => setChoosing(true)}><SlidersHorizontal size={14} /></IconButton></h2>
               <a href="#/metrics" className="card-link">{t('全部')}<ChevronRight size={14} /></a>
             </div>
-            {o.latest_metrics.every((m) => hide.includes(m.metric_type)) && (
+            {list.loaded && tiles.length === 0 && (
               <div className="row muted small" style={{ gap: 8 }}>{t('首页没有选中的指标。')}<button className="btn ghost sm" onClick={() => setChoosing(true)}>{t('选择指标')}</button></div>
             )}
             <div className="tiles">
-              {o.latest_metrics.filter((m) => !hide.includes(m.metric_type)).map((m) => (
+              {list.loaded && tiles.map((m) => (
                 <div key={m.metric_type} className="tile" style={kindStyle('metrics')}
                   onClick={() => (location.hash = '/metrics?type=' + encodeURIComponent(m.metric_type))}>
                   <div className="k">{tx(m.metric_type)}</div>
@@ -204,14 +203,9 @@ export function Overview() {
       </div>
 
       {choosing && (
-        <MetricChooser title={t('选择首页显示的指标')} names={o.latest_metrics.map((m) => m.metric_type)}
-          shown={(m) => !hide.includes(m)} note={t('关掉的指标只是不在首页显示，记录都还在「身体数据」里。')}
-          onClose={() => setChoosing(false)}
-          onChange={(m, v) => {
-            const next = v ? hide.filter((x) => x !== m) : [...hide, m]
-            setHidden(next)
-            api.setHiddenMetrics(next).catch((e) => toast(e.message))
-          }} />
+        <ArrangeList title={t('选择首页显示的指标')} icon={<KindIcon kind="metrics" />}
+          items={list.ordered.map((n) => ({ key: n, label: tx(n) }))} shown={list.shown} onChange={list.save}
+          note={t('拖动左边的把手调整顺序。关掉的指标只是不在首页显示，记录都还在「身体数据」里。')} onClose={() => setChoosing(false)} />
       )}
       {adding && (
         <Modal title={t('添加{label}', { label: noun(entity(adding)) })} icon={<KindIcon kind={adding} />} onClose={() => setAdding(null)}>

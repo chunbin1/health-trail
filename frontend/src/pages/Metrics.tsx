@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { ChevronDown, ChevronUp, Pencil, Plus, SlidersHorizontal } from 'lucide-react'
+import { Pencil, Plus, SlidersHorizontal } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, nowLocal, today } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
 import { EntityForm } from '../components/EntityForm'
 import { LineChart } from '../components/LineChart'
-import { MetricChooser } from '../components/MetricChooser'
+import { ArrangeList } from '../components/ArrangeList'
 import { Modal } from '../components/Modal'
 import { noun, paren, t, tx } from '../i18n'
-import { hashParam, openRecord, useApp, useLoad, useMetricKinds } from '../state'
+import { hashParam, openRecord, useApp, useListChoice, useLoad, useMetricKinds } from '../state'
 import { Empty, IconButton, KindIcon } from '../ui'
 
 const RANGES = [30, 90, 365, 0]
@@ -33,24 +33,14 @@ export function Metrics() {
   const kindId = useRef<number>()
   if (kind) kindId.current = kind.id
   const [addingKind, setAddingKind] = useState(false)
-  // the metrics kept under 更多: the person's choice once made, else those
-  // with no readings that aren't key ones
-  const { data: info } = useLoad(() => api.info(), [])
+  // the pills in the person's order, as on the 今天 page; before a choice,
+  // the key ones and those with readings
   const { data: o } = useLoad(() => api.overview(), [])
-  const [chosen, setChosen] = useState<string[] | null>()
-  const pageHidden = chosen !== undefined ? chosen : info?.metrics_page_hidden ?? null
   const withData = new Set(o?.latest_metrics.map((m) => m.metric_type))
-  const folded = (m: string) => (pageHidden ? pageHidden.includes(m) : !KEY_METRICS.includes(m) && !withData.has(m))
-  const shown = mk.types.filter((m) => !folded(m))
-  const more = mk.types.filter(folded)
-  const [moreOpen, setMoreOpen] = useState(false)
-  const open = moreOpen || more.includes(type)
+  const list = useListChoice('metrics_page', mk.types, (m) => KEY_METRICS.includes(m) || withData.has(m))
+  // one opened by a link shows while it's chosen
+  const shown = list.ordered.filter((m) => list.shown(m) || m === type)
   const [choosing, setChoosing] = useState(false)
-  function choose(m: string, on: boolean) {
-    const next = mk.types.filter((x) => (x === m ? !on : folded(x)))
-    setChosen(next)
-    api.setPageHidden(next).catch((e) => toast(e.message))
-  }
   // the metric was renamed (follow it) or deleted (show the first one) from
   // its drawer. Only when the list reloads: a metric just added is chosen
   // before it's in it.
@@ -90,23 +80,13 @@ export function Metrics() {
       <div className="page-head">
         <div className="titles"><h1>{t('身体数据')}<IconButton small label={t('选择直接显示的指标')} onClick={() => setChoosing(true)}><SlidersHorizontal size={16} /></IconButton></h1><div className="sub">{t('体重、血压、血糖等日常测量')}</div></div>
       </div>
-      {/* drawn once it's known what goes under 更多, so nothing jumps */}
+      {/* drawn once it's known which are shown, so nothing jumps */}
       <div className="pills" style={{ marginBottom: 18, minHeight: 34 }}>
-        {info && o && <>
+        {list.loaded && o && <>
           {shown.map((m) => (
             <button key={m} className={'pill' + (m === type ? ' on' : '')} onClick={() => setType(m)}>{tx(m)}</button>
           ))}
-          {more.length > 0 && (
-            <button className="pill" aria-expanded={open} onClick={() => setMoreOpen(!open)}>
-              {t('更多 {n}', { n: more.length })}{open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-          )}
-          {(open || more.length === 0) && <>
-            {more.map((m) => (
-              <button key={m} className={'pill' + (m === type ? ' on' : '')} onClick={() => setType(m)}>{tx(m)}</button>
-            ))}
-            <button className="pill" onClick={() => setAddingKind(true)}><Plus size={13} />{t('新指标')}</button>
-          </>}
+          <button className="pill" onClick={() => setAddingKind(true)}><Plus size={13} />{t('新指标')}</button>
         </>}
       </div>
       <div className="stack">
@@ -182,7 +162,7 @@ export function Metrics() {
             <div className="list">
               {/* a lab result of the same name is shown here, kept in its report */}
               {[...rows].reverse().slice(0, 100).map((r) => (
-                <div key={r.source + r.id} className="row-item no-ico" onClick={() => openRecord(r.source, r.id)}>
+                <div key={r.source + r.id + (r.from || '')} className="row-item no-ico" onClick={() => openRecord(r.source, r.id)}>
                   <div className="body"><span className="val" style={{ fontSize: 15 }}>{metricValue(r)}</span> <span className="muted small">{tx(r.unit)}</span></div>
                   <span className="side">
                     {r.category && <span className="tag">{tx(r.category)}</span>}
@@ -198,8 +178,9 @@ export function Metrics() {
       </div>
 
       {choosing && (
-        <MetricChooser title={t('选择直接显示的指标')} names={mk.types} shown={(m) => !folded(m)} onChange={choose}
-          note={t('关掉的指标收进「更多」，记录都还在。')} onClose={() => setChoosing(false)} />
+        <ArrangeList title={t('选择直接显示的指标')} icon={<KindIcon kind="metrics" />}
+          items={list.ordered.map((m) => ({ key: m, label: tx(m) }))} shown={list.shown} onChange={list.save}
+          note={t('拖动左边的把手调整顺序。关掉的指标只是不在这一页列出，记录都还在，随时可以在这里打开。')} onClose={() => setChoosing(false)} />
       )}
       {addingKind && (
         <Modal title={t('添加{label}', { label: noun(entity('metric_kinds')) })} icon={<KindIcon kind="metric_kinds" />} onClose={() => setAddingKind(false)}>

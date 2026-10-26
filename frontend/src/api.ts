@@ -104,13 +104,18 @@ export interface HabitStats {
   dates: string[]
 }
 
+// ListChoice is a list put in order: any item not in order comes after.
+export interface ListChoice {
+  order: string[]
+  hidden: string[]
+}
+
 export interface Info {
   data_dir: string
   version: string
   lan: boolean
   lang: string
-  hidden_metrics: string[] | null // body metrics left off the 今天 page
-  metrics_page_hidden: string[] | null // kept under 更多 on the 身体数据 page; null until chosen
+  lists: Record<string, ListChoice> // lists the person arranged, by name (useListChoice)
   listening: string
   listen_error: string
   phone_urls: string[] | null
@@ -231,8 +236,7 @@ export const api = {
   installUpdate: () => req<UpdateStatus>('POST', '/api/update/install'),
   openReleasePage: () => req<{ ok: boolean }>('POST', '/api/update/page'),
   setLang: (lang: string) => req<Info>('PUT', '/api/settings', { lang }),
-  setHiddenMetrics: (hidden_metrics: string[]) => req<Info>('PUT', '/api/settings', { hidden_metrics }),
-  setPageHidden: (metrics_page_hidden: string[]) => req<Info>('PUT', '/api/settings', { metrics_page_hidden }),
+  setList: (name: string, choice: ListChoice) => req<Info>('PUT', '/api/settings', { lists: { [name]: choice } }),
   backup: () => req<BackupState>('GET', '/api/backup'),
   saveBackup: (c: BackupConfig) => req<BackupConfig>('PUT', '/api/backup', c),
   runBackup: () => req<{ name: string }>('POST', '/api/backup/run'),
