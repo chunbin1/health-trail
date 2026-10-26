@@ -19,7 +19,8 @@ class Passes(unittest.TestCase):
                      "**结论：可以合（无挡合并项）**",
                      "**结论：没有必须修的问题，可以合并。**",
                      "**结论：可以合。**",
-                     "结论：可以合（Verified on macOS）"]:  # "if" inside a word isn't one
+                     "结论：可以合（无必须修的问题）",
+                     "**结论：可以合**（Approve, 无阻塞项）"]:
             self.assertTrue(passes(body), body)
 
     def test_anything_else(self):
@@ -47,14 +48,26 @@ class Passes(unittest.TestCase):
                      "结论：可以合 (pending CI)",
                      "**结论：可以合**（a）（b）",
                      "结论：可以合【修完再合】",
+                     # a note is one of the fixed few, not any without a condition
+                     "**结论：可以合**（需补一个测试）",
+                     "**结论：可以合**（待 CI 通过）",
+                     "**结论：可以合**（有挡合并项）",
+                     "**结论：可以合**（Must-fix 1 条）",
+                     "**结论：可以合**（Request changes）",
+                     "**结论：可以合**（未验证）",
+                     "**结论：可以合**（ifCI绿）",
+                     "**结论：可以合**（Comment）",
+                     "结论：可以合（Verified on macOS）",
                      "没有结论行，可以合",
                      ""]:
             self.assertFalse(passes(body), body)
 
     def test_only_the_first_conclusion(self):
         self.assertFalse(passes("**结论：有必须修的问题，先别合。**\n\n结论：没有必须修的问题，可以合。"))
-        # 「**结论**：」 is the 结论 line too, not one to look past
-        self.assertFalse(passes("**结论**：先别合\n\n结论：可以合"))
+        # however the 结论 line is marked up, it isn't one to look past
+        for first in ["**结论**：先别合", "__结论__：先别合", "*结论*：先别合", "**结论（增量）**：先别合",
+                      "结论（d44192d）：先别合", "### 结论\n先别合"]:
+            self.assertFalse(passes(first + "\n\n结论：可以合"), first)
 
 
 class Names(unittest.TestCase):

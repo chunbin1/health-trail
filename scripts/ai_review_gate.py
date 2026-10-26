@@ -21,15 +21,17 @@ import json, os, re, subprocess, sys
 # is nothing to fix, so the reviewer's comment may follow the closing **:
 PASS = re.compile(r"\**\s*结论[：:]\s*没有必须修(的问题)?，可以合并?[。.]?\s*(\*\*|$)")
 # The short one, as another reviewing agent writes it, says only 可以合 (or
-# 可以合并), so the line has to end there, but for one note in brackets with
-# no condition in it: 「可以合**（Comment；无挡合并项）」, not 「可以合** 修完再合」
-# or 「可以合（但先修 X）」. A note that only looks like a condition fails too.
+# 可以合并), so the line has to end there, but for one note in brackets that
+# says there is nothing to fix first: 「可以合**（Comment；无挡合并项）」. Only
+# those notes (NOTE), not any note without a condition in it: no list of
+# conditions is ever complete (「需补一个测试」「待 CI 通过」「Must-fix 1 条」).
 SHORT = re.compile(r"\**\s*结论[：:]\s*可以合并?[。.]?\s*(\*\*)?\s*(?:[（(]([^（()）]*)[)）])?\s*(\*\*)?\s*$")
-CONDITION = re.compile(r"修|但|先|再|后|前提|除非|条件|不|否|暂|等|吗|[?？]"
-                       r"|\b(pending|but|after|until|unless|if|once|wait)\b", re.I)
-# a 结论 line, 「**结论**：」 too: the first one is the review's, even when
-# it isn't a passing one (a 结论 further down doesn't count)
-CONCLUSION = re.compile(r"\W*结论(\*\*)?\s*[：:]")
+NOTE = re.compile(r"\s*(?:(?:Comment|Approve)\s*[；;，,]\s*)?"
+                  r"无\s*(?:挡合并项|必须修(?:的问题)?|Must-fix|阻塞项)\s*[。.]?\s*", re.I)
+# a 结论 line: one that starts with 结论 once marks and underscores are gone
+# (「**结论**：」「结论（增量）：」「### 结论」). The first one is the review's,
+# even when it isn't a passing one: a 结论 further down doesn't count.
+CONCLUSION = re.compile(r"[\W_]*结论")
 
 
 def passes(body):
@@ -39,7 +41,7 @@ def passes(body):
             if PASS.match(line):
                 return True
             m = SHORT.match(line)
-            return bool(m) and not CONDITION.search(m.group(2) or "")
+            return bool(m) and (m.group(2) is None or bool(NOTE.fullmatch(m.group(2))))
     return False
 
 
