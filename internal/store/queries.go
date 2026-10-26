@@ -46,7 +46,7 @@ func (s *Store) latestMetrics() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	labs, err := s.labReadings(append(slices.Clone(MetricTypes), kinds...), "", "")
+	labs, err := s.labReadings(append(slices.Clone(MetricTypes), append(kinds, BMI)...), "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -529,11 +529,15 @@ func (s *Store) labReadings(metricTypes []string, from, to string) ([]Record, er
 		if want := units[name]; want == "" || unit == "" || !sameUnit(want, unit) {
 			continue
 		}
-		out = append(out, Record{
+		r := Record{
 			"source": "lab_results", "id": l["id"], "metric_type": name,
 			"measured_at": l["test_date"], "value": l["value_num"], "value2": nil, "unit": unit,
 			"flag": l["flag"], "ref_range": l["ref_range"], "report_id": l["report_id"], "report_title": l["report_title"],
-		})
+		}
+		if v, ok := l["value_num"].(float64); ok && name == BMI {
+			r["category"] = bmiCategory(v)
+		}
+		out = append(out, r)
 	}
 	return out, nil
 }
@@ -542,7 +546,7 @@ func (s *Store) labReadings(metricTypes []string, from, to string) ([]Record, er
 // mg/dL, ignoring case and spaces.
 func sameUnit(a, b string) bool {
 	norm := func(u string) string {
-		u = strings.NewReplacer("μ", "u", "µ", "u", " ", "").Replace(u)
+		u = strings.NewReplacer("μ", "u", "µ", "u", " ", "", "²", "2", "^2", "2").Replace(u)
 		return strings.ToLower(u)
 	}
 	return norm(a) == norm(b)

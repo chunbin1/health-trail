@@ -755,7 +755,44 @@ func TestOwnBMIAndHeightKeptAfterUpgrade(t *testing.T) {
 	if _, err := s.Update("metric_kinds", kind, Record{"name": "体重"}); err == nil {
 		t.Error("the own 身高 kind was renamed to 体重")
 	}
-	_ = hs
+	// a new name or unit would carry off the built-in heights: refused, saying why
+	for _, p := range []Record{{"name": "我的身高"}, {"unit": "m"}} {
+		if _, err := s.Update("metric_kinds", kind, p); err == nil || !strings.Contains(err.Error(), "直接删掉") {
+			t.Errorf("changing the own 身高 kind %v: err = %v", p, err)
+		}
+	}
+	// deleting it leaves the heights to the built-in one, and BMI with them
+	if err := s.Delete("metric_kinds", kind); err != nil {
+		t.Fatalf("deleting the own 身高 kind: %v", err)
+	}
+	if got, err := s.Get("metrics", hs["id"].(int64)); err != nil || got["metric_type"] != "身高" || got["unit"] != "cm" {
+		t.Errorf("height after the kind went: %v %v", got, err)
+	}
+	if pts, _ := s.MetricSeries(BMI, "", ""); len(pts) != 2 || pts[1]["value"] != 29.1 {
+		t.Errorf("BMI after the kind went = %v", pts)
+	}
+	// a BMI printed on a lab report shows once, though the own BMI takes it too
+	lab, _ := s.Create("lab_results", Record{"test_date": "2026-10-26", "item_name": "BMI", "value_num": 29.0, "unit": "kg/m2"})
+	pts, _ = s.MetricSeries(BMI, "", "")
+	if len(pts) != 3 || pts[2]["source"] != "lab_results" || pts[2]["id"] != lab["id"] || pts[2]["category"] != "肥胖" {
+		t.Errorf("series with the lab BMI = %v", pts)
+	}
+}
+
+// A BMI on a lab report in kg/m² is in the trend and can be the latest,
+// with no BMI metric of the person's own.
+func TestBMIFromALabReport(t *testing.T) {
+	s := open(t)
+	s.Create("lab_results", Record{"test_date": "2026-09-21", "item_name": "BMI", "value_num": 31.2, "unit": "kg/m²"})
+	s.Create("lab_results", Record{"test_date": "2026-09-22", "item_name": "BMI", "value_num": 31.0, "unit": "%"})
+	pts, err := s.MetricSeries(BMI, "", "")
+	if err != nil || len(pts) != 1 || pts[0]["value"] != 31.2 || pts[0]["category"] != "肥胖" {
+		t.Fatalf("series = %v %v, want the kg/m² one", pts, err)
+	}
+	o, _ := s.Overview()
+	if len(o.LatestMetrics) != 1 || o.LatestMetrics[0]["metric_type"] != BMI || o.LatestMetrics[0]["value"] != 31.2 {
+		t.Errorf("latest = %v, want the lab BMI", o.LatestMetrics)
+	}
 }
 
 // A height measured on the day of a lab weight (which has a day only) is

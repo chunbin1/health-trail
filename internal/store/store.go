@@ -313,6 +313,11 @@ func check(e *Entity, r, prev Record) error {
 	if e.Name == "metric_kinds" && renamed && strings.EqualFold(strings.TrimSpace(name), BMI) {
 		return invalid("%v", errBMI)
 	}
+	// its readings are the built-in metric's now: a new name or unit would
+	// carry them all off (renameMetric)
+	if old, _ := prev["name"].(string); e.Name == "metric_kinds" && slices.Contains(MetricTypes, old) && (renamed || r["unit"] != prev["unit"]) {
+		return invalid("「%s」现在是内置的指标，这个同名的自建指标不能改名字和单位（它的读数都算内置的「%s」）；不需要它的话可以直接删掉，读数会留着", old, old)
+	}
 	return nil
 }
 
@@ -527,6 +532,10 @@ func (s *Store) inUse(e *Entity, id int64) error {
 	cur, err := s.Get(e.Name, id)
 	if err != nil {
 		return err
+	}
+	// one named like a built-in metric: its readings stay, under that one
+	if name, _ := cur["name"].(string); slices.Contains(MetricTypes, name) {
+		return nil
 	}
 	var metrics, habits int
 	s.DB.QueryRow("SELECT COUNT(*) FROM metrics WHERE metric_type = ?", cur["name"]).Scan(&metrics)

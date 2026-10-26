@@ -143,6 +143,12 @@ func (s *Store) bmiSeries(from, to string) ([]Record, error) {
 			}
 		}
 	}
+	// a BMI printed on a lab report, in kg/m²
+	labs, err := s.labReadings([]string{BMI}, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, labs...)
 	names, err := s.customNames("metric_kinds")
 	if err != nil {
 		return nil, err
@@ -157,6 +163,14 @@ func (s *Store) bmiSeries(from, to string) ([]Record, error) {
 		}
 		out = append(out, own...)
 	}
+	// a lab result comes once, though a BMI of the person's own takes it too
+	seen := map[string]bool{}
+	out = slices.DeleteFunc(out, func(r Record) bool {
+		k := fmt.Sprint(r["source"], r["id"], r["from"])
+		dup := seen[k]
+		seen[k] = true
+		return dup
+	})
 	sort.SliceStable(out, func(i, j int) bool { return fmt.Sprint(out[i]["measured_at"]) < fmt.Sprint(out[j]["measured_at"]) })
 	return out, nil
 }
