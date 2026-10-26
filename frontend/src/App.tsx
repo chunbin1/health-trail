@@ -3,6 +3,7 @@ import { MoreHorizontal, Search as SearchIcon, Settings as SettingsIcon } from '
 import { api, type Overview as OV } from './api'
 import { t, tx, type Key } from './i18n'
 import { RecordDrawer } from './components/RecordDrawer'
+import { UpdateCard } from './components/UpdateCard'
 import { Checkins } from './pages/Checkins'
 import { Connect } from './pages/Connect'
 import { Metrics } from './pages/Metrics'
@@ -38,7 +39,7 @@ const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string 
 // window comes back, when the app has just checked ("update-checked"), on
 // each page change and every half hour (the app checks GitHub itself; this
 // only reads what it found). Outside the app the API isn't there.
-function useNewerVersion(page: string) {
+function useUpdateStatus(page: string) {
   const { data, reload } = useLoad(() => api.updateStatus().catch(() => null), [page])
   useEffect(() => {
     const id = setInterval(reload, 30 * 60_000)
@@ -51,7 +52,7 @@ function useNewerVersion(page: string) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  return !!data?.state.latest
+  return data ?? null
 }
 
 const TABS = ['overview', 'checkins', 'reports', 'metrics']
@@ -102,8 +103,9 @@ export function App() {
 
 
   // the settings sit behind a gear at the end of the 连接 AI row, with a dot
-  // when the Mac app has found a newer version
-  const newer = useNewerVersion(page)
+  // when the Mac app has found a newer version (and a card above the row)
+  const update = useUpdateStatus(page)
+  const newer = !!update?.state.latest
   const gearLabel = newer ? t('设置 · 有新版本') : t('设置')
   const settingsLink = (
     <a href="#/settings" className={'icon-btn' + (page === 'settings' ? ' on' : '') + (newer ? ' has-dot' : '')} aria-label={gearLabel} title={gearLabel}>
@@ -127,7 +129,10 @@ export function App() {
             {g.items.map((i) => navItem(i.page, i.label, i.count))}
           </div>
         ))}
-        <div className="side-foot foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>
+        <div className="side-foot">
+          <UpdateCard status={update} />
+          <div className="foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>
+        </div>
       </nav>
       <div className="main-wrap">
         <div className="drag-strip drag" />

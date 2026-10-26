@@ -130,6 +130,8 @@ const EN = {
   '自动检查更新': 'Check for updates automatically',
   '每隔几个小时、窗口回到前台时向 GitHub 查有没有新版本，只问版本号，不会发送任何健康数据。': 'Asks GitHub every few hours, and when the window comes to the front, whether there’s a new version; only the version is asked for, never any health data.',
   '设置 · 有新版本': 'Settings · update available',
+  '有新版本': 'Update available',
+  '更新说明': 'What’s new',
   'Mac 没有允许健康足迹发通知，吃药、预约和打卡提醒都不会弹出。': 'Your Mac doesn’t allow Health Trail’s notifications, so no medication, appointment or check-in reminder will show.',
   '打开通知设置': 'Open Notification Settings',
   '同步到 iPhone': 'Sync to iPhone',

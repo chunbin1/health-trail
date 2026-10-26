@@ -154,6 +154,8 @@ function Updates() {
     if (running || !r || !(await ask(t('更新到 {version}？\n\n设置了备份的话，会先备份一次数据；然后下载新版本、检查签名，替换后重新打开健康足迹。', { version: r.version }), { ok: t('更新并重启') }))) return
     setCur({ ...s!, state: { ...st!, phase: 'backup', error: '' } })
     await run(api.installUpdate)
+    // the card in the sidebar follows along
+    window.dispatchEvent(new Event('update-checked'))
   }
 
   const r = st.latest
