@@ -30,6 +30,8 @@ DEV_ID  ?= -
 # The shared test data: made-up records, kept across restarts, used by make dev,
 # make test-window and every coding session that tries a change by hand. Never
 # the real data in ~/Library/Application Support/HealthVault (CLAUDE.md).
+# One process on it at a time: make dev and make test-window write the same
+# database. It also holds the AI assistant's key; keep it out of shared files.
 TEST_DATA ?= $(HOME)/Library/Application Support/HealthTrail-Test
 # saved once with: xcrun notarytool store-credentials health-trail --team-id <your team id>;
 # CI passes an App Store Connect API key instead (--key … --key-id … --issuer …)
