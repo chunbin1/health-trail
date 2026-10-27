@@ -116,6 +116,8 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	}
 	d := Draft{Items: []Item{}, Steps: []Step{}}
 	w := newDrafting(st, turns, now)
+	// whether this reply has looked anything up yet
+	read := false
 	for round := 0; ; round++ {
 		last := round == maxRounds-1
 		choice := "auto"
@@ -133,6 +135,20 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			break
 		}
 		msgs = append(msgs, m.Raw)
+		// a round that only put cards together, all of them fine, is the
+		// end of the reply: asking the model again would resend everything
+		// for one sentence. Unless something was looked up and the answer
+		// isn't written yet.
+		onlyCards := true
+		for _, c := range m.Calls {
+			if !draftTools[c.Name] {
+				onlyCards = false
+			}
+			if tb.read[c.Name] {
+				read = true
+			}
+		}
+		failedAny := false
 		for _, c := range m.Calls {
 			out, failed := "", false
 			args, err := argsOf(c.Args)
@@ -152,11 +168,16 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			}
 			step := stepOf(c.Name, args)
 			step.Error = failed
+			failedAny = failedAny || failed
 			d.Steps = append(d.Steps, step)
 			if onStep != nil {
 				onStep(step)
 			}
 			msgs = append(msgs, map[string]any{"role": "tool", "tool_call_id": c.ID, "content": out})
+		}
+		if onlyCards && !failedAny && (!read || strings.TrimSpace(m.Content) != "") {
+			d.Reply = strings.TrimSpace(m.Content)
+			break
 		}
 	}
 	d.Items = w.items

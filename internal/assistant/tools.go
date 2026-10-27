@@ -70,11 +70,28 @@ func openTools(ctx context.Context, st *store.Store) (*toolbox, error) {
 		tb.defs = append(tb.defs, map[string]any{
 			"type": "function",
 			"function": map[string]any{
-				"name": t.Name, "description": t.Description, "parameters": t.InputSchema,
+				"name": t.Name, "description": shortDescription(t.Name, t.Description), "parameters": t.InputSchema,
 			},
 		})
 	}
 	return tb, nil
+}
+
+// fieldTable starts the list of every record type and its fields that MCP
+// puts in a tool description.
+const fieldTable = "记录类型（type）及字段："
+
+// shortDescription keeps the field table in add_record only. Every request
+// carries every tool description, and the table is the longest part of
+// them; list_records had a second copy.
+func shortDescription(name, desc string) string {
+	if name == "add_record" {
+		return desc
+	}
+	if i := strings.Index(desc, fieldTable); i >= 0 {
+		return strings.TrimSpace(desc[:i]) + "\n\n记录类型和字段名见 add_record 的说明。"
+	}
+	return desc
 }
 
 func (tb *toolbox) close() {

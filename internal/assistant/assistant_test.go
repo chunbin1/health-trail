@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lee/health-trail/internal/mcpserver"
 	"github.com/lee/health-trail/internal/store"
@@ -105,7 +106,10 @@ func (f *fakeModel) cfg(srv *httptest.Server) Config {
 }
 
 // calls is a reply asking for tools; each pair is a name and its arguments.
-func calls(pairs ...string) string {
+func calls(pairs ...string) string { return callsSaying("", pairs...) }
+
+// callsSaying is calls with text next to the tool calls.
+func callsSaying(text string, pairs ...string) string {
 	var tc []map[string]any
 	for i := 0; i+1 < len(pairs); i += 2 {
 		tc = append(tc, map[string]any{
@@ -115,9 +119,16 @@ func calls(pairs ...string) string {
 	}
 	b, _ := json.Marshal(map[string]any{
 		"usage":   map[string]any{"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110, "prompt_tokens_details": map[string]any{"cached_tokens": 80}},
-		"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": nil, "tool_calls": tc, "reasoning_content": "想一想"}}},
+		"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": nullable(text), "tool_calls": tc, "reasoning_content": "想一想"}}},
 	})
 	return string(b)
+}
+
+func nullable(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func answer(text string) string {
@@ -235,6 +246,46 @@ func TestWriteToolsNeverRun(t *testing.T) {
 	if !tb.read["health_overview"] || !tb.read["get_lab_trend"] {
 		t.Fatal("read tools missing")
 	}
+}
+
+// Only putting cards together, all fine, ends the reply: the model is not
+// asked again just to say so.
+func TestCardsOnlyRoundEndsTheReply(t *testing.T) {
+	st := openStore(t)
+	symptom := `{"type":"symptoms","fields":{"occurred_at":"2026-10-27 09:00","description":"头痛","severity":3}}`
+	for _, c := range []struct{ said, reply string }{{"记下了今天早上的头痛。", "记下了今天早上的头痛。"}, {"", ""}} {
+		f := &fakeModel{t: t, replies: []string{callsSaying(c.said, "add_record", symptom), answer("不该有这一次")}}
+		d, err := Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "今天早上头痛"}}, day, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(f.bodies) != 1 || d.Reply != c.reply || len(d.Items) != 1 || d.Unclear != "" || d.Usage.TotalTokens != 110 {
+			t.Fatalf("%q: requests %d draft %+v", c.said, len(f.bodies), d)
+		}
+	}
+	// something was looked up and no answer written yet: ask once more
+	f := &fakeModel{t: t, replies: []string{calls("health_overview", `{}`), calls("add_record", symptom), answer("尿酸正常，头痛记下了。")}}
+	d, err := Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "我最近怎么样，今天头痛"}}, day, nil)
+	if err != nil || len(f.bodies) != 3 || d.Reply != "尿酸正常，头痛记下了。" {
+		t.Fatalf("requests %d err %v draft %+v", len(f.bodies), err, d)
+	}
+}
+
+func TestFieldTableSentOnce(t *testing.T) {
+	st := openStore(t)
+	tb, err := openTools(context.Background(), st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tb.close()
+	b, _ := json.Marshal(tb.defs)
+	if n := strings.Count(string(b), fieldTable); n != 1 {
+		t.Fatalf("field table %d times", n)
+	}
+	if !strings.Contains(string(b), "见 add_record 的说明") {
+		t.Fatal("list_records does not point to add_record")
+	}
+	t.Logf("tool definitions: %d characters", utf8.RuneCount(b))
 }
 
 func TestStopsAfterMaxRounds(t *testing.T) {
