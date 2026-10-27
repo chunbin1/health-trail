@@ -410,6 +410,7 @@ export const api = {
   assistantChats: () => req<ChatHead[]>('GET', '/api/assistant/chats'),
   assistantChat: (id: string) => req<ChatHead & { messages: ChatMsgWire[] }>('GET', '/api/assistant/chats/' + encodeURIComponent(id)),
   saveAssistantChat: (body: { id: string; messages: ChatMsgWire[] }) => req<ChatHead>('PUT', '/api/assistant/chats', body),
+  deleteAssistantChat: (id: string) => req<{ ok: boolean }>('DELETE', '/api/assistant/chats/' + encodeURIComponent(id)),
   speechStart: () => req<SpeechState>('POST', '/api/assistant/speech/start'),
   speechStop: () => req<SpeechState>('POST', '/api/assistant/speech/stop'),
   speech: () => req<SpeechState>('GET', '/api/assistant/speech'),

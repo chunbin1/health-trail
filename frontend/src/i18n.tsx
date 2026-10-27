@@ -181,6 +181,8 @@ const EN = {
   '关闭': 'Close',
   '编辑': 'Edit',
   '删除': 'Delete',
+  '删除对话': 'Delete chat',
+  '删除这段对话？删除后不能恢复；已经保存进档案的记录不受影响。': 'Delete this chat? It can\'t be undone. Anything already saved to your records stays.',
   '确定': 'OK',
   '好': 'OK',
   '请确认': 'Please confirm',

@@ -760,6 +760,18 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
 }
 .chat-side-item:hover { background: var(--surface-2); }
 .chat-side-item.on { background: var(--surface); box-shadow: var(--shadow); }
+.chat-side-item.menu-on { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.ctx-menu {
+  position: fixed; z-index: 1000; min-width: 160px; padding: 4px;
+  background: var(--surface); border-radius: 10px; box-shadow: var(--shadow-lg);
+}
+.ctx-menu button {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  border: 0; background: transparent; cursor: pointer; text-align: left;
+  border-radius: 6px; padding: 7px 10px; font: inherit; font-size: 13.5px; color: var(--ink);
+}
+.ctx-menu button:hover, .ctx-menu button:focus-visible { background: var(--surface-2); outline: none; }
+.ctx-menu button.danger { color: var(--danger); }
 .chat-side-item .title {
   font-size: 13.5px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   max-width: 100%;

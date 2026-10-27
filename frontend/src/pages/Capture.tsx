@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
-import { Check, ImagePlus, Mic, SendHorizontal, X } from 'lucide-react'
+import { Check, ImagePlus, Mic, SendHorizontal, Trash2, X } from 'lucide-react'
 import { api, ApiError, fmtDate, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft, type ToolStep } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
 import { AssistantSetup } from '../components/AssistantSetup'
+import { ask } from '../components/Dialog'
 import { t, tx } from '../i18n'
 import { openRecord, useApp, useLoad } from '../state'
 import { IconButton, KindIcon } from '../ui'
@@ -193,6 +194,9 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   const [chatId, setChatId] = useState(kept.id || String(Date.now()))
   const [past, setPast] = useState<ChatHead[] | null>(null)
   const [chats, setChats] = useState<ChatHead[]>([])
+  // the right-click menu on a chat in the list
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<ChatMsg[]>(kept.messages)
   const [text, setText] = useState(kept.draft)
   const [pics, setPics] = useState<Pic[]>([])
@@ -322,6 +326,25 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     }, 400)
     return () => clearInterval(id)
   }, [listening])
+
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const down = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) close() }
+    const key = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') close() }
+    document.addEventListener('mousedown', down)
+    document.addEventListener('keydown', key)
+    window.addEventListener('blur', close)
+    window.addEventListener('resize', close)
+    document.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('mousedown', down)
+      document.removeEventListener('keydown', key)
+      window.removeEventListener('blur', close)
+      window.removeEventListener('resize', close)
+      document.removeEventListener('scroll', close, true)
+    }
+  }, [menu])
 
   if (error) return <div className="error">{error}</div>
   if (!view) return null
@@ -536,6 +559,11 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
 
   function newChat() {
     if (messages.length) api.saveAssistantChat({ id: chatId, messages: wireOf(messages) }).catch(() => {})
+    clearChat()
+  }
+
+  // clearChat starts an empty chat without saving the one on screen
+  function clearChat() {
     setChatId(String(Date.now()))
     setPast(null)
     setMessages([])
@@ -544,6 +572,25 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     writeText('')
     setPics([])
     setErr('')
+  }
+
+  function chatMenu(e: React.MouseEvent, id: string) {
+    e.preventDefault()
+    // kept inside the window
+    setMenu({ id, x: Math.min(e.clientX, window.innerWidth - 172), y: Math.min(e.clientY, window.innerHeight - 52) })
+  }
+
+  async function removeChat(id: string) {
+    setMenu(null)
+    if (!(await ask(t('删除这段对话？删除后不能恢复；已经保存进档案的记录不受影响。'), { ok: t('删除'), danger: true }))) return
+    try {
+      await api.deleteAssistantChat(id)
+      setChats((list) => list.filter((c) => c.id !== id))
+      setPast((list) => list && list.filter((c) => c.id !== id))
+      if (id === chatId) clearChat()
+    } catch (e: any) {
+      setErr(e.message)
+    }
   }
 
   async function openPast() {
@@ -573,13 +620,20 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
 
   return (
     <div className={panel ? 'capture-panel' : 'capture-page'}>
+      {menu && (
+        <div ref={menuRef} className="ctx-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
+          <button type="button" role="menuitem" className="danger" autoFocus onClick={() => removeChat(menu.id)}>
+            <Trash2 size={15} />{t('删除对话')}
+          </button>
+        </div>
+      )}
       {!panel && (
         <aside className="chat-side">
           <button type="button" className="btn sm" onClick={newChat}>{t('新对话')}</button>
           <div className="chat-side-list">
             {chats.length === 0 && <div className="sub">{t('还没有对话记录')}</div>}
             {chats.map((c) => (
-              <button type="button" key={c.id} className={'chat-side-item' + (c.id === chatId ? ' on' : '')} onClick={() => { if (c.id !== chatId) openPastChat(c.id) }}>
+              <button type="button" key={c.id} className={'chat-side-item' + (c.id === chatId ? ' on' : '') + (menu?.id === c.id ? ' menu-on' : '')} onClick={() => { if (c.id !== chatId) openPastChat(c.id) }} onContextMenu={(e) => chatMenu(e, c.id)}>
                 <span className="title">{c.title}</span>
                 <span className="small muted">{chatMeta(c)}</span>
               </button>
@@ -627,7 +681,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
             past.length === 0
               ? <div className="sub">{t('还没有对话记录')}</div>
               : <div className="card flush">{past.map((c) => (
-                <button type="button" key={c.id} className="row-item no-ico" onClick={() => openPastChat(c.id)}>
+                <button type="button" key={c.id} className="row-item no-ico" onClick={() => openPastChat(c.id)} onContextMenu={(e) => chatMenu(e, c.id)}>
                   <span className="body">{c.title}</span>
                   <span className="small muted nowrap">{chatMeta(c)}</span>
                 </button>

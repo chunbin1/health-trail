@@ -88,6 +88,26 @@ func ListChats(dir string) ([]Chat, error) {
 	return out, nil
 }
 
+// DeleteChat removes one conversation. One that is not there is already gone.
+func DeleteChat(dir, id string) error {
+	chatsMu.Lock()
+	defer chatsMu.Unlock()
+	file, err := readChats(dir)
+	if err != nil {
+		return err
+	}
+	out := file.Chats[:0]
+	for _, c := range file.Chats {
+		if c.ID != id {
+			out = append(out, c)
+		}
+	}
+	if len(out) == len(file.Chats) {
+		return nil
+	}
+	return writeChats(dir, chatFile{Chats: out})
+}
+
 // GetChat returns one conversation, including its messages.
 func GetChat(dir, id string) (Chat, bool, error) {
 	chatsMu.Lock()

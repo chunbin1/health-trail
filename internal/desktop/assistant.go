@@ -129,6 +129,13 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 		}
 		writeJSON(w, c)
 	}))
+	mux.HandleFunc("DELETE /api/assistant/chats/{id}", wrap(func(w http.ResponseWriter, r *http.Request) {
+		if err := assistant.DeleteChat(a.st.Dir, r.PathValue("id")); err != nil {
+			writeError(w, err.Error())
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	}))
 	mux.HandleFunc("PUT /api/assistant/chats", wrap(func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			ID       string          `json:"id"`

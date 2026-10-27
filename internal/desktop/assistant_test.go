@@ -38,7 +38,7 @@ func TestAssistantNotOnThePhone(t *testing.T) {
 	}
 
 	for _, path := range []string{"/api/assistant/chats", "/api/assistant/chats/1"} {
-		for _, method := range []string{http.MethodGet, http.MethodPut} {
+		for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
 			r := httptest.NewRequest(method, path, strings.NewReader(`{"id":"1","messages":[]}`))
 			r.RemoteAddr = "127.0.0.1:9"
 			r.Host = "127.0.0.1:8721"
