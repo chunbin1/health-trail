@@ -147,7 +147,7 @@ function SaveMode({ auto, onChange }: { auto: boolean; onChange: (on: boolean) =
     }
   }, [open])
   const modes = [
-    { on: true, key: '1', title: t('自动保存'), desc: t('回复一到就写入档案，用药要另外点保存'), recommend: true },
+    { on: true, key: '1', title: t('自动保存'), desc: t('回复一到就写入档案，健康问题和用药要另外点保存'), recommend: true },
     { on: false, key: '2', title: t('手动保存'), desc: t('看过、改过之后再保存'), recommend: false },
   ]
   return (
@@ -256,7 +256,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     if (!last || last.role !== 'assistant' || autoTried.current.has(last.id)) return
     if (!last.items?.length || savedAll(last) || last.locked) return
     if (last.open && Object.values(last.open).some(Boolean)) return
-    const rest = last.items.filter((it, i) => !last.saved?.[i] && !isMedication(it))
+    const rest = last.items.filter((it, i) => !last.saved?.[i] && !waitsForSave(it))
     if (!rest.length || rest.some((it) => it.problem)) return
     autoTried.current.add(last.id)
     save(last, true)
@@ -436,7 +436,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
 
   async function save(msg: ChatMsg, autoSave = false) {
     if (savingRef.current || savingId || msg.locked || savedAll(msg) || !msg.items?.length) return
-    const pending = msg.items.map((it, i) => ({ it, i })).filter(({ it, i }) => !msg.saved?.[i] && !(autoSave && isMedication(it)))
+    const pending = msg.items.map((it, i) => ({ it, i })).filter(({ it, i }) => !msg.saved?.[i] && !(autoSave && waitsForSave(it)))
     if (!pending.length) return
     const prior = messages.slice(0, messages.findIndex((m) => m.id === msg.id)).reverse().find((m) => m.role === 'user')
     if ((prior?.imageCount || prior?.images?.length) && !prior.images?.some((p) => p.data)) {
@@ -491,8 +491,15 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     }
   }
 
+  // An edited reply is saved by hand: automatic saving leaves it alone from
+  // here on, so the old warning can go and the editor stays open.
   function patch(msgId: string, i: number, next: DraftItem) {
-    setMessages((ms) => ms.map((m) => m.id === msgId ? { ...m, items: m.items?.map((it, n) => n === i ? next : it) } : m))
+    autoTried.current.add(msgId)
+    setMessages((ms) => ms.map((m) => m.id === msgId ? {
+      ...m,
+      items: m.items?.map((it, n) => n === i ? { ...next, problem: '' } : it),
+      open: { ...m.open, [i]: true },
+    } : m))
   }
 
   function dropItem(msgId: string, i: number) {
@@ -569,7 +576,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       <div className="page-head">
         <div className="titles">
           <h1>{t('AI助手')}</h1>
-          <div className="sub">{t('像聊天一样说，也可以问档案里的报告和症状，或发化验单、处方的照片。要记下的内容，自动保存开着时会写入档案。用药建议不会自动写入，要点保存。')}</div>
+          <div className="sub">{t('像聊天一样说，也可以问档案里的报告和症状，或发化验单、处方的照片。要记下的内容，自动保存开着时会写入档案。健康问题和用药建议不会自动写入，要点保存。')}</div>
         </div>
         {view.configured && !showSetup && (
           <button type="button" className="btn ghost sm" onClick={() => setShowSetup(true)}>{t('修改接口')}</button>
@@ -732,8 +739,10 @@ function wireOf(messages: ChatMsg[]): ChatMsgWire[] {
   }))
 }
 
-function isMedication(it: DraftItem) {
-  return it.type === 'medications' || it.kind === 'medications'
+// A health issue (often the assistant's own diagnosis) and a medicine are
+// never written by automatic saving: the person saves them.
+function waitsForSave(it: DraftItem) {
+  return it.type === 'medications' || it.kind === 'medications' || it.type === 'conditions' || it.kind === 'conditions'
 }
 
 function savedAll(m: ChatMsg) {

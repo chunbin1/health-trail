@@ -3,6 +3,7 @@ package assistant
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,7 +159,15 @@ func readChats(dir string) (chatFile, error) {
 	}
 	var file chatFile
 	if err := json.Unmarshal(b, &file); err != nil {
-		return chatFile{}, fmt.Errorf("对话记录读不出来")
+		// keep the damaged file for a look later, and start a new list so
+		// saving works again instead of failing on every message
+		path := filepath.Join(dir, chatsFile)
+		bad := path + ".bad-" + time.Now().Format("20060102-150405")
+		if rerr := os.Rename(path, bad); rerr != nil {
+			return chatFile{}, fmt.Errorf("对话记录读不出来")
+		}
+		log.Printf("对话记录读不出来（%v），已改名为 %s", err, filepath.Base(bad))
+		return chatFile{}, nil
 	}
 	return file, nil
 }

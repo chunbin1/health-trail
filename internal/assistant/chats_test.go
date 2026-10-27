@@ -2,6 +2,8 @@ package assistant
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -58,5 +60,27 @@ func TestChatsRoundTrip(t *testing.T) {
 	listed, err := ListChats(dir)
 	if err != nil || listed[0].Tokens != 40 {
 		t.Fatal("list dropped the token total")
+	}
+}
+
+func TestChatsDamagedFileIsSetAside(t *testing.T) {
+	dir := t.TempDir()
+	cut := []byte(`{"chats":[{"id":"a","messages":[{"role":"user"`)
+	if err := os.WriteFile(filepath.Join(dir, chatsFile), cut, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveChat(dir, "b", json.RawMessage(`[{"role":"user","text":"头痛"}]`)); err != nil {
+		t.Fatalf("save after a damaged file: %v", err)
+	}
+	list, err := ListChats(dir)
+	if err != nil || len(list) != 1 || list[0].ID != "b" {
+		t.Fatalf("list %+v %v", list, err)
+	}
+	bad, _ := filepath.Glob(filepath.Join(dir, chatsFile+".bad-*"))
+	if len(bad) != 1 {
+		t.Fatalf("damaged copy %v", bad)
+	}
+	if b, _ := os.ReadFile(bad[0]); string(b) != string(cut) {
+		t.Fatalf("damaged copy changed: %s", b)
 	}
 }

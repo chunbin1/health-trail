@@ -351,6 +351,28 @@ func TestUpdateRequiresKeyWhenHostChanges(t *testing.T) {
 	if _, err := cfg.Update(&other, nil, nil, false); err == nil || !strings.Contains(err.Error(), "重新填写密钥") {
 		t.Fatal(err)
 	}
+	blank := ""
+	if _, err := cfg.Update(&other, &blank, nil, false); err == nil {
+		t.Fatal("a blank key went to another host")
+	}
+	// the same key typed again for the new host (a gateway that takes it)
+	moved, err := cfg.Update(&other, &key, nil, false)
+	if err != nil || moved.BaseURL != other || moved.APIKey != "sk-old" {
+		t.Fatalf("same key typed again %+v %v", moved, err)
+	}
+	// clearing the address leaves the key with no host to go to
+	cleared, err := cfg.Update(&blank, nil, nil, false)
+	if err != nil || cleared.BaseURL != "" {
+		t.Fatalf("clear address %+v %v", cleared, err)
+	}
+	// and an address filled in after that still needs the key again
+	if _, err := cleared.Update(&other, nil, nil, false); err == nil {
+		t.Fatal("the key went to a host filled in after clearing the address")
+	}
+	// clearing the key while moving is fine too
+	if _, err := cfg.Update(&other, nil, nil, true); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func openStore(t *testing.T) *store.Store {
