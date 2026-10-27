@@ -79,7 +79,10 @@ func (c Config) Update(baseURL, apiKey, model *string, clearKey bool) (Config, e
 		}
 		next.APIKey = k
 	}
-	if hostOf(c.BaseURL) != "" && hostOf(next.BaseURL) != hostOf(c.BaseURL) && c.APIKey != "" && next.APIKey == c.APIKey {
+	// the saved key belongs to the old host: going to another one takes a key
+	// filled in this time (the same one is fine), so it isn't sent on by itself
+	typed := apiKey != nil && strings.TrimSpace(*apiKey) != ""
+	if to := hostOf(next.BaseURL); to != "" && to != hostOf(c.BaseURL) && next.APIKey != "" && !typed {
 		return c, errors.New("换了接口地址，请重新填写密钥")
 	}
 	if err := next.save(); err != nil {

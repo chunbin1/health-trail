@@ -69,6 +69,9 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 		}
 	}
 	kindNames := []string{}
+	// the unit of a metric kind made in this batch: prepare looks units up
+	// outside the transaction, where that kind isn't visible yet
+	kindUnits := map[string]any{}
 
 	for _, i := range order {
 		it := items[i]
@@ -105,6 +108,11 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 		if err != nil {
 			return nil, prefixErr(pos(n), err)
 		}
+		if t, ok := r["metric_type"].(string); ok && r["unit"] == nil && (e.Name == "metrics" || e.Name == "habits") {
+			if u, ok := kindUnits[t]; ok {
+				r["unit"] = u
+			}
+		}
 		if err := editable(e, r); err != nil {
 			return nil, prefixErr(pos(n), err)
 		}
@@ -119,6 +127,9 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 		if e.Name == "metric_kinds" {
 			if name, _ := r["name"].(string); name != "" {
 				kindNames = append(kindNames, name)
+				if r["unit"] != nil {
+					kindUnits[name] = r["unit"]
+				}
 			}
 		}
 		if e.Name == "conditions" {

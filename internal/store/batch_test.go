@@ -14,7 +14,7 @@ func TestCreateInOrderMetricKindAndReading(t *testing.T) {
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("%v %+v", err, rows)
 	}
-	if rows[0]["metric_type"] != "尿酸" {
+	if rows[0]["metric_type"] != "尿酸" || rows[0]["unit"] != "μmol/L" {
 		t.Fatalf("%+v", rows[0])
 	}
 }
