@@ -13,20 +13,53 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 type Record = map[string]any
 
 // ErrNotFound is returned when a record id doesn't exist.
-var ErrNotFound = errors.New("记录不存在")
+var ErrNotFound error = msg.New("记录不存在", "The record doesn't exist")
 
 // ValidationError is a problem with the input, worded for whoever typed it
 // (a person in the UI, or Claude through MCP).
-type ValidationError struct{ Msg string }
+// ValidationError is a mistake in what was sent. Msg is what MCP and the
+// model read; En is the same for a page in English (empty: none yet).
+type ValidationError struct{ Msg, En string }
 
-func (e *ValidationError) Error() string { return e.Msg }
+func (e *ValidationError) Error() string   { return e.Msg }
+func (e *ValidationError) English() string { return e.En }
 
-func invalid(format string, a ...any) error { return &ValidationError{fmt.Sprintf(format, a...)} }
+// invalid formats zh and en with the same args; in en, an arg that has
+// English text (word, an error from msg) is written in English.
+func invalid(zh, en string, a ...any) error {
+	return &ValidationError{Msg: fmt.Sprintf(zh, a...), En: msg.Sprintf("en", en, a...)}
+}
+
+// word is a label of the schema in both languages.
+func word(s string) msg.Word { return msg.Word{Zh: s, En: En(s)} }
+
+// En is the English of a label, hint, option or unit of the schema, or s
+// when it has none.
+func En(s string) string {
+	if e, ok := English[s]; ok {
+		return e
+	}
+	return s
+}
+
+// words is a list of labels or options in one language.
+func words(lang string, list []string, sepZh string) string {
+	if lang != "en" {
+		return strings.Join(list, sepZh)
+	}
+	out := make([]string, len(list))
+	for i, s := range list {
+		out[i] = En(s)
+	}
+	return strings.Join(out, ", ")
+}
 
 type Store struct {
 	DB      *sql.DB
@@ -153,7 +186,7 @@ func now() string { return time.Now().Format("2006-01-02 15:04:05") }
 func entity(name string) (*Entity, error) {
 	e := EntityByName(name)
 	if e == nil {
-		return nil, invalid("没有 %q 这种记录类型，可用的有：%s", name, strings.Join(EntityNames(), ", "))
+		return nil, invalid("没有 %q 这种记录类型，可用的有：%s", "There's no record type %q; the types are: %s", name, strings.Join(EntityNames(), ", "))
 	}
 	return e, nil
 }
@@ -183,17 +216,17 @@ func (s *Store) cleanWithNames(e *Entity, in Record, known map[string]map[int64]
 			for i, f := range e.Fields {
 				names[i] = f.Name
 			}
-			return nil, invalid("%s 没有字段 %q，可用字段：%s", e.Label, k, strings.Join(names, ", "))
+			return nil, invalid("%s 没有字段 %q，可用字段：%s", "%s has no field %q; the fields are: %s", word(e.Label), k, strings.Join(names, ", "))
 		}
 		cv, err := s.convertExtra(*f, v, extra)
 		if err != nil {
-			return nil, invalid("%s「%s」：%v", e.Label, f.Label, err)
+			return nil, invalid("%s「%s」：%v", "%s, %s: %v", word(e.Label), word(f.Label), err)
 		}
 		if cv != nil && f.Type == Ref {
 			id := cv.(int64)
 			if !refKnown(known, f.Ref, id) {
 				if err := s.mustExist(f.Ref, id); err != nil {
-					return nil, invalid("%s「%s」：%s #%d 不存在", e.Label, f.Label, EntityByName(f.Ref).Label, id)
+					return nil, invalid("%s「%s」：%s #%d 不存在", "%s, %s: %s #%d doesn't exist", word(e.Label), word(f.Label), word(EntityByName(f.Ref).Label), id)
 				}
 			}
 		}
@@ -244,12 +277,13 @@ func (s *Store) customOption(f Field, v string) (any, error) {
 		return nil, errBMI
 	}
 	ce := EntityByName(f.Custom)
-	have := "还没有"
+	have := msg.Word{Zh: "还没有", En: "none yet"}
 	if len(names) > 0 {
-		have = strings.Join(names, "、")
+		have = msg.Word{Zh: strings.Join(names, "、"), En: strings.Join(names, ", ")}
 	}
-	return nil, fmt.Errorf("%q 不在可选值中：%s。%s（%s）：%s。要用新的，先新建一条 %s（填名称和单位）",
-		v, strings.Join(f.Options, "、"), ce.Label, ce.Name, have, ce.Name)
+	return nil, msg.Errorf("%q 不在可选值中：%s。%s（%s）：%s。要用新的，先新建一条 %s（填名称和单位）",
+		"%q isn't one of: %s. %s (%s): %s. To use a new one, first add a %s (with name and unit)",
+		v, msg.Word{Zh: words("zh", f.Options, "、"), En: words("en", f.Options, "、")}, word(ce.Label), ce.Name, have, ce.Name)
 }
 
 func (s *Store) customNames(entity string) ([]string, error) {
@@ -283,14 +317,15 @@ func (s *Store) mustExist(table string, id int64) error {
 }
 
 func required(e *Entity, r Record) error {
-	var missing []string
+	var missing, missingEn []string
 	for _, f := range e.Fields {
 		if f.Required && r[f.Name] == nil {
 			missing = append(missing, f.Label+"("+f.Name+")")
+			missingEn = append(missingEn, En(f.Label)+" ("+f.Name+")")
 		}
 	}
 	if len(missing) > 0 {
-		return invalid("%s缺少必填项：%s", e.Label, strings.Join(missing, "、"))
+		return invalid("%s缺少必填项：%s", "%s: missing %s", word(e.Label), msg.Word{Zh: strings.Join(missing, "、"), En: strings.Join(missingEn, ", ")})
 	}
 	return nil
 }
@@ -303,7 +338,7 @@ func editable(e *Entity, r Record) error {
 		return nil
 	}
 	if d, _ := r["date"].(string); d != today() {
-		return invalid("打卡只能记在今天（%s），%s 的打卡不能再新增、修改或撤销", today(), d)
+		return invalid("打卡只能记在今天（%s），%s 的打卡不能再新增、修改或撤销", "Check-ins are only for today (%s); one for %s can't be added, changed or undone", today(), d)
 	}
 	return nil
 }
@@ -329,7 +364,7 @@ func (s *Store) prepare(e *Entity, r Record) {
 	}
 }
 
-var errBMI = fmt.Errorf("BMI 不用记，由体重和身高自动算出：记体重（kg）和身高（cm）就行")
+var errBMI = msg.New("BMI 不用记，由体重和身高自动算出：记体重（kg）和身高（cm）就行", "BMI isn't recorded: it's worked out from weight and height. Record weight (kg) and height (cm)")
 
 // check refuses what the fields allow but the app doesn't; prev is the
 // record before an update (nil for a new one).
@@ -339,15 +374,15 @@ func check(e *Entity, r, prev Record) error {
 	name, _ := r["name"].(string)
 	renamed := prev == nil || prev["name"] != name
 	if e.Name == "metric_kinds" && renamed && slices.Contains(MetricTypes, name) {
-		return invalid("「%s」已经是内置的指标，直接选它就行，不用新建", name)
+		return invalid("「%s」已经是内置的指标，直接选它就行，不用新建", "%q is already a built-in metric; pick it instead of making a new one", word(name))
 	}
 	if e.Name == "metric_kinds" && renamed && strings.EqualFold(strings.TrimSpace(name), BMI) {
-		return invalid("%v", errBMI)
+		return invalid("%v", "%v", errBMI)
 	}
 	// its readings are the built-in metric's now: a new name or unit would
 	// carry them all off (renameMetric)
 	if old, _ := prev["name"].(string); e.Name == "metric_kinds" && slices.Contains(MetricTypes, old) && (renamed || r["unit"] != prev["unit"]) {
-		return invalid("「%s」现在是内置的指标，这个同名的自建指标不能改名字和单位（它的读数都算内置的「%s」）；不需要它的话可以直接删掉，读数会留着", old, old)
+		return invalid("「%s」现在是内置的指标，这个同名的自建指标不能改名字和单位（它的读数都算内置的「%s」）；不需要它的话可以直接删掉，读数会留着", "%q is now a built-in metric, so this custom metric of the same name can't change its name or unit (its readings count as the built-in %q). If you don't need it, delete it; the readings stay", word(old), word(old))
 	}
 	return nil
 }
@@ -424,7 +459,7 @@ func (s *Store) CreateMany(entityName string, ins []Record) ([]Record, error) {
 	built := make([]Record, len(ins))
 	for i, in := range ins {
 		if built[i], err = s.build(e, in); err != nil {
-			return nil, prefixErr(fmt.Sprintf("第 %d 条：", i+1), err)
+			return nil, prefixErr(i+1, err)
 		}
 	}
 	tx, err := s.DB.Begin()
@@ -435,7 +470,7 @@ func (s *Store) CreateMany(entityName string, ins []Record) ([]Record, error) {
 	ids := make([]int64, len(built))
 	for i, r := range built {
 		if ids[i], err = insert(tx, e, r); err != nil {
-			return nil, prefixErr(fmt.Sprintf("第 %d 条：", i+1), err)
+			return nil, prefixErr(i+1, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -450,10 +485,15 @@ func (s *Store) CreateMany(entityName string, ins []Record) ([]Record, error) {
 	return out, nil
 }
 
-func prefixErr(p string, err error) error {
+// prefixErr puts "第 n 条：" (item n) in front of a validation error.
+func prefixErr(n int, err error) error {
 	var ve *ValidationError
 	if errors.As(err, &ve) {
-		return invalid("%s%s", p, ve.Msg)
+		en := ve.En
+		if en == "" {
+			en = ve.Msg
+		}
+		return &ValidationError{Msg: pos(n) + ve.Msg, En: fmt.Sprintf("Item %d: ", n) + en}
 	}
 	return err
 }
@@ -598,14 +638,17 @@ func (s *Store) inUse(e *Entity, id int64) error {
 	if metrics+habits == 0 {
 		return nil
 	}
-	var used []string
+	var used, usedEn []string
 	if metrics > 0 {
 		used = append(used, fmt.Sprintf(" %d 条身体数据", metrics))
+		usedEn = append(usedEn, fmt.Sprintf("%d body metric readings", metrics))
 	}
 	if habits > 0 {
 		used = append(used, fmt.Sprintf(" %d 个打卡项", habits))
+		usedEn = append(usedEn, fmt.Sprintf("%d check-in items", habits))
 	}
-	return invalid("「%s」还有%s在用，先删掉它们或改成别的指标，再删除这个指标", cur["name"], strings.Join(used, "和"))
+	return invalid("「%s」还有%s在用，先删掉它们或改成别的指标，再删除这个指标", "%q is still used by %s. Delete those or move them to another metric first, then delete this one",
+		cur["name"], msg.Word{Zh: strings.Join(used, "和"), En: strings.Join(usedEn, " and ")})
 }
 
 func (s *Store) Delete(entityName string, id int64) error {
@@ -618,7 +661,7 @@ func (s *Store) Delete(entityName string, id int64) error {
 		if _, err := s.Get(e.Name, id); err != nil {
 			return err
 		}
-		return invalid("打卡项不能删除，这样它的打卡记录会一直保留。不再打卡的话，把它的 archived 改成 true（归档），以后还能改回来")
+		return invalid("打卡项不能删除，这样它的打卡记录会一直保留。不再打卡的话，把它的 archived 改成 true（归档），以后还能改回来", "A check-in item can't be deleted, so its check-ins are kept. To stop checking in, archive it (archived true); it can be restored later")
 	}
 	if e.Name == "checkins" {
 		cur, err := s.Get(e.Name, id)
@@ -708,7 +751,7 @@ func (s *Store) List(entityName string, q ListQuery) ([]Record, int, error) {
 		if q.From != "" {
 			d, err := normalizeDate(q.From)
 			if err != nil {
-				return nil, 0, invalid("from：%v", err)
+				return nil, 0, invalid("from：%v", "from: %v", err)
 			}
 			where = append(where, "substr("+e.DateKey+",1,10) >= ?")
 			args = append(args, d)
@@ -716,7 +759,7 @@ func (s *Store) List(entityName string, q ListQuery) ([]Record, int, error) {
 		if q.To != "" {
 			d, err := normalizeDate(q.To)
 			if err != nil {
-				return nil, 0, invalid("to：%v", err)
+				return nil, 0, invalid("to：%v", "to: %v", err)
 			}
 			where = append(where, "substr("+e.DateKey+",1,10) <= ?")
 			args = append(args, d)
@@ -725,11 +768,11 @@ func (s *Store) List(entityName string, q ListQuery) ([]Record, int, error) {
 	for k, v := range q.Filters {
 		f := e.Field(k)
 		if f == nil {
-			return nil, 0, invalid("%s 没有字段 %q", e.Label, k)
+			return nil, 0, invalid("%s 没有字段 %q", "%s has no field %q", word(e.Label), k)
 		}
 		cv, err := s.convert(*f, v)
 		if err != nil {
-			return nil, 0, invalid("%s：%v", f.Label, err)
+			return nil, 0, invalid("%s：%v", "%s: %v", word(f.Label), err)
 		}
 		if cv == nil {
 			where = append(where, k+" IS NULL")
@@ -798,18 +841,18 @@ func (s *Store) query(sqlText string, args ...any) ([]Record, error) {
 }
 
 func dbErr(e *Entity, err error) error {
-	msg := err.Error()
-	if strings.Contains(msg, "UNIQUE constraint failed") {
+	m := err.Error()
+	if strings.Contains(m, "UNIQUE constraint failed") {
 		if e.Name == "checkins" {
-			return invalid("这个打卡项当天已经打过卡了")
+			return invalid("这个打卡项当天已经打过卡了", "This item is already checked in for that day")
 		}
 		if e.Name == "habits" {
-			return invalid("已经有一个同名的打卡项了；如果它已归档，可以在打卡页底部恢复它")
+			return invalid("已经有一个同名的打卡项了；如果它已归档，可以在打卡页底部恢复它", "There's already a check-in item with this name; if it's archived, restore it at the bottom of the Check-ins page")
 		}
-		return invalid("%s已存在同名记录", e.Label)
+		return invalid("%s已存在同名记录", "%s already has a record with this name", word(e.Label))
 	}
-	if strings.Contains(msg, "FOREIGN KEY constraint failed") {
-		return invalid("关联的记录不存在")
+	if strings.Contains(m, "FOREIGN KEY constraint failed") {
+		return invalid("关联的记录不存在", "The linked record doesn't exist")
 	}
 	return err
 }

@@ -3,7 +3,6 @@ package assistant
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -11,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lee/health-trail/internal/mcpserver"
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -39,13 +39,13 @@ func openTools(ctx context.Context, st *store.Store) (*toolbox, error) {
 	clientEnd, serverEnd := mcp.NewInMemoryTransports()
 	ss, err := srv.Connect(ctx, serverEnd, nil)
 	if err != nil {
-		return nil, fmt.Errorf("没能打开档案工具")
+		return nil, msg.New("没能打开档案工具", "Couldn't open the record tools")
 	}
 	client := mcp.NewClient(&mcp.Implementation{Name: "health-trail-assistant", Version: "app"}, nil)
 	cs, err := client.Connect(ctx, clientEnd, nil)
 	if err != nil {
 		ss.Close()
-		return nil, fmt.Errorf("没能打开档案工具")
+		return nil, msg.New("没能打开档案工具", "Couldn't open the record tools")
 	}
 	tb := &toolbox{session: cs, server: ss, read: map[string]bool{}}
 	if r := cs.InitializeResult(); r != nil {
@@ -54,7 +54,7 @@ func openTools(ctx context.Context, st *store.Store) (*toolbox, error) {
 	res, err := cs.ListTools(ctx, nil)
 	if err != nil {
 		tb.close()
-		return nil, fmt.Errorf("没能打开档案工具")
+		return nil, msg.New("没能打开档案工具", "Couldn't open the record tools")
 	}
 	tools := res.Tools
 	// the same order every time, so the request prefix can be cached
@@ -79,7 +79,7 @@ func openTools(ctx context.Context, st *store.Store) (*toolbox, error) {
 
 // fieldTable starts the list of every record type and its fields that MCP
 // puts in a tool description.
-const fieldTable = "记录类型（type）及字段："
+const fieldTable = mcpserver.FieldTable
 
 // shortDescription keeps the field table in add_record only. Every request
 // carries every tool description, and the table is the longest part of
@@ -137,7 +137,7 @@ func argsOf(raw string) (map[string]any, error) {
 	}
 	var m map[string]any
 	if err := json.Unmarshal([]byte(raw), &m); err != nil || m == nil {
-		return nil, fmt.Errorf("参数不是 JSON 对象，请重新调用")
+		return nil, msg.New("参数不是 JSON 对象，请重新调用", "The arguments aren't a JSON object; call it again")
 	}
 	return m, nil
 }

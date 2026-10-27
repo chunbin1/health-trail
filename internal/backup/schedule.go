@@ -1,8 +1,9 @@
 package backup
 
 import (
-	"fmt"
 	"time"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 // Config is where backups go and what makes one. Every trigger can be on or
@@ -40,14 +41,14 @@ func (c *Config) Defaults() {
 func (c *Config) Check() error {
 	for _, at := range []string{c.DailyAt, c.WeeklyAt} {
 		if _, err := time.Parse("15:04", at); err != nil {
-			return fmt.Errorf("时间要写成 HH:MM，如 21:00，收到 %q", at)
+			return msg.Errorf("时间要写成 HH:MM，如 21:00，收到 %q", "The time must be HH:MM, like 21:00; got %q", at)
 		}
 	}
 	if c.Weekday < 0 || c.Weekday > 6 {
-		return fmt.Errorf("星期要在 0（周日）到 6（周六）之间，收到 %d", c.Weekday)
+		return msg.Errorf("星期要在 0（周日）到 6（周六）之间，收到 %d", "The weekday must be 0 (Sunday) to 6 (Saturday); got %d", c.Weekday)
 	}
 	if c.Keep < 1 || c.Keep > 1000 {
-		return fmt.Errorf("保留份数要在 1 到 1000 之间，收到 %d", c.Keep)
+		return msg.Errorf("保留份数要在 1 到 1000 之间，收到 %d", "Keep must be 1 to 1000; got %d", c.Keep)
 	}
 	return nil
 }

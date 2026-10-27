@@ -40,7 +40,7 @@ func (s *Store) AddAttachment(ownerType string, ownerID int64, filename, mime st
 		err = cerr
 	}
 	if err == nil && n > MaxAttachment {
-		err = invalid("文件超过 %d MB", MaxAttachment>>20)
+		err = invalid("文件超过 %d MB", "The file is over %d MB", MaxAttachment>>20)
 	}
 	if err != nil {
 		os.Remove(path)

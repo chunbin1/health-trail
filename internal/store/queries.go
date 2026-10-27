@@ -190,7 +190,7 @@ func (s *Store) FindHabit(ref string) (Record, error) {
 func (s *Store) Checkin(habitID int64, date string, value *float64, notes string) (Record, error) {
 	d, err := normalizeDate(date)
 	if err != nil {
-		return nil, invalid("%v", err)
+		return nil, invalid("%v", "%v", err)
 	}
 	// before the metric below is touched
 	ce, _ := entity("checkins")
@@ -202,7 +202,7 @@ func (s *Store) Checkin(habitID int64, date string, value *float64, notes string
 		return nil, err
 	}
 	if archived(h) {
-		return nil, invalid("「%v」已归档，不能打卡；要继续打卡，先把它的 archived 改成 false（恢复）", h["name"])
+		return nil, invalid("「%v」已归档，不能打卡；要继续打卡，先把它的 archived 改成 false（恢复）", "%q is archived and can't be checked in; restore it (archived false) to check in again", h["name"])
 	}
 	rows, err := s.query(`SELECT * FROM checkins WHERE habit_id = ? AND date = ?`, habitID, d)
 	if err != nil {
@@ -255,7 +255,7 @@ func (s *Store) Checkin(habitID int64, date string, value *float64, notes string
 func (s *Store) Uncheck(habitID int64, date string) (bool, error) {
 	d, err := normalizeDate(date)
 	if err != nil {
-		return false, invalid("%v", err)
+		return false, invalid("%v", "%v", err)
 	}
 	rows, err := s.query(`SELECT * FROM checkins WHERE habit_id = ? AND date = ?`, habitID, d)
 	if err != nil || len(rows) == 0 {
@@ -291,13 +291,13 @@ func (s *Store) CheckinStats(from, to string, habitID int64) ([]HabitStats, erro
 	if to == "" {
 		to = today()
 	} else if to, err = normalizeDate(to); err != nil {
-		return nil, invalid("%v", err)
+		return nil, invalid("%v", "%v", err)
 	}
 	if from == "" {
 		t, _ := time.ParseInLocation("2006-01-02", to, time.Local)
 		from = t.AddDate(0, 0, -29).Format("2006-01-02")
 	} else if from, err = normalizeDate(from); err != nil {
-		return nil, invalid("%v", err)
+		return nil, invalid("%v", "%v", err)
 	}
 	var habits []Record
 	if habitID > 0 {
@@ -456,12 +456,12 @@ func (s *Store) recordedSeries(metricType, from, to string) ([]Record, error) {
 	var err error
 	if from != "" {
 		if from, err = normalizeDate(from); err != nil {
-			return nil, invalid("from：%v", err)
+			return nil, invalid("from：%v", "from: %v", err)
 		}
 	}
 	if to != "" {
 		if to, err = normalizeDate(to); err != nil {
-			return nil, invalid("to：%v", err)
+			return nil, invalid("to：%v", "to: %v", err)
 		}
 	}
 	// the newest ones when there are more (List takes 1000 at most), turned
@@ -565,7 +565,7 @@ type SearchHit struct {
 // Search looks for text in every kind of record.
 func (s *Store) Search(q string, limit int) ([]SearchHit, error) {
 	if strings.TrimSpace(q) == "" {
-		return nil, invalid("搜索词不能为空")
+		return nil, invalid("搜索词不能为空", "Type something to search for")
 	}
 	if limit <= 0 {
 		limit = 20

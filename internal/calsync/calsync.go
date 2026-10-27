@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -35,8 +35,8 @@ const (
 	accessWriteOnly
 )
 
-func accessName(a access) string {
-	return [...]string{"还没问过", "已允许", "被拒绝", "只能写入"}[a]
+func accessName(a access) msg.Word {
+	return [...]msg.Word{{Zh: "还没问过", En: "not asked yet"}, {Zh: "已允许", En: "allowed"}, {Zh: "被拒绝", En: "denied"}, {Zh: "只能写入", En: "write only"}}[a]
 }
 
 type calItem struct {
@@ -89,9 +89,10 @@ type calState struct {
 	// Made is what this app wrote, by record key: a digest of it, or
 	// "gone:" + the digest when the person deleted it there (and it isn't
 	// put back until the record changes).
-	Made      map[string]string `json:"made,omitempty"`
-	LastAt    string            `json:"last_at,omitempty"`
-	LastError string            `json:"last_error,omitempty"`
+	Made        map[string]string `json:"made,omitempty"`
+	LastAt      string            `json:"last_at,omitempty"`
+	LastError   string            `json:"last_error,omitempty"`
+	LastErrorEn string            `json:"last_error_en,omitempty"`
 }
 
 type Sync struct {
@@ -165,9 +166,9 @@ func (c *Sync) Set(reminders, on bool) error {
 	if on {
 		if c.api.Access(reminders) != accessFull && !c.api.Request(reminders) {
 			if reminders {
-				return errors.New("没有「提醒事项」的权限：系统设置 → 隐私与安全性 → 提醒事项，打开健康足迹")
+				return msg.New("没有「提醒事项」的权限：系统设置 → 隐私与安全性 → 提醒事项，打开健康足迹", "No access to Reminders: System Settings → Privacy & Security → Reminders, turn on Health Trail")
 			}
-			return errors.New("没有「日历」的权限：系统设置 → 隐私与安全性 → 日历，打开健康足迹")
+			return msg.New("没有「日历」的权限：系统设置 → 隐私与安全性 → 日历，打开健康足迹", "No access to Calendars: System Settings → Privacy & Security → Calendars, turn on Health Trail")
 		}
 		saved := s.CalendarID
 		if reminders {
@@ -241,22 +242,22 @@ func (c *Sync) sync(now time.Time) error {
 	var errs []error
 	if s.Events {
 		if a := c.api.Access(false); a != accessFull {
-			errs = append(errs, fmt.Errorf("没有「日历」的完整权限（%s）：系统设置 → 隐私与安全性 → 日历", accessName(a)))
+			errs = append(errs, msg.Errorf("没有「日历」的完整权限（%s）：系统设置 → 隐私与安全性 → 日历", "No full access to Calendars (%s): System Settings → Privacy & Security → Calendars", accessName(a)))
 		} else {
 			errs = append(errs, c.syncEvents(&s, now))
 		}
 	}
 	if s.Reminders {
 		if a := c.api.Access(true); a != accessFull {
-			errs = append(errs, fmt.Errorf("没有「提醒事项」的完整权限（%s）：系统设置 → 隐私与安全性 → 提醒事项", accessName(a)))
+			errs = append(errs, msg.Errorf("没有「提醒事项」的完整权限（%s）：系统设置 → 隐私与安全性 → 提醒事项", "No full access to Reminders (%s): System Settings → Privacy & Security → Reminders", accessName(a)))
 		} else {
 			errs = append(errs, c.syncReminders(&s, now))
 		}
 	}
-	err := errors.Join(errs...)
-	s.LastAt, s.LastError = now.Format("2006-01-02 15:04:05"), ""
+	err := msg.Join(errs...)
+	s.LastAt, s.LastError, s.LastErrorEn = now.Format("2006-01-02 15:04:05"), "", ""
 	if err != nil {
-		s.LastError = err.Error()
+		s.LastError, s.LastErrorEn = err.Error(), msg.In(err, "en")
 	}
 	if serr := c.save(s); serr != nil && err == nil {
 		err = serr
@@ -462,8 +463,11 @@ func forget(s *calState, kind string, have map[string]calItem, want map[string]b
 
 // Status is what the settings page shows of the sync: what is on, whether
 // macOS allows it, the account, how it last went.
-func (c *Sync) Status() map[string]any {
+func (c *Sync) Status(lang string) map[string]any {
 	s := c.load()
+	if lang == "en" && s.LastErrorEn != "" {
+		s.LastError = s.LastErrorEn
+	}
 	names := []string{"not_asked", "full", "denied", "write_only"}
 	return map[string]any{
 		"events": s.Events, "reminders": s.Reminders, "source": s.Source, "title": c.title,

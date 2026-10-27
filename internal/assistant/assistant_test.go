@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lee/health-trail/internal/mcpserver"
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -445,7 +446,7 @@ func TestUpdateBecomesCard(t *testing.T) {
 	if got, _ := st.Get("medications", id); got["status"] != "计划中" {
 		t.Fatal("changed before saving")
 	}
-	res := Commit(st, d.Items)
+	res := Commit(st, d.Items, "zh")
 	if !res.OK || len(res.Saved) != 1 || res.Saved[0].Kind != "update" || res.Saved[0].ID != id {
 		t.Fatalf("%+v", res)
 	}
@@ -482,7 +483,7 @@ func TestCommitRollsBackAndPartial(t *testing.T) {
 	res := Commit(st, []Item{
 		{Kind: "record", Type: "conditions", Fields: map[string]any{"name": "胃炎"}},
 		{Kind: "record", Type: "visits", Fields: map[string]any{"visit_date": "2026-10-27", "visit_type": "很高"}},
-	})
+	}, "zh")
 	if res.OK || res.Error == "" {
 		t.Fatalf("%+v", res)
 	}
@@ -493,7 +494,7 @@ func TestCommitRollsBackAndPartial(t *testing.T) {
 	res = Commit(st, []Item{
 		{Kind: "record", Type: "symptoms", Fields: map[string]any{"occurred_at": "2026-10-27 09:00", "description": "头痛", "severity": 4}},
 		{Kind: "checkin", Habit: "没有这项"},
-	})
+	}, "zh")
 	if res.OK || len(res.Saved) != 1 || res.FailedIndex == nil || *res.FailedIndex != 1 {
 		t.Fatalf("%+v", res)
 	}
@@ -510,17 +511,17 @@ func TestCommitRollsBackAndPartial(t *testing.T) {
 		{Kind: "checkin", Habit: "晨跑", Date: time.Now().Format("2006-01-02")},
 		{Kind: "lab_report", Report: map[string]any{"report_date": "2026-10-27", "title": "血常规", "report_type": "化验"},
 			Results: []LabResult{{ItemName: "白细胞", Value: "11.2", Unit: "10^9/L", RefRange: "3.5-9.5"}}},
-	})
+	}, "zh")
 	if !res.OK || len(res.Saved) != 4 {
 		t.Fatalf("%+v", res)
 	}
 	sym, _, _ := st.List("symptoms", store.ListQuery{Q: "隐痛", Limit: 5})
 	cond, _, _ := st.List("conditions", store.ListQuery{Q: "胃炎", Limit: 5})
-	res = Commit(st, []Item{{Kind: "widget"}})
+	res = Commit(st, []Item{{Kind: "widget"}}, "zh")
 	if res.OK || !strings.Contains(res.Error, "不能记这种类型") {
 		t.Fatalf("unknown kind %+v", res)
 	}
-	res = Commit(st, []Item{{Kind: "checkin", Habit: "晨跑", Date: "2020-01-01"}})
+	res = Commit(st, []Item{{Kind: "checkin", Habit: "晨跑", Date: "2020-01-01"}}, "zh")
 	if res.OK || !strings.Contains(res.Error, "只能记在今天") {
 		t.Fatalf("past check-in %+v", res)
 	}
@@ -697,5 +698,32 @@ func TestEnglishQuestionsAreRecognised(t *testing.T) {
 	}
 	if medicineAsk("How was my sleep?") {
 		t.Fatal("not about medicine")
+	}
+}
+
+// What the person sees follows the UI's language; what the model reads
+// stays Chinese.
+func TestEnglishUI(t *testing.T) {
+	st := openStore(t)
+	if res := Commit(st, nil, "en"); res.Error != "Nothing to save" {
+		t.Fatalf("%q", res.Error)
+	}
+	res := Commit(st, []Item{{Kind: "record", Type: "symptoms", Fields: map[string]any{"description": "x"}}}, "en")
+	if res.OK || strings.ContainsAny(res.Error, "症状缺少必填项") || !strings.Contains(res.Error, "missing") {
+		t.Fatalf("%q", res.Error)
+	}
+	f := &fakeModel{t: t, replies: []string{answer("已为您设置提醒。")}}
+	cfg := f.cfg(f.start())
+	cfg.Lang = "en"
+	d, err := Propose(context.Background(), st, cfg, []Turn{{Role: "user", Text: "remind me"}}, day, nil)
+	if err != nil || !strings.HasSuffix(d.Reply, claimNoteEn) || d.Unclear != "" {
+		t.Fatalf("err %v draft %+v", err, d)
+	}
+	if !strings.Contains(f.bodies[1], "App 检查") {
+		t.Fatal("the model's note is not Chinese")
+	}
+	_, err = Propose(context.Background(), st, Config{Lang: "en"}, []Turn{{Role: "user", Text: "hi"}}, day, nil)
+	if got := msg.In(err, "en"); got != "Enter the API address, key and model first" {
+		t.Fatalf("%q", got)
 	}
 }

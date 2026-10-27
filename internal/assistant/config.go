@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 // Config is the saved interface. APIKey is never returned by the HTTP API.
@@ -18,6 +20,9 @@ type Config struct {
 	APIKey  string `json:"api_key,omitempty"`
 	Model   string `json:"model,omitempty"`
 	path    string
+	// Lang is the UI's language for what the person sees ("en" or "zh");
+	// not saved
+	Lang string `json:"-"`
 }
 
 func configPath(dir string) string { return filepath.Join(dir, "assistant.json") }
@@ -75,7 +80,7 @@ func (c Config) Update(baseURL, apiKey, model *string, clearKey bool) (Config, e
 	} else if apiKey != nil && strings.TrimSpace(*apiKey) != "" {
 		k := strings.TrimSpace(*apiKey)
 		if len(k) > 500 || strings.ContainsAny(k, "\r\n") {
-			return c, errors.New("密钥无效")
+			return c, msg.New("密钥无效", "The key isn't valid")
 		}
 		next.APIKey = k
 	}
@@ -83,7 +88,7 @@ func (c Config) Update(baseURL, apiKey, model *string, clearKey bool) (Config, e
 	// filled in this time (the same one is fine), so it isn't sent on by itself
 	typed := apiKey != nil && strings.TrimSpace(*apiKey) != ""
 	if to := hostOf(next.BaseURL); to != "" && to != hostOf(c.BaseURL) && next.APIKey != "" && !typed {
-		return c, errors.New("换了接口地址，请重新填写密钥")
+		return c, msg.New("换了接口地址，请重新填写密钥", "The address changed; enter the key again")
 	}
 	if err := next.save(); err != nil {
 		return c, err
@@ -93,7 +98,7 @@ func (c Config) Update(baseURL, apiKey, model *string, clearKey bool) (Config, e
 
 func (c Config) save() error {
 	if c.path == "" {
-		return errors.New("没有配置文件路径")
+		return msg.New("没有配置文件路径", "No settings file path")
 	}
 	b, err := json.MarshalIndent(struct {
 		BaseURL string `json:"base_url,omitempty"`
@@ -115,29 +120,29 @@ func (c Config) save() error {
 func NormalizeBaseURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", errors.New("请填写接口地址")
+		return "", msg.New("请填写接口地址", "Enter the API address")
 	}
 	if len(raw) > 300 {
-		return "", errors.New("接口地址太长")
+		return "", msg.New("接口地址太长", "The API address is too long")
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.Scheme == "" {
-		return "", errors.New("接口地址无法识别")
+		return "", msg.New("接口地址无法识别", "Can't read the API address")
 	}
 	if u.User != nil {
-		return "", errors.New("接口地址里不要写账号密码")
+		return "", msg.New("接口地址里不要写账号密码", "Don't put a user name or password in the API address")
 	}
 	switch u.Scheme {
 	case "https":
 	case "http":
 		if !localHost(u.Hostname()) {
-			return "", errors.New("http 只允许本机地址（127.0.0.1、localhost）；其他地址请用 https")
+			return "", msg.New("http 只允许本机地址（127.0.0.1、localhost）；其他地址请用 https", "http is only for this computer (127.0.0.1, localhost); use https for other addresses")
 		}
 	default:
-		return "", errors.New("接口地址只支持 https，本机可以用 http")
+		return "", msg.New("接口地址只支持 https，本机可以用 http", "The API address must be https (http only for this computer)")
 	}
 	if u.RawQuery != "" || u.Fragment != "" {
-		return "", errors.New("接口地址不要带 ? 或 #")
+		return "", msg.New("接口地址不要带 ? 或 #", "The API address can't have ? or #")
 	}
 	u.Path = strings.TrimSuffix(u.Path, "/")
 	u.Path = strings.TrimSuffix(u.Path, "/chat/completions")
@@ -162,10 +167,10 @@ func localHost(h string) bool {
 func CleanModel(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return "", errors.New("请填写模型名")
+		return "", msg.New("请填写模型名", "Enter the model name")
 	}
 	if len(s) > 80 || strings.ContainsAny(s, "\r\n\t") {
-		return "", errors.New("模型名无效")
+		return "", msg.New("模型名无效", "The model name isn't valid")
 	}
 	return s, nil
 }

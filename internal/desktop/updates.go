@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lee/health-trail/internal/backup"
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/update"
 )
 
@@ -38,11 +39,11 @@ type updates struct {
 type updateState struct {
 	CheckedAt string          `json:"checked_at,omitempty"` // YYYY-MM-DD HH:MM:SS
 	Checking  bool            `json:"checking"`
-	Latest    *update.Release `json:"latest,omitempty"` // only when newer than this build
+	Latest    *update.Release `json:"latest,omitempty"`        // only when newer than this build
 	Error     string          `json:"error,omitempty"`         // of the last check
 	Failed    string          `json:"install_error,omitempty"` // why the last install didn't finish
-	Phase     string          `json:"phase,omitempty"` // backup, download, install, restart
-	Done      int64           `json:"done,omitempty"`  // of the download
+	Phase     string          `json:"phase,omitempty"`         // backup, download, install, restart
+	Done      int64           `json:"done,omitempty"`          // of the download
 	Total     int64           `json:"total,omitempty"`
 }
 
@@ -288,7 +289,7 @@ func (u *updates) routes(mux *http.ServeMux) {
 			Auto bool `json:"auto"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			writeError(w, "无效的请求")
+			writeError(w, u.settings.msg("无效的请求", "Invalid request"))
 			return
 		}
 		u.settings.mu.Lock()
@@ -301,7 +302,7 @@ func (u *updates) routes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /api/update/install", func(w http.ResponseWriter, r *http.Request) {
 		if err := u.install(); err != nil {
-			writeError(w, err.Error())
+			writeError(w, msg.In(err, u.settings.lang()))
 			return
 		}
 		writeJSON(w, u.status())

@@ -3,7 +3,6 @@ package desktop
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lee/health-trail/internal/backup"
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -24,6 +24,8 @@ import (
 type backups struct {
 	st   *store.Store
 	path string
+	// the UI's language, for the errors the page shows
+	lang func() string
 	mu   sync.Mutex // one backup or restore at a time
 	// changed since the last backup, as loop sees it; true at start, when
 	// what happened while the app was closed (Claude over MCP) is unknown
@@ -39,13 +41,15 @@ type backupStatus struct {
 	LastAt    string `json:"last_at,omitempty"` // YYYY-MM-DD HH:MM:SS
 	LastFile  string `json:"last_file,omitempty"`
 	LastError string `json:"last_error,omitempty"`
-	ErrorAt   string `json:"error_at,omitempty"`
+	// the same in English, for a page in English
+	LastErrorEn string `json:"last_error_en,omitempty"`
+	ErrorAt     string `json:"error_at,omitempty"`
 }
 
 const stamp = "2006-01-02 15:04:05"
 
 func newBackups(st *store.Store, dataDir string) *backups {
-	b := &backups{st: st, path: filepath.Join(dataDir, "backup.json")}
+	b := &backups{st: st, path: filepath.Join(dataDir, "backup.json"), lang: func() string { return "zh" }}
 	b.dirty.Store(true)
 	return b
 }
@@ -85,9 +89,9 @@ func (b *backups) runLocked(suffix string, prune bool) (string, error) {
 				log.Printf("清理旧备份失败：%v", perr)
 			}
 		}
-		s.Status.LastAt, s.Status.LastFile, s.Status.LastError, s.Status.ErrorAt = now.Format(stamp), name, "", ""
+		s.Status.LastAt, s.Status.LastFile, s.Status.LastError, s.Status.LastErrorEn, s.Status.ErrorAt = now.Format(stamp), name, "", "", ""
 	} else {
-		s.Status.LastError, s.Status.ErrorAt = err.Error(), now.Format(stamp)
+		s.Status.LastError, s.Status.LastErrorEn, s.Status.ErrorAt = err.Error(), msg.In(err, "en"), now.Format(stamp)
 		log.Printf("备份失败：%v", err)
 	}
 	if serr := b.save(s); serr != nil {
@@ -110,10 +114,10 @@ func (b *backups) restore(name string) error {
 		found = found || e.Name == name
 	}
 	if !found {
-		return errors.New("备份位置里没有这份备份")
+		return msg.New("备份位置里没有这份备份", "That backup isn't in the backup folder")
 	}
 	if _, err := b.runLocked(backup.BeforeRestore, false); err != nil {
-		return errors.New("恢复前先备份当前数据失败，没有恢复：" + err.Error())
+		return msg.Errorf("恢复前先备份当前数据失败，没有恢复：%v", "Couldn't back up the current data first, so nothing was restored: %v", err)
 	}
 	return backup.Restore(b.st, filepath.Join(s.Config.Dir, name))
 }
@@ -194,6 +198,9 @@ func (b *backups) routes(mux *http.ServeMux) {
 		if err != nil || s.Config.Dir == "" {
 			list = []backup.Entry{}
 		}
+		if b.lang() == "en" && s.Status.LastErrorEn != "" {
+			s.Status.LastError = s.Status.LastErrorEn
+		}
 		writeJSON(w, map[string]any{
 			"config":         s.Config,
 			"status":         s.Status,
@@ -207,7 +214,7 @@ func (b *backups) routes(mux *http.ServeMux) {
 		defer b.mu.Unlock()
 		s := b.load()
 		if err := json.NewDecoder(r.Body).Decode(&s.Config); err != nil {
-			writeError(w, "无效的请求")
+			writeError(w, msg.Pick(b.lang(), "无效的请求", "Invalid request"))
 			return
 		}
 		s.Config.Dir = filepath.Clean(s.Config.Dir)
@@ -215,17 +222,17 @@ func (b *backups) routes(mux *http.ServeMux) {
 			s.Config.Dir = ""
 		}
 		if err := s.Config.Check(); err != nil {
-			writeError(w, err.Error())
+			writeError(w, msg.In(err, b.lang()))
 			return
 		}
 		if s.Config.Dir != "" {
 			if err := backup.CheckDir(b.st, s.Config.Dir); err != nil {
-				writeError(w, err.Error())
+				writeError(w, msg.In(err, b.lang()))
 				return
 			}
 		}
 		if err := b.save(s); err != nil {
-			writeError(w, "保存失败："+err.Error())
+			writeError(w, msg.Pick(b.lang(), "保存失败：", "Couldn't save: ")+err.Error())
 			return
 		}
 		writeJSON(w, s.Config)
@@ -233,7 +240,7 @@ func (b *backups) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/backup/run", func(w http.ResponseWriter, r *http.Request) {
 		name, err := b.run("")
 		if err != nil {
-			writeError(w, err.Error())
+			writeError(w, msg.In(err, b.lang()))
 			return
 		}
 		writeJSON(w, map[string]string{"name": name})
@@ -243,11 +250,11 @@ func (b *backups) routes(mux *http.ServeMux) {
 			Name string `json:"name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
-			writeError(w, "要说明恢复哪一份备份（name）")
+			writeError(w, msg.Pick(b.lang(), "要说明恢复哪一份备份（name）", "Say which backup to restore (name)"))
 			return
 		}
 		if err := b.restore(in.Name); err != nil {
-			writeError(w, err.Error())
+			writeError(w, msg.In(err, b.lang()))
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})

@@ -30,6 +30,7 @@ const claimNudge = "（App 检查）你的回复说已经做好了，但这次�
 	"用户要记录或修改的，现在调用对应的工具整理成卡片，再写一两句回复；缺必要的信息（比如预约的具体时刻）就问用户，不要说已经做了。"
 
 const claimNote = "\n\n（这次回复没有整理出卡片，什么都没有保存。）"
+const claimNoteEn = "\n\n(This reply made no cards; nothing was saved.)"
 
 var (
 	boldRe    = regexp.MustCompile(`\*\*|__`)

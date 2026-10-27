@@ -3,7 +3,6 @@ package desktop
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 // listener is the app's socket. It can be moved between 127.0.0.1 and all
@@ -170,16 +171,16 @@ func (s *settings) mergeLists(puts map[string]listChoice) (map[string]listChoice
 	}
 	for k, l := range puts {
 		if !listName.MatchString(k) {
-			return nil, fmt.Errorf("lists 的名字 %q 只能用小写字母、数字和下划线，字母开头，最多 40 个字符", k)
+			return nil, msg.Errorf("lists 的名字 %q 只能用小写字母、数字和下划线，字母开头，最多 40 个字符", "the list name %q may only have lowercase letters, digits and underscores, start with a letter, and be at most 40 characters", k)
 		}
 		l.Order, l.Hidden = clean(l.Order), clean(l.Hidden)
 		if len(l.Order) > 200 || len(l.Hidden) > 200 {
-			return nil, fmt.Errorf("lists.%s 的 order 和 hidden 各最多 200 项", k)
+			return nil, msg.Errorf("lists.%s 的 order 和 hidden 各最多 200 项", "lists.%s: order and hidden may have at most 200 each", k)
 		}
 		out[k] = l
 	}
 	if len(out) > 20 {
-		return nil, fmt.Errorf("lists 最多 20 个")
+		return nil, msg.New("lists 最多 20 个", "at most 20 lists")
 	}
 	return out, nil
 }

@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 // HTTP client that does not follow redirects, so the key is not sent on to
@@ -37,7 +37,7 @@ type toolCall struct {
 	Args string
 }
 
-var errNoTools = errors.New("这个模型不支持工具调用，没法查档案。请在接口设置里换一个支持工具调用（function calling）的模型")
+var errNoTools = msg.New("这个模型不支持工具调用，没法查档案。请在接口设置里换一个支持工具调用（function calling）的模型", "This model can't call tools, so it can't read your records. Choose a model that supports tool calls (function calling) in the API settings")
 
 // chat sends the conversation with the tools. choice is "auto", or "none" on
 // the last round so the model has to answer.
@@ -64,7 +64,7 @@ func chat(ctx context.Context, cfg Config, msgs []any, tools []any, choice strin
 		return message{}, Usage{}, err
 	}
 	if strings.TrimSpace(m.Content) == "" && len(m.Calls) == 0 {
-		return message{}, Usage{}, errors.New("接口没有返回内容")
+		return message{}, Usage{}, msg.New("接口没有返回内容", "The API returned nothing")
 	}
 	return m, usageOf(b), nil
 }
@@ -91,21 +91,21 @@ func contentOf(t Turn) any {
 func postChat(ctx context.Context, cfg Config, body []byte) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return nil, 0, fmt.Errorf("没能发起请求")
+		return nil, 0, msg.New("没能发起请求", "Couldn't send the request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	res, err := chatClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("连不上接口：%s", redact(err.Error(), cfg.APIKey))
+		return nil, 0, msg.Errorf("连不上接口：%s", "Couldn't reach the API: %s", redact(err.Error(), cfg.APIKey))
 	}
 	defer res.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(res.Body, maxResponse+1))
 	if err != nil {
-		return nil, res.StatusCode, fmt.Errorf("读取接口回复失败")
+		return nil, res.StatusCode, msg.New("读取接口回复失败", "Couldn't read the API's reply")
 	}
 	if len(b) > maxResponse {
-		return nil, res.StatusCode, fmt.Errorf("接口的回复太长")
+		return nil, res.StatusCode, msg.New("接口的回复太长", "The API's reply is too long")
 	}
 	return b, res.StatusCode, nil
 }
@@ -141,7 +141,7 @@ func messageOf(b []byte) (message, error) {
 		} `json:"choices"`
 	}
 	if json.Unmarshal(b, &resp) != nil || len(resp.Choices) == 0 || len(resp.Choices[0].Message) == 0 {
-		return message{}, errors.New("接口的回复读不懂")
+		return message{}, msg.New("接口的回复读不懂", "Can't understand the API's reply")
 	}
 	raw := resp.Choices[0].Message
 	var m struct {
@@ -155,7 +155,7 @@ func messageOf(b []byte) (message, error) {
 		} `json:"tool_calls"`
 	}
 	if json.Unmarshal(raw, &m) != nil {
-		return message{}, errors.New("接口的回复读不懂")
+		return message{}, msg.New("接口的回复读不懂", "Can't understand the API's reply")
 	}
 	out := message{Raw: raw}
 	switch c := m.Content.(type) {
@@ -178,29 +178,29 @@ func messageOf(b []byte) (message, error) {
 }
 
 func upstreamError(status int, raw, key string) error {
-	msg := raw
+	detail := raw
 	var wrap struct {
 		Error any `json:"error"`
 	}
 	if json.Unmarshal([]byte(raw), &wrap) == nil && wrap.Error != nil {
 		switch e := wrap.Error.(type) {
 		case string:
-			msg = e
+			detail = e
 		case map[string]any:
 			if m, _ := e["message"].(string); m != "" {
-				msg = m
+				detail = m
 			}
 		}
 	}
-	msg = strings.TrimSpace(redact(msg, key))
-	msg = strings.Join(strings.Fields(msg), " ")
-	if len(msg) > 200 {
-		msg = msg[:200]
+	detail = strings.TrimSpace(redact(detail, key))
+	detail = strings.Join(strings.Fields(detail), " ")
+	if len(detail) > 200 {
+		detail = detail[:200]
 	}
-	if msg == "" {
-		return fmt.Errorf("接口返回了错误（%d）", status)
+	if detail == "" {
+		return msg.Errorf("接口返回了错误（%d）", "The API returned an error (%d)", status)
 	}
-	return fmt.Errorf("接口返回了错误（%d）：%s", status, msg)
+	return msg.Errorf("接口返回了错误（%d）：%s", "The API returned an error (%d): %s", status, detail)
 }
 
 func redact(s, key string) string {

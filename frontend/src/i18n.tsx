@@ -422,6 +422,7 @@ const EN = {
   '这张图片太大': 'This picture is too large',
   '一次最多 4 张图片': 'Up to 4 pictures at a time',
   '（图片）': '(picture)',
+  '对话': 'Chat',
   '正在思考…': 'Thinking…',
   '像聊天一样说，也可以问档案里的任何记录，或发化验单、处方的照片。要记下的内容，自动保存开着时会写入档案；健康问题、用药建议和对已有记录的修改不会自动写入，要点保存。': 'Chat as you would with an assistant. Ask about anything on file, or send a photo of a lab report or prescription. What you want recorded is written into your records when automatic saving is on; a health issue, a suggested medicine and a change to a record already on file wait until you save them.',
   '声音只在这台 Mac 上识别，不会上传。文字和图片会发给你填写的接口；回答时它会按需读取档案里的记录（和连接 Claude 用的是同一套工具），读到的内容也会发过去。整理出来的内容不能代替医生的诊断。': 'Speech is recognized on this Mac and is not uploaded. Text and pictures are sent to the service you configured; to answer, it reads the records it needs (with the same tools Claude uses when connected), and what it reads is sent too. What comes back is not a diagnosis.',

@@ -3,9 +3,12 @@ package store
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 func open(t *testing.T) *Store {
@@ -88,7 +91,7 @@ func TestValidation(t *testing.T) {
 	if !errors.As(err, &ve) {
 		t.Errorf("dangling ref accepted: %v", err)
 	}
-	_, err = s.Create("conditions", Record{"name": "胃炎", "status": "好了"})
+	_, err = s.Create("conditions", Record{"name": "胃炎", "status": "done"})
 	if !errors.As(err, &ve) || !strings.Contains(err.Error(), "已痊愈") {
 		t.Errorf("bad enum: %v", err)
 	}
@@ -908,3 +911,38 @@ func TestCheckUpdateMatchesUpdate(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
+
+// Every mistake a page can show has English, and the Chinese (what MCP and
+// the model read) stays as it was.
+func TestErrorsInEnglish(t *testing.T) {
+	s := open(t)
+	han := regexp.MustCompile(`\p{Han}`)
+	habit, err := s.Create("habits", Record{"name": "晨跑"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, e1 := s.Create("widgets", Record{})
+	_, e2 := s.Create("conditions", Record{"nam": "x"})
+	_, e3 := s.Create("conditions", Record{"status": "观察中"})
+	_, e4 := s.Create("conditions", Record{"name": "x", "status": "done"})
+	_, e5 := s.Create("symptoms", Record{"occurred_at": "2026-13-40 10:00", "description": "x"})
+	_, e6 := s.Search(" ", 10)
+	e7 := s.Delete("habits", idOf(habit))
+	_, e8 := s.Create("metric_kinds", Record{"name": "BMI"})
+	_, e9 := s.Create("metrics", Record{"metric_type": "vision", "value": 1, "measured_at": "today"})
+	for i, err := range []error{e1, e2, e3, e4, e5, e6, e7, e8, e9} {
+		var ve *ValidationError
+		if !errors.As(err, &ve) {
+			t.Errorf("%d: not a validation error: %v", i+1, err)
+			continue
+		}
+		if !han.MatchString(ve.Msg) {
+			t.Errorf("%d: the Chinese is gone: %q", i+1, ve.Msg)
+		}
+		if en := msg.In(err, "en"); en == "" || han.MatchString(en) {
+			t.Errorf("%d: English %q (Chinese %q)", i+1, en, ve.Msg)
+		}
+	}
+}
+
+func idOf(r Record) int64 { n, _ := r["id"].(int64); return n }

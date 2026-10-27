@@ -3,12 +3,12 @@ package assistant
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -103,7 +103,7 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		return Draft{}, err
 	}
 	if !cfg.Configured() {
-		return Draft{}, errors.New("先填写接口地址、密钥和模型")
+		return Draft{}, msg.New("先填写接口地址、密钥和模型", "Enter the API address, key and model first")
 	}
 	tb, err := openTools(ctx, st)
 	if err != nil {
@@ -195,10 +195,10 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	d.Items = w.items
 	d.Reply = plainReply(d.Reply)
 	if len(d.Items) == 0 && claimsDone(d.Reply) {
-		d.Reply += claimNote
+		d.Reply += msg.Pick(cfg.Lang, claimNote, claimNoteEn)
 	}
 	if len(d.Items) == 0 && d.Reply == "" {
-		d.Unclear = "没有从这段话里整理出可以保存的记录"
+		d.Unclear = msg.Pick(cfg.Lang, "没有从这段话里整理出可以保存的记录", "Nothing to save came out of this")
 	}
 	logExchange(st.Dir, cfg, x, d, nil)
 	return d, nil
@@ -501,7 +501,7 @@ const (
 
 func cleanTurns(in []Turn) ([]Turn, error) {
 	if len(in) == 0 {
-		return nil, errors.New("先说或写一点内容")
+		return nil, msg.New("先说或写一点内容", "Say or type something first")
 	}
 	if len(in) > maxTurns {
 		in = in[len(in)-maxTurns:]
@@ -511,7 +511,7 @@ func cleanTurns(in []Turn) ([]Turn, error) {
 	for _, t := range in {
 		role := strings.TrimSpace(t.Role)
 		if role != "user" && role != "assistant" {
-			return nil, errors.New("对话里有无法识别的一方")
+			return nil, msg.New("对话里有无法识别的一方", "The chat has a speaker it doesn't know")
 		}
 		text := strings.TrimSpace(t.Text)
 		if role == "assistant" {
@@ -527,25 +527,25 @@ func cleanTurns(in []Turn) ([]Turn, error) {
 		}
 		images += len(pics)
 		if images > maxImages*2 {
-			return nil, fmt.Errorf("一次对话最多附 %d 张图片", maxImages*2)
+			return nil, msg.Errorf("一次对话最多附 %d 张图片", "A chat can have at most %d pictures", maxImages*2)
 		}
 		if text == "" && len(pics) == 0 {
 			continue
 		}
 		if utf8.RuneCountInString(text) > maxRunes {
-			return nil, fmt.Errorf("一次最多整理 %d 个字", maxRunes)
+			return nil, msg.Errorf("一次最多整理 %d 个字", "At most %d characters at a time", maxRunes)
 		}
 		out = append(out, Turn{Role: "user", Text: text, Images: pics})
 	}
 	if len(out) == 0 || out[len(out)-1].Role != "user" {
-		return nil, errors.New("先说或写一点内容")
+		return nil, msg.New("先说或写一点内容", "Say or type something first")
 	}
 	return out, nil
 }
 
 func cleanImages(in []Image) ([]Image, error) {
 	if len(in) > maxImages {
-		return nil, fmt.Errorf("一次最多 %d 张图片", maxImages)
+		return nil, msg.Errorf("一次最多 %d 张图片", "At most %d pictures at a time", maxImages)
 	}
 	out := make([]Image, 0, len(in))
 	for _, im := range in {
@@ -563,14 +563,14 @@ func cleanImages(in []Image) ([]Image, error) {
 		switch mime {
 		case "image/jpeg", "image/png", "image/gif", "image/webp":
 		default:
-			return nil, errors.New("只能发送图片（JPG、PNG、GIF、WebP）")
+			return nil, msg.New("只能发送图片（JPG、PNG、GIF、WebP）", "Only pictures can be sent (JPG, PNG, GIF, WebP)")
 		}
 		raw, err := base64.StdEncoding.DecodeString(data)
 		if err != nil || len(raw) == 0 {
-			return nil, errors.New("这张图片读不出来")
+			return nil, msg.New("这张图片读不出来", "Couldn't read this picture")
 		}
 		if len(raw) > maxImageBytes {
-			return nil, errors.New("这张图片太大")
+			return nil, msg.New("这张图片太大", "This picture is too big")
 		}
 		out = append(out, Image{MIME: mime, Data: base64.StdEncoding.EncodeToString(raw)})
 	}

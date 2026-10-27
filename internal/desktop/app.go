@@ -115,6 +115,7 @@ func newApp(dataDir, port string) *app {
 	}
 	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir), grants: folders.New(dataDir), ear: platformEar()}
 	a.updates = newUpdates(a.settings)
+	a.backups.lang = a.settings.lang
 	a.grants.Open()
 	// phone access is hidden until it's reworked: a choice saved earlier no
 	// longer opens the app to the network (serve -lan still does, on purpose)
@@ -124,8 +125,9 @@ func newApp(dataDir, port string) *app {
 		UI:    frontend.FS(),
 		MCP:   mcpHandler(st),
 		Info:  a.info,
+		Lang:  a.settings.lang,
 	}
-	a.listener = &listener{handler: &server.Guard{Token: token, Next: a.handler()}}
+	a.listener = &listener{handler: &server.Guard{Token: token, Next: a.handler(), Lang: a.settings.lang}}
 	return a
 }
 
@@ -155,15 +157,13 @@ func (a *app) handler() http.Handler {
 			Lists map[string]listChoice `json:"lists"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			http.Error(w, `{"error":"无效的请求"}`, http.StatusBadRequest)
+			writeError(w, a.msg("无效的请求", "Invalid request"))
 			return
 		}
 		if len(in.Lists) > 0 {
 			lists, err := a.settings.mergeLists(in.Lists)
 			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				writeError(w, a.errText(err))
 				return
 			}
 			a.settings.mu.Lock()
@@ -178,7 +178,7 @@ func (a *app) handler() http.Handler {
 		}
 		if in.Lang != nil {
 			if *in.Lang != "zh" && *in.Lang != "en" {
-				http.Error(w, `{"error":"lang 只能是 zh 或 en"}`, http.StatusBadRequest)
+				writeError(w, a.msg("lang 只能是 zh 或 en", "lang must be zh or en"))
 				return
 			}
 			a.settings.mu.Lock()
@@ -192,7 +192,7 @@ func (a *app) handler() http.Handler {
 			}
 		}
 		if in.LAN != nil && *in.LAN {
-			http.Error(w, `{"error":"手机访问暂时关闭"}`, http.StatusBadRequest)
+			writeError(w, a.msg("手机访问暂时关闭", "Phone access is turned off for now"))
 			return
 		}
 		if in.LAN != nil && *in.LAN != a.settings.LAN {
@@ -273,7 +273,7 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 			Reminders *bool `json:"reminders"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || a.cal == nil {
-			writeError(w, "无效的请求")
+			writeError(w, a.msg("无效的请求", "Invalid request"))
 			return
 		}
 		var err error
@@ -284,7 +284,7 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 			err = a.cal.Set(true, *in.Reminders)
 		}
 		if err != nil {
-			writeError(w, err.Error())
+			writeError(w, a.errText(err))
 			return
 		}
 		writeJSON(w, a.calStatus())
@@ -306,7 +306,7 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 			Enabled bool `json:"enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || a.shell == nil {
-			writeError(w, "无效的请求")
+			writeError(w, a.msg("无效的请求", "Invalid request"))
 			return
 		}
 		if err := a.shell.setAutostart(in.Enabled); err != nil {
@@ -403,7 +403,7 @@ func RunServe(dataDir, port string, lanFlag bool) {
 	// in the window; the text API is here for this computer only (see
 	// assistantRoutes). The Mac app's own socket keeps using handler(), which
 	// does not have these routes, so a phone with the token cannot call them.
-	a.listener.handler = &server.Guard{Token: a.token, Next: a.serveHandler()}
+	a.listener.handler = &server.Guard{Token: a.token, Next: a.serveHandler(), Lang: a.settings.lang}
 	if lanFlag {
 		a.settings.LAN = true
 	}
@@ -531,7 +531,7 @@ func (a *app) calStatus() map[string]any {
 	if a.cal == nil {
 		return map[string]any{}
 	}
-	return a.cal.Status()
+	return a.cal.Status(a.settings.lang())
 }
 
 // bundleID is the app's identifier (build/Info.plist).

@@ -45,7 +45,7 @@ func do(h http.Handler, method, url, remote, host string, body string, hdr map[s
 }
 
 func TestGuard(t *testing.T) {
-	h, _ := guarded(t)
+	h, st := guarded(t)
 	local, phone := "127.0.0.1:50000", "192.168.1.20:50000"
 	cases := []struct {
 		name         string
@@ -83,6 +83,24 @@ func TestGuard(t *testing.T) {
 	w = do(h, "POST", "/api/r/conditions", local, "127.0.0.1:8721", `{"name":"x"}`, map[string]string{"Origin": "https://evil.example"})
 	if w.Code != 403 {
 		t.Errorf("cross-site post: %d", w.Code)
+	}
+	// the refusals in the UI's language; the rules stay the same
+	en := &Guard{Token: token, Next: (&Server{Store: st, Lang: func() string { return "en" }}).Handler(), Lang: func() string { return "en" }}
+	if w := do(en, "GET", "/api/overview", phone, "192.168.1.5:8721", "", nil); w.Code != 401 || !strings.Contains(w.Body.String(), "access token") {
+		t.Errorf("English 401: %d %s", w.Code, w.Body)
+	}
+	if w := do(en, "GET", "/api/overview", local, "127.0.0.1:8721", "", map[string]string{"Origin": "https://evil.example"}); w.Code != 403 || !strings.Contains(w.Body.String(), "refused") {
+		t.Errorf("English 403: %d %s", w.Code, w.Body)
+	}
+	if w := do(en, "GET", "/", phone, "192.168.1.5:8721", "", nil); w.Code != 401 || !strings.Contains(w.Body.String(), "Health Trail") {
+		t.Errorf("English page: %d %s", w.Code, w.Body)
+	}
+	// a validation error from the store, in English
+	if w := do(en, "POST", "/api/r/conditions", local, "127.0.0.1:8721", `{"status":"观察中"}`, nil); w.Code != 400 || !strings.Contains(w.Body.String(), "missing Name") {
+		t.Errorf("English validation: %d %s", w.Code, w.Body)
+	}
+	if w := do(h, "POST", "/api/r/conditions", local, "127.0.0.1:8721", `{"status":"观察中"}`, nil); w.Code != 400 || !strings.Contains(w.Body.String(), "缺少必填项") {
+		t.Errorf("Chinese validation: %d %s", w.Code, w.Body)
 	}
 }
 

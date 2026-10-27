@@ -634,7 +634,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
             {chats.length === 0 && <div className="sub">{t('还没有对话记录')}</div>}
             {chats.map((c) => (
               <button type="button" key={c.id} className={'chat-side-item' + (c.id === chatId ? ' on' : '') + (menu?.id === c.id ? ' menu-on' : '')} onClick={() => { if (c.id !== chatId) openPastChat(c.id) }} onContextMenu={(e) => chatMenu(e, c.id)}>
-                <span className="title">{c.title}</span>
+                <span className="title">{chatTitle(c)}</span>
                 <span className="small muted">{chatMeta(c)}</span>
               </button>
             ))}
@@ -682,7 +682,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
               ? <div className="sub">{t('还没有对话记录')}</div>
               : <div className="card flush">{past.map((c) => (
                 <button type="button" key={c.id} className="row-item no-ico" onClick={() => openPastChat(c.id)} onContextMenu={(e) => chatMenu(e, c.id)}>
-                  <span className="body">{c.title}</span>
+                  <span className="body">{chatTitle(c)}</span>
                   <span className="small muted nowrap">{chatMeta(c)}</span>
                 </button>
               ))}</div>
@@ -793,6 +793,14 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       </div>
     </div>
   )
+}
+
+// chatTitle is the chat's first words; the backend's stand-ins for a chat
+// with no words are shown in the UI's language
+function chatTitle(c: ChatHead) {
+  if (c.title === '对话') return t('对话')
+  if (c.title === '（图片）') return t('（图片）')
+  return c.title
 }
 
 function chatMeta(c: ChatHead) {
