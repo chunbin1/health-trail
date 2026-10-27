@@ -777,24 +777,31 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
   flex: 1 1 0; min-height: 0; overflow: hidden;
   display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px;
 }
-.capture-page .chat-log {
-  min-height: 0; overflow: auto; overscroll-behavior: contain;
+.capture-page .chat-log { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.capture-page .chat-log, .assist-dock .chat-log {
   scrollbar-width: thin;
   scrollbar-color: var(--line-2) transparent;
 }
-.capture-page .chat-log::-webkit-scrollbar { width: 6px; }
-.capture-page .chat-log::-webkit-scrollbar-track { background: transparent; }
-.capture-page .chat-log::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; }
+/* The log scrolls, so it clips whatever sticks out of it: the cards' outline
+   and shadow need room on both sides. The negative margin keeps the cards in
+   line with the title and the input. */
+.capture-page .chat-log { margin-left: -6px; padding: 2px 8px 6px 6px; }
+.capture-page .chat-log::-webkit-scrollbar, .assist-dock .chat-log::-webkit-scrollbar { width: 6px; }
+.capture-page .chat-log::-webkit-scrollbar-track, .assist-dock .chat-log::-webkit-scrollbar-track { background: transparent; }
+.capture-page .chat-log::-webkit-scrollbar-thumb, .assist-dock .chat-log::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; }
 .capture-page .chat-bar { background: var(--canvas); padding-right: 16px; }
 .phone-only { display: none; }
 @media (max-width: 760px) {
   .capture-page {
     left: 0;
     bottom: calc(62px + env(safe-area-inset-bottom));
-    padding: 16px 0 8px 16px;
+    padding: 16px 0 8px 10px;
   }
   .chat-side { display: none; }
-  .chat-main { padding-left: 0; }
+  /* 6px here is where the log's negative margin goes */
+  .chat-main { padding-left: 6px; }
+  /* a phone's scrollbar takes no room: line the cards up with the input */
+  .capture-page .chat-log { padding-right: 16px; }
   .phone-only { display: inline-flex; }
 }
 
@@ -820,7 +827,7 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
 .assist-dock .chat-main { flex: 1; min-height: 0; padding-left: 0; }
 .assist-dock .chat-main > .page-head { flex: none; }
 .assist-dock .chat-main > .stack { flex: 1; min-height: 0; max-width: none !important; display: flex; flex-direction: column; gap: 8px; padding: 8px 14px 12px; }
-.assist-dock .chat-log { flex: 1; min-height: 0; overflow: auto; }
+.assist-dock .chat-log { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; margin: 0 -8px; padding: 2px 2px 6px 8px; }
 .assist-dock .chat-bar { position: static; background: var(--surface); padding-top: 0; }
 @media (max-width: 760px) {
   .assist-ball { right: 16px; bottom: calc(78px + env(safe-area-inset-bottom)); }
