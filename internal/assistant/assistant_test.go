@@ -492,7 +492,7 @@ func TestProposeSendsImageAndRejectsOtherFiles(t *testing.T) {
 // a 1x1 jpeg
 const jpg = "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="
 
-func TestExchangeLogKeepsOnlyMetadata(t *testing.T) {
+func TestExchangeLog(t *testing.T) {
 	st := openStore(t)
 	f := &fakeModel{t: t, replies: []string{
 		calls("search_records", `{"query":"头痛"}`),
@@ -510,12 +510,16 @@ func TestExchangeLogKeepsOnlyMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(b)
-	for _, want := range []string{"glm-4.6v", "search_records", "缓存命中 80"} {
+	// what was asked, each request, the call with its arguments, the
+	// answer: enough to see where the tokens went
+	for _, want := range []string{"glm-4.6v", "帮我记下头痛", "（图片 image/jpeg", "第 1 次请求", "第 2 次请求",
+		`调用 search_records {"query":"头痛"}`, "日志测试的回答", "2 次请求", "工具说明"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("log missing %q\n%s", want, s)
 		}
 	}
-	for _, not := range []string{cfg.APIKey, jpg[:40], "帮我记下头痛", "日志测试的回答", "名册"} {
+	// the key, the picture and the system prompt stay out
+	for _, not := range []string{cfg.APIKey, jpg[:40], "名册"} {
 		if strings.Contains(s, not) {
 			t.Fatalf("log has %q:\n%s", not, s)
 		}

@@ -110,7 +110,9 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		return Draft{}, err
 	}
 	defer tb.close()
-	msgs := []any{map[string]any{"role": "system", "content": Instructions(st, tb.instructions, now)}}
+	system := Instructions(st, tb.instructions, now)
+	msgs := []any{map[string]any{"role": "system", "content": system}}
+	x := newExchange(system, tb.defs, turns)
 	for _, t := range turns {
 		msgs = append(msgs, map[string]any{"role": t.Role, "content": contentOf(t)})
 	}
@@ -126,8 +128,9 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		}
 		m, u, err := chat(ctx, cfg, msgs, tb.defs, choice)
 		d.Usage.add(u)
+		x.request(u, m.Content)
 		if err != nil {
-			logExchange(st.Dir, cfg, d, err)
+			logExchange(st.Dir, cfg, x, d, err)
 			return Draft{}, err
 		}
 		if len(m.Calls) == 0 || last {
@@ -169,6 +172,7 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			step := stepOf(c.Name, args)
 			step.Error = failed
 			failedAny = failedAny || failed
+			x.call(c.Name, c.Args, out, failed)
 			d.Steps = append(d.Steps, step)
 			if onStep != nil {
 				onStep(step)
@@ -184,7 +188,7 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	if len(d.Items) == 0 && d.Reply == "" {
 		d.Unclear = "没有从这段话里整理出可以保存的记录"
 	}
-	logExchange(st.Dir, cfg, d, nil)
+	logExchange(st.Dir, cfg, x, d, nil)
 	return d, nil
 }
 
