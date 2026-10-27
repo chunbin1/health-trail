@@ -168,6 +168,10 @@ func (s *Store) clean(e *Entity, in Record) (Record, error) {
 // earlier in the same transaction (invisible to s.DB until it commits) can
 // be referenced by the next row.
 func (s *Store) cleanKnown(e *Entity, in Record, known map[string]map[int64]struct{}) (Record, error) {
+	return s.cleanWithNames(e, in, known, nil)
+}
+
+func (s *Store) cleanWithNames(e *Entity, in Record, known map[string]map[int64]struct{}, extra []string) (Record, error) {
 	out := Record{}
 	for k, v := range in {
 		if k == "id" || k == "created_at" || k == "updated_at" {
@@ -181,7 +185,7 @@ func (s *Store) cleanKnown(e *Entity, in Record, known map[string]map[int64]stru
 			}
 			return nil, invalid("%s 没有字段 %q，可用字段：%s", e.Label, k, strings.Join(names, ", "))
 		}
-		cv, err := s.convert(*f, v)
+		cv, err := s.convertExtra(*f, v, extra)
 		if err != nil {
 			return nil, invalid("%s「%s」：%v", e.Label, f.Label, err)
 		}
@@ -208,8 +212,17 @@ func refKnown(known map[string]map[int64]struct{}, table string, id int64) bool 
 
 // convert is convert, plus the user's own values for an enum open to them.
 func (s *Store) convert(f Field, v any) (any, error) {
+	return s.convertExtra(f, v, nil)
+}
+
+// convertExtra is convert, and also accepts extra names of a custom enum
+// created earlier in the same batch (a metric kind and its first reading).
+func (s *Store) convertExtra(f Field, v any, extra []string) (any, error) {
 	cv, err := convert(f, v)
 	if str, ok := v.(string); ok && err != nil && f.Custom != "" {
+		if slices.Contains(extra, str) {
+			return str, nil
+		}
 		return s.customOption(f, str)
 	}
 	return cv, err
@@ -344,7 +357,11 @@ func (s *Store) build(e *Entity, in Record) (Record, error) {
 }
 
 func (s *Store) buildKnown(e *Entity, in Record, known map[string]map[int64]struct{}) (Record, error) {
-	r, err := s.cleanKnown(e, in, known)
+	return s.buildWithNames(e, in, known, nil)
+}
+
+func (s *Store) buildWithNames(e *Entity, in Record, known map[string]map[int64]struct{}, extra []string) (Record, error) {
+	r, err := s.cleanWithNames(e, in, known, extra)
 	if err != nil {
 		return nil, err
 	}

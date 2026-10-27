@@ -174,6 +174,15 @@ func TestCommitRollsBackAndPartial(t *testing.T) {
 	}
 	sym, _, _ := st.List("symptoms", store.ListQuery{Q: "隐痛", Limit: 5})
 	cond, _, _ := st.List("conditions", store.ListQuery{Q: "胃炎", Limit: 5})
+	res = Commit(st, []Item{{Kind: "widget"}})
+	if res.OK || !strings.Contains(res.Error, "不能记这种类型") {
+		t.Fatalf("unknown kind %+v", res)
+	}
+	res = Commit(st, []Item{{Kind: "checkin", Habit: "晨跑", Date: "2020-01-01"}})
+	if res.OK || !strings.Contains(res.Error, "只能记在今天") {
+		t.Fatalf("past check-in %+v", res)
+	}
+
 	if len(sym) != 1 || len(cond) != 1 || sym[0]["condition_id"] != cond[0]["id"] {
 		b, _ := json.Marshal(sym)
 		t.Fatalf("link %s", b)
@@ -313,6 +322,34 @@ func TestMedicineQuestionDropsCondition(t *testing.T) {
 	blank := fillMedicationStatus([]Item{{Kind: "record", Type: "medications", Fields: map[string]any{"name": "别嘌醇"}}})
 	if blank[0].Fields["status"] != "计划中" {
 		t.Fatalf("status %+v", blank[0].Fields)
+	}
+	linked := dropConditions(st, []Turn{{Role: "user", Text: "给我推荐药品"}}, []Item{
+		{Kind: "record", Type: "conditions", Fields: map[string]any{"name": "痛风"}},
+		{Kind: "record", Type: "medications", Fields: map[string]any{"name": "别嘌醇", "status": "计划中"}, ConditionName: "痛风"},
+	})
+	if len(linked) != 1 || linked[0].ConditionName != "" {
+		t.Fatalf("dangling condition name %+v", linked)
+	}
+}
+
+func TestUpdateRequiresKeyWhenHostChanges(t *testing.T) {
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, key, model := "https://open.bigmodel.cn/api/paas/v4", "sk-old", "m"
+	cfg, err = cfg.Update(&base, &key, &model, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	same := "https://open.bigmodel.cn/api/paas/v3"
+	kept, err := cfg.Update(&same, nil, nil, false)
+	if err != nil || kept.APIKey != "sk-old" {
+		t.Fatalf("same host %+v %v", kept, err)
+	}
+	other := "https://api.openai.com/v1"
+	if _, err := cfg.Update(&other, nil, nil, false); err == nil || !strings.Contains(err.Error(), "重新填写密钥") {
+		t.Fatal(err)
 	}
 }
 

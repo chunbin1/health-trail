@@ -2,6 +2,7 @@ package assistant
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,10 @@ func SaveChat(dir, id string, messages json.RawMessage) (Chat, error) {
 	}
 	chatsMu.Lock()
 	defer chatsMu.Unlock()
-	file := readChats(dir)
+	file, err := readChats(dir)
+	if err != nil {
+		return Chat{}, err
+	}
 	now := time.Now().Format("2006-01-02 15:04")
 	next := Chat{ID: id, Updated: now, Title: chatTitle(messages), Tokens: chatTokens(messages), Messages: messages}
 	out := make([]Chat, 0, len(file.Chats)+1)
@@ -68,28 +72,35 @@ func SaveChat(dir, id string, messages json.RawMessage) (Chat, error) {
 }
 
 // ListChats returns the newest conversations without their messages.
-func ListChats(dir string) []Chat {
+func ListChats(dir string) ([]Chat, error) {
 	chatsMu.Lock()
 	defer chatsMu.Unlock()
-	file := readChats(dir)
+	file, err := readChats(dir)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]Chat, len(file.Chats))
 	for i, c := range file.Chats {
 		c.Messages = nil
 		out[i] = c
 	}
-	return out
+	return out, nil
 }
 
 // GetChat returns one conversation, including its messages.
-func GetChat(dir, id string) (Chat, bool) {
+func GetChat(dir, id string) (Chat, bool, error) {
 	chatsMu.Lock()
 	defer chatsMu.Unlock()
-	for _, c := range readChats(dir).Chats {
+	file, err := readChats(dir)
+	if err != nil {
+		return Chat{}, false, err
+	}
+	for _, c := range file.Chats {
 		if c.ID == id {
-			return c, true
+			return c, true, nil
 		}
 	}
-	return Chat{}, false
+	return Chat{}, false, nil
 }
 
 func chatTitle(messages json.RawMessage) string {
@@ -137,16 +148,19 @@ type chatError struct{ s string }
 
 func (e *chatError) Error() string { return e.s }
 
-func readChats(dir string) chatFile {
+func readChats(dir string) (chatFile, error) {
 	b, err := os.ReadFile(filepath.Join(dir, chatsFile))
 	if err != nil {
-		return chatFile{}
+		if os.IsNotExist(err) {
+			return chatFile{}, nil
+		}
+		return chatFile{}, err
 	}
 	var file chatFile
-	if json.Unmarshal(b, &file) != nil {
-		return chatFile{}
+	if err := json.Unmarshal(b, &file); err != nil {
+		return chatFile{}, fmt.Errorf("对话记录读不出来")
 	}
-	return file
+	return file, nil
 }
 
 func writeChats(dir string, file chatFile) error {
@@ -157,5 +171,10 @@ func writeChats(dir string, file chatFile) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, chatsFile), b, 0o600)
+	path := filepath.Join(dir, chatsFile)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }

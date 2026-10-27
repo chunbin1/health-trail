@@ -54,7 +54,9 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 	}, len(items))
 
 	order := make([]int, 0, len(items))
-	for _, want := range []string{"conditions", "medications"} {
+	// metric kinds before their first reading, so the reading can name a
+	// kind created in this same batch
+	for _, want := range []string{"conditions", "medications", "metric_kinds"} {
 		for i, it := range items {
 			if it.Entity == want {
 				order = append(order, i)
@@ -62,10 +64,11 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 		}
 	}
 	for i, it := range items {
-		if it.Entity != "conditions" && it.Entity != "medications" {
+		if it.Entity != "conditions" && it.Entity != "medications" && it.Entity != "metric_kinds" {
 			order = append(order, i)
 		}
 	}
+	kindNames := []string{}
 
 	for _, i := range order {
 		it := items[i]
@@ -98,7 +101,7 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 			}
 			fields["medication_id"] = id
 		}
-		r, err := s.buildKnown(e, fields, known)
+		r, err := s.buildWithNames(e, fields, known, kindNames)
 		if err != nil {
 			return nil, prefixErr(pos(n), err)
 		}
@@ -113,6 +116,11 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 			known[e.Name] = map[int64]struct{}{}
 		}
 		known[e.Name][id] = struct{}{}
+		if e.Name == "metric_kinds" {
+			if name, _ := r["name"].(string); name != "" {
+				kindNames = append(kindNames, name)
+			}
+		}
 		if e.Name == "conditions" {
 			if name, _ := r["name"].(string); name != "" {
 				if _, seen := condNames[name]; !seen {

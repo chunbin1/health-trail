@@ -42,6 +42,13 @@ func Commit(st *store.Store, items []Item) Result {
 	for i := range items {
 		items[i] = normalize(items[i])
 	}
+	for i, it := range items {
+		switch it.Kind {
+		case "record", "checkin", "lab_report":
+		default:
+			return fail(out, i, fmt.Sprintf("第 %d 条：不能记这种类型", i+1))
+		}
+	}
 	var rows []store.CaptureRow
 	for i, it := range items {
 		if it.Kind != "record" {

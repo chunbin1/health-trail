@@ -109,10 +109,19 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 		writeJSON(w, a.draftStatus())
 	}))
 	mux.HandleFunc("GET /api/assistant/chats", wrap(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, assistant.ListChats(a.st.Dir))
+		list, err := assistant.ListChats(a.st.Dir)
+		if err != nil {
+			writeError(w, err.Error())
+			return
+		}
+		writeJSON(w, list)
 	}))
 	mux.HandleFunc("GET /api/assistant/chats/{id}", wrap(func(w http.ResponseWriter, r *http.Request) {
-		c, ok := assistant.GetChat(a.st.Dir, r.PathValue("id"))
+		c, ok, err := assistant.GetChat(a.st.Dir, r.PathValue("id"))
+		if err != nil {
+			writeError(w, err.Error())
+			return
+		}
 		if !ok {
 			writeError(w, a.msg("没有这段对话", "That chat isn't here"))
 			return

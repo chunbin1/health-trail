@@ -118,6 +118,7 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			d.Items[i].Problem = p
 		}
 	}
+	clearBatchMetricProblems(d.Items)
 	if len(d.Items) == 0 && d.Unclear == "" && d.Reply == "" {
 		d.Unclear = "没有从这段话里整理出可以保存的记录"
 	}
@@ -140,13 +141,17 @@ func dropConditions(st *store.Store, turns []Turn, items []Item) []Item {
 			have[sameName(text(r["name"]))] = true
 		}
 	}
+	dropped := map[string]bool{}
 	out := make([]Item, 0, len(items))
 	for _, it := range items {
 		if it.Kind == "record" && it.Type == "conditions" {
+			name := sameName(text(it.Fields["name"]))
 			if skipNew {
+				if name != "" {
+					dropped[name] = true
+				}
 				continue
 			}
-			name := sameName(text(it.Fields["name"]))
 			if name != "" && have[name] {
 				continue
 			}
@@ -155,6 +160,18 @@ func dropConditions(st *store.Store, turns []Turn, items []Item) []Item {
 			}
 		}
 		out = append(out, it)
+	}
+	// a medicine question drops the new diagnosis; don't leave other rows
+	// pointing at a name that was never written
+	for i, it := range out {
+		n := sameName(it.ConditionName)
+		if n != "" && dropped[n] && !have[n] {
+			it.ConditionName = ""
+			if it.Fields != nil {
+				delete(it.Fields, "condition_name")
+			}
+			out[i] = it
+		}
 	}
 	return out
 }
@@ -252,6 +269,25 @@ func recordAsk(s string) bool {
 
 func sameName(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(s), ""))
+}
+
+// clearBatchMetricProblems accepts a reading of a metric kind created in
+// the same draft. Checked one row at a time, that reading looks unknown.
+func clearBatchMetricProblems(items []Item) {
+	names := map[string]bool{}
+	for _, it := range items {
+		if it.Kind == "record" && it.Type == "metric_kinds" {
+			names[text(it.Fields["name"])] = true
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	for i, it := range items {
+		if it.Kind == "record" && it.Type == "metrics" && names[text(it.Fields["metric_type"])] && strings.Contains(it.Problem, "不在可选值中") {
+			items[i].Problem = ""
+		}
+	}
 }
 
 func problem(st *store.Store, it Item, now time.Time) string {

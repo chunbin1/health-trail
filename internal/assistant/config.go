@@ -79,6 +79,9 @@ func (c Config) Update(baseURL, apiKey, model *string, clearKey bool) (Config, e
 		}
 		next.APIKey = k
 	}
+	if hostOf(c.BaseURL) != "" && hostOf(next.BaseURL) != hostOf(c.BaseURL) && c.APIKey != "" && next.APIKey == c.APIKey {
+		return c, errors.New("换了接口地址，请重新填写密钥")
+	}
 	if err := next.save(); err != nil {
 		return c, err
 	}
@@ -137,6 +140,14 @@ func NormalizeBaseURL(raw string) (string, error) {
 	u.Path = strings.TrimSuffix(u.Path, "/chat/completions")
 	u.Path = strings.TrimSuffix(u.Path, "/")
 	return u.String(), nil
+}
+
+func hostOf(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
 }
 
 func localHost(h string) bool {

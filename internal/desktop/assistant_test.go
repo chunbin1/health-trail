@@ -37,6 +37,28 @@ func TestAssistantNotOnThePhone(t *testing.T) {
 		}
 	}
 
+	for _, path := range []string{"/api/assistant/chats", "/api/assistant/chats/1"} {
+		for _, method := range []string{http.MethodGet, http.MethodPut} {
+			r := httptest.NewRequest(method, path, strings.NewReader(`{"id":"1","messages":[]}`))
+			r.RemoteAddr = "127.0.0.1:9"
+			r.Host = "127.0.0.1:8721"
+			w := httptest.NewRecorder()
+			a.handler().ServeHTTP(w, r)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("handler %s %s: %d %s", method, path, w.Code, w.Body)
+			}
+			r = httptest.NewRequest(method, path, strings.NewReader(`{"id":"1","messages":[]}`))
+			r.RemoteAddr = "192.168.1.20:9"
+			r.Host = "192.168.1.5:8721"
+			r.Header.Set("Authorization", "Bearer "+a.token)
+			w = httptest.NewRecorder()
+			a.listener.handler.ServeHTTP(w, r)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("phone %s %s: %d %s", method, path, w.Code, w.Body)
+			}
+		}
+	}
+
 	// the window has it, and the reply does not contain the key
 	w := httptest.NewRecorder()
 	a.windowHandler(nil).ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/assistant",

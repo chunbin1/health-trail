@@ -21,7 +21,10 @@ func TestChatsRoundTrip(t *testing.T) {
 	if _, err := SaveChat(dir, "a", first); err != nil {
 		t.Fatal(err)
 	}
-	list := ListChats(dir)
+	list, err := ListChats(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(list) != 2 || list[0].ID != "b" || list[1].ID != "a" {
 		t.Fatalf("list %+v", list)
 	}
@@ -31,8 +34,8 @@ func TestChatsRoundTrip(t *testing.T) {
 	if !strings.HasSuffix(list[0].Title, "…") || len([]rune(list[0].Title)) > 41 {
 		t.Fatalf("title %q", list[0].Title)
 	}
-	got, ok := GetChat(dir, "b")
-	if !ok || !strings.Contains(string(got.Messages), "尿") {
+	got, ok, err := GetChat(dir, "b")
+	if err != nil || !ok || !strings.Contains(string(got.Messages), "尿") {
 		t.Fatalf("get %+v %v", got, ok)
 	}
 	for i := 0; i < chatsKept+5; i++ {
@@ -40,7 +43,11 @@ func TestChatsRoundTrip(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if n := len(ListChats(dir)); n != chatsKept {
+	kept, err := ListChats(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(kept); n != chatsKept {
 		t.Fatalf("kept %d", n)
 	}
 	used := json.RawMessage(`[{"role":"assistant","usage":{"total_tokens":15}},{"role":"assistant","usage":{"total_tokens":25}}]`)
@@ -48,7 +55,8 @@ func TestChatsRoundTrip(t *testing.T) {
 	if err != nil || saved.Tokens != 40 {
 		t.Fatalf("tokens %+v %v", saved, err)
 	}
-	if ListChats(dir)[0].Tokens != 40 {
+	listed, err := ListChats(dir)
+	if err != nil || listed[0].Tokens != 40 {
 		t.Fatal("list dropped the token total")
 	}
 }

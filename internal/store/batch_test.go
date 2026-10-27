@@ -5,6 +5,20 @@ import (
 	"testing"
 )
 
+func TestCreateInOrderMetricKindAndReading(t *testing.T) {
+	s := open(t)
+	rows, err := s.CreateInOrder([]CaptureRow{
+		{Entity: "metrics", Fields: Record{"measured_at": "2026-10-27 08:00", "metric_type": "尿酸", "value": 420}, Index: 1},
+		{Entity: "metric_kinds", Fields: Record{"name": "尿酸", "unit": "μmol/L"}, Index: 2},
+	})
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("%v %+v", err, rows)
+	}
+	if rows[0]["metric_type"] != "尿酸" {
+		t.Fatalf("%+v", rows[0])
+	}
+}
+
 func TestCreateInOrderRollsBack(t *testing.T) {
 	s := open(t)
 	_, err := s.CreateInOrder([]CaptureRow{

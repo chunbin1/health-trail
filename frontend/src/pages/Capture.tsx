@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
 import { Check, ImagePlus, Mic, SendHorizontal, X } from 'lucide-react'
-import { api, fmtDate, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft } from '../api'
+import { api, ApiError, fmtDate, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
 import { AssistantSetup } from '../components/AssistantSetup'
 import { t, tx } from '../i18n'
@@ -228,15 +228,20 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
 
   useEffect(() => {
     if (!messages.length) return
-    api.saveAssistantChat({ id: chatId, messages: wireOf(messages) }).then((c) => {
-      setChats((list) => {
-        const i = list.findIndex((x) => x.id === c.id)
-        if (i < 0) return [c, ...list]
-        const next = list.slice()
-        next[i] = c
-        return next
-      })
-    }, () => {})
+    const id = chatId
+    const body = wireOf(messages)
+    const timer = window.setTimeout(() => {
+      api.saveAssistantChat({ id, messages: body }).then((c) => {
+        setChats((list) => {
+          const i = list.findIndex((x) => x.id === c.id)
+          if (i < 0) return [c, ...list]
+          const next = list.slice()
+          next[i] = c
+          return next
+        })
+      }, () => {})
+    }, 600)
+    return () => window.clearTimeout(timer)
   }, [chatId, messages])
 
   useEffect(() => {
@@ -250,6 +255,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     const last = messages[messages.length - 1]
     if (!last || last.role !== 'assistant' || autoTried.current.has(last.id)) return
     if (!last.items?.length || savedAll(last) || last.locked) return
+    if (last.open && Object.values(last.open).some(Boolean)) return
     const rest = last.items.filter((it, i) => !last.saved?.[i] && !isMedication(it))
     if (!rest.length || rest.some((it) => it.problem)) return
     autoTried.current.add(last.id)
@@ -401,7 +407,13 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     try {
       const d = await api.assistantDraft({ id, messages: turnsOf(history) })
       takeReply(id, d)
-    } catch {
+    } catch (e: any) {
+      if (e instanceof ApiError) {
+        setPendingId('')
+        pendingRef.current = ''
+        setErr(e.message)
+        return
+      }
       setPendingId(id)
       pendingRef.current = id
     }
@@ -426,10 +438,6 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     if (savingRef.current || savingId || msg.locked || savedAll(msg) || !msg.items?.length) return
     const pending = msg.items.map((it, i) => ({ it, i })).filter(({ it, i }) => !msg.saved?.[i] && !(autoSave && isMedication(it)))
     if (!pending.length) return
-    if (pending.some(({ it }) => it.problem)) {
-      setErr(t('请先改掉标出的问题，再保存。'))
-      return
-    }
     const prior = messages.slice(0, messages.findIndex((m) => m.id === msg.id)).reverse().find((m) => m.role === 'user')
     if ((prior?.imageCount || prior?.images?.length) && !prior.images?.some((p) => p.data)) {
       setErr(t('这张图片已经不在这次对话里，请重新发一次再保存。'))
@@ -447,7 +455,11 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       }
       const wrote = !!res.saved?.length
       const unfinished = msg.items.some((_, i) => !done[i])
-      setMessages((ms) => ms.map((m) => m.id === msg.id ? { ...m, saved: done, locked: (!res.ok && wrote) || (res.ok && !unfinished) } : m))
+      setMessages((ms) => ms.map((m) => {
+        if (m.id !== msg.id) return m
+        const items = m.items?.map((it, i) => (done[i] ? { ...it, problem: '' } : it))
+        return { ...m, items, saved: done, locked: res.ok && !unfinished }
+      }))
       if (!res.ok) {
         setErr(res.error || '')
         if (wrote) changed()
@@ -480,7 +492,24 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   }
 
   function patch(msgId: string, i: number, next: DraftItem) {
-    setMessages((ms) => ms.map((m) => m.id === msgId ? { ...m, items: m.items?.map((it, n) => n === i ? { ...next, problem: '' } : it) } : m))
+    setMessages((ms) => ms.map((m) => m.id === msgId ? { ...m, items: m.items?.map((it, n) => n === i ? next : it) } : m))
+  }
+
+  function dropItem(msgId: string, i: number) {
+    setMessages((ms) => ms.map((m) => {
+      if (m.id !== msgId) return m
+      const shift = <T,>(rec?: Record<number, T>) => {
+        if (!rec) return rec
+        const out: Record<number, T> = {}
+        for (const [k, v] of Object.entries(rec)) {
+          const n = Number(k)
+          if (n === i) continue
+          out[n > i ? n - 1 : n] = v
+        }
+        return out
+      }
+      return { ...m, items: m.items?.filter((_, n) => n !== i), saved: shift(m.saved), open: shift(m.open) }
+    }))
   }
 
   function newChat() {
@@ -604,7 +633,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
                     {itemDate(it, entity) && <span className="small muted nowrap">{itemDate(it, entity)}</span>}
                     {m.saved?.[i] && <span className="tag">{t('已保存')}</span>}
                     {!m.locked && !savedAll(m) && (
-                      <IconButton label={t('去掉')} small onClick={() => setMessages((ms) => ms.map((x) => x.id === m.id ? { ...x, items: x.items?.filter((_, n) => n !== i) } : x))}>
+                      <IconButton label={t('去掉')} small onClick={() => dropItem(m.id, i)}>
                         <X size={14} />
                       </IconButton>
                     )}
@@ -795,7 +824,7 @@ function FieldInput({ field, value, onChange, wide }: { field: Field; value: any
     <textarea className="input" value={String(v)} onChange={(e) => onChange(e.target.value)} />
   ) : field.type === 'int' || field.type === 'real' || field.type === 'ref' ? (
     <input className="input" inputMode="decimal" value={v === '' ? '' : String(v)}
-      onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} />
+      onChange={(e) => onChange(field.type === 'ref' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />
   ) : (
     <input className="input" value={String(v)} onChange={(e) => onChange(e.target.value)} />
   )
@@ -816,7 +845,7 @@ function CheckinEditor({ item, onChange }: { item: DraftItem; onChange: (it: Dra
       </label>
       <label className="field">
         <span className="lbl">{t('数量')}</span>
-        <input className="input" inputMode="decimal" value={item.value ?? ''} onChange={(e) => onChange({ ...item, value: e.target.value === '' ? null : Number(e.target.value) })} />
+        <input className="input" inputMode="decimal" value={item.value ?? ''} onChange={(e) => onChange({ ...item, value: e.target.value === '' ? null : e.target.value })} />
       </label>
       <label className="field full">
         <span className="lbl">{t('备注')}</span>
