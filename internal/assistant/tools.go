@@ -64,7 +64,7 @@ func openTools(ctx context.Context, st *store.Store) (*toolbox, error) {
 		if !readOnly && !draftTools[t.Name] {
 			continue
 		}
-		if readOnly {
+		if readOnly && !draftTools[t.Name] {
 			tb.read[t.Name] = true
 		}
 		tb.defs = append(tb.defs, map[string]any{
@@ -85,6 +85,9 @@ func (tb *toolbox) close() {
 // run calls a read-only tool. The text goes back to the model; an error is
 // told to it as a result, so it can try again.
 func (tb *toolbox) run(ctx context.Context, name string, args map[string]any) (string, bool) {
+	if !tb.read[name] {
+		return name + " 不是只读的工具，这里不能直接执行", true
+	}
 	res, err := tb.session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
 		return err.Error(), true

@@ -869,3 +869,42 @@ func TestOwnHeightUsedByAHabit(t *testing.T) {
 		t.Errorf("deleting it: err = %v, want told a check-in item uses it", err)
 	}
 }
+
+// CheckUpdate is Update without the write: the same patches pass and fail,
+// with the same message, and nothing changes until Update runs.
+func TestCheckUpdateMatchesUpdate(t *testing.T) {
+	s := open(t)
+	med, err := s.Create("medications", Record{"name": "多替诺雷", "status": "计划中"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := med["id"].(int64)
+	for _, patch := range []Record{
+		{"status": "很好"},
+		{"name": ""},
+		{"remind_times": "早上"},
+	} {
+		checkErr := s.CheckUpdate("medications", id, patch)
+		_, updateErr := s.Update("medications", id, patch)
+		if checkErr == nil || updateErr == nil || checkErr.Error() != updateErr.Error() {
+			t.Fatalf("%v: check %v, update %v", patch, checkErr, updateErr)
+		}
+	}
+	if err := s.CheckUpdate("medications", 999, Record{"status": "在用"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing record: %v", err)
+	}
+	if err := s.CheckUpdate("medications", id, Record{}); err != nil {
+		t.Fatalf("empty patch: %v", err)
+	}
+	ok := Record{"status": "在用", "remind_times": "09:00"}
+	if err := s.CheckUpdate("medications", id, ok); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Get("medications", id); got["status"] != "计划中" || got["remind_times"] != nil || got["updated_at"] != med["updated_at"] {
+		t.Fatalf("CheckUpdate wrote: %+v", got)
+	}
+	got, err := s.Update("medications", id, ok)
+	if err != nil || got["status"] != "在用" || got["remind_times"] != "09:00" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}

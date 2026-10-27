@@ -136,15 +136,17 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		for _, c := range m.Calls {
 			out, failed := "", false
 			args, err := argsOf(c.Args)
+			// the write tools first: they never reach the store from here,
+			// whatever their annotations say
 			switch {
 			case err != nil:
 				out, failed = err.Error(), true
-			case tb.read[c.Name]:
-				out, failed = tb.run(ctx, c.Name, args)
 			case c.Name == "update_record":
 				out, failed = w.update(args)
 			case draftTools[c.Name]:
 				out, failed = w.draft(c.Name, args)
+			case tb.read[c.Name]:
+				out, failed = tb.run(ctx, c.Name, args)
 			default:
 				out, failed = "这里没有 "+c.Name+" 这个工具", true
 			}

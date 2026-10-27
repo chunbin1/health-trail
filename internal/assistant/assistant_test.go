@@ -211,6 +211,32 @@ func TestToolErrorGoesBackToModel(t *testing.T) {
 	}
 }
 
+// The write tools are never run against the store from the assistant, even
+// if one were marked read-only by mistake.
+func TestWriteToolsNeverRun(t *testing.T) {
+	st := openStore(t)
+	tb, err := openTools(context.Background(), st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tb.close()
+	for name := range draftTools {
+		if tb.read[name] {
+			t.Errorf("%s is on the read list", name)
+		}
+	}
+	out, failed := tb.run(context.Background(), "add_record", map[string]any{"type": "symptoms", "fields": map[string]any{"occurred_at": "2026-10-27 09:00", "description": "头痛"}})
+	if !failed || !strings.Contains(out, "不是只读") {
+		t.Fatalf("%v %s", failed, out)
+	}
+	if _, n, _ := st.List("symptoms", store.ListQuery{Limit: 5}); n != 0 {
+		t.Fatal("written")
+	}
+	if !tb.read["health_overview"] || !tb.read["get_lab_trend"] {
+		t.Fatal("read tools missing")
+	}
+}
+
 func TestStopsAfterMaxRounds(t *testing.T) {
 	st := openStore(t)
 	f := &fakeModel{t: t, replies: []string{calls("health_overview", `{}`)}}
