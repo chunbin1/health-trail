@@ -15,7 +15,7 @@
 python3 -I scripts/ai_review_gate.py pr 8
 ```
 
-**谁来审**：不是写代码的那个 Claude。开一个新的会话（或者没有上下文的子代理），对这个 PR 跑 `/code-review`，自己跑测试、复现问题，再以仓库所有者的账号发一条评审（`gh pr review <编号> --comment --body-file <文件>`；GitHub 不让自己批准自己的 PR，所以用评论）。格式和 cb-quant 一样：
+**谁来审**：不是写代码的那个 Claude，而是另一个模型，照着 [docs/ai-reviewer.md](docs/ai-reviewer.md) 做；写代码的会话只推 PR、按审阅改问题。审阅的模型对这个 PR 跑 `/code-review`，自己跑测试、复现问题，再以仓库所有者的账号发一条评审（`gh pr review <编号> --comment --body-file <文件>`；GitHub 不让自己批准自己的 PR，所以用评论）。格式和 cb-quant 一样：
 
 ```
 ## AI 审阅（<PR 最新提交的前 7 位>）
