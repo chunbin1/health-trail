@@ -16,19 +16,19 @@ import (
 func (a *app) openAttachmentHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		writeError(w, "无效的附件 id")
+		writeError(w, a.msg("无效的附件 id", "Invalid attachment id"))
 		return
 	}
 	revealed, err := attachopen.Open(a.st, id, a.openDir, func(args ...string) error {
 		return exec.Command("open", args...).Run()
 	})
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, "附件不存在")
+		writeError(w, a.msg("附件不存在", "The attachment doesn't exist"))
 		return
 	}
 	if err != nil {
 		log.Printf("打开附件 %d：%v", id, err)
-		writeError(w, "打不开附件")
+		writeError(w, a.msg("打不开附件", "Couldn't open the attachment"))
 		return
 	}
 	writeJSON(w, map[string]bool{"revealed": revealed})

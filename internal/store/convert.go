@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 // convert turns an input value (from JSON: string, float64, bool, nil, or
@@ -41,7 +43,7 @@ func convert(f Field, v any) (any, error) {
 		switch x := v.(type) {
 		case float64:
 			if x != math.Trunc(x) {
-				return nil, fmt.Errorf("需要整数，收到 %v", x)
+				return nil, msg.Errorf("需要整数，收到 %v", "needs a whole number, got %v", x)
 			}
 			return int64(x), nil
 		case int:
@@ -51,7 +53,7 @@ func convert(f Field, v any) (any, error) {
 		case string:
 			n, err := strconv.ParseInt(strings.TrimPrefix(x, "#"), 10, 64)
 			if err != nil {
-				return nil, fmt.Errorf("需要整数，收到 %q", x)
+				return nil, msg.Errorf("需要整数，收到 %q", "needs a whole number, got %q", x)
 			}
 			return n, nil
 		}
@@ -66,7 +68,7 @@ func convert(f Field, v any) (any, error) {
 		case string:
 			n, err := strconv.ParseFloat(strings.ReplaceAll(x, ",", ""), 64)
 			if err != nil {
-				return nil, fmt.Errorf("需要数字，收到 %q", x)
+				return nil, msg.Errorf("需要数字，收到 %q", "needs a number, got %q", x)
 			}
 			return n, nil
 		}
@@ -95,23 +97,23 @@ func convert(f Field, v any) (any, error) {
 				return int64(0), nil
 			}
 		}
-		return nil, fmt.Errorf("需要 true/false，收到 %v", v)
+		return nil, msg.Errorf("需要 true/false，收到 %v", "needs true or false, got %v", v)
 	case Date:
 		s, ok := v.(string)
 		if !ok {
-			return nil, fmt.Errorf("需要日期（YYYY-MM-DD），收到 %v", v)
+			return nil, msg.Errorf("需要日期（YYYY-MM-DD），收到 %v", "needs a date (YYYY-MM-DD), got %v", v)
 		}
 		return normalizeDate(s)
 	case DateTime:
 		s, ok := v.(string)
 		if !ok {
-			return nil, fmt.Errorf("需要时间（YYYY-MM-DD HH:MM），收到 %v", v)
+			return nil, msg.Errorf("需要时间（YYYY-MM-DD HH:MM），收到 %v", "needs a date and time (YYYY-MM-DD HH:MM), got %v", v)
 		}
 		return normalizeDateTime(s)
 	case Time:
 		s, ok := v.(string)
 		if !ok {
-			return nil, fmt.Errorf("需要时间（HH:MM，如 23:00），收到 %v", v)
+			return nil, msg.Errorf("需要时间（HH:MM，如 23:00），收到 %v", "needs a time (HH:MM, like 23:00), got %v", v)
 		}
 		return normalizeTime(s)
 	case Times:
@@ -125,11 +127,11 @@ func convert(f Field, v any) (any, error) {
 			}
 			return normalizeTimes(strings.Join(parts, ","))
 		}
-		return nil, fmt.Errorf("需要每天的时刻，用逗号分开（如 08:00, 20:00），收到 %v", v)
+		return nil, msg.Errorf("需要每天的时刻，用逗号分开（如 08:00, 20:00），收到 %v", "needs times of day separated by commas (like 08:00, 20:00), got %v", v)
 	case Enum:
 		s, ok := v.(string)
 		if !ok {
-			return nil, fmt.Errorf("需要以下之一：%s", strings.Join(f.Options, "、"))
+			return nil, msg.Errorf("需要以下之一：%s", "needs one of: %s", msg.Word{Zh: words("zh", f.Options, "、"), En: words("en", f.Options, "、")})
 		}
 		if f.Name == "flag" {
 			if fl := normalizeFlag(s); fl != "" {
@@ -143,9 +145,9 @@ func convert(f Field, v any) (any, error) {
 				return o, nil
 			}
 		}
-		return nil, fmt.Errorf("%q 不在可选值中：%s", s, strings.Join(f.Options, "、"))
+		return nil, msg.Errorf("%q 不在可选值中：%s", "%q isn't one of: %s", s, msg.Word{Zh: words("zh", f.Options, "、"), En: words("en", f.Options, "、")})
 	}
-	return nil, fmt.Errorf("无法识别的值 %v", v)
+	return nil, msg.Errorf("无法识别的值 %v", "can't read the value %v", v)
 }
 
 var (
@@ -169,14 +171,14 @@ func normalizeDate(s string) (string, error) {
 		m = compactDateRe.FindStringSubmatch(s)
 	}
 	if m == nil {
-		return "", fmt.Errorf("无法识别日期 %q，请用 YYYY-MM-DD", s)
+		return "", msg.Errorf("无法识别日期 %q，请用 YYYY-MM-DD", "can't read the date %q; use YYYY-MM-DD", s)
 	}
 	y, _ := strconv.Atoi(m[1])
 	mo, _ := strconv.Atoi(m[2])
 	d, _ := strconv.Atoi(m[3])
 	t := time.Date(y, time.Month(mo), d, 0, 0, 0, 0, time.Local)
 	if t.Year() != y || int(t.Month()) != mo || t.Day() != d {
-		return "", fmt.Errorf("日期 %q 不存在", s)
+		return "", msg.Errorf("日期 %q 不存在", "there's no date %q", s)
 	}
 	return t.Format("2006-01-02"), nil
 }
@@ -203,7 +205,7 @@ func normalizeDateTime(s string) (string, error) {
 		h, _ := strconv.Atoi(t[1])
 		mi, _ := strconv.Atoi(t[2])
 		if h > 23 || mi > 59 {
-			return "", fmt.Errorf("时间 %q 不存在", s)
+			return "", msg.Errorf("时间 %q 不存在", "there's no time %q", s)
 		}
 		return fmt.Sprintf("%s %02d:%02d", d, h, mi), nil
 	}
@@ -217,7 +219,7 @@ var clockRe = regexp.MustCompile(`^(\d{1,2})(?:\s*[:：点时]\s*(\d{1,2}|半)?\
 func normalizeTime(s string) (string, error) {
 	m := clockRe.FindStringSubmatch(strings.TrimSpace(s))
 	if m == nil {
-		return "", fmt.Errorf("需要时间（HH:MM，如 23:00），收到 %q", s)
+		return "", msg.Errorf("需要时间（HH:MM，如 23:00），收到 %q", "needs a time (HH:MM, like 23:00), got %q", s)
 	}
 	h, _ := strconv.Atoi(m[1])
 	mi := 0
@@ -229,7 +231,7 @@ func normalizeTime(s string) (string, error) {
 		mi, _ = strconv.Atoi(m[2])
 	}
 	if h > 23 || mi > 59 {
-		return "", fmt.Errorf("时间 %q 不存在", s)
+		return "", msg.Errorf("时间 %q 不存在", "there's no time %q", s)
 	}
 	return fmt.Sprintf("%02d:%02d", h, mi), nil
 }
@@ -250,7 +252,7 @@ func normalizeTimes(s string) (any, error) {
 		for _, q := range parts {
 			t, err := normalizeTime(q)
 			if err != nil {
-				return nil, fmt.Errorf("需要每天的时刻，用逗号分开（如 08:00, 20:00）：%q 不是时刻", q)
+				return nil, msg.Errorf("需要每天的时刻，用逗号分开（如 08:00, 20:00）：%q 不是时刻", "needs times of day separated by commas (like 08:00, 20:00): %q isn't a time", q)
 			}
 			if !seen[t] {
 				seen[t] = true

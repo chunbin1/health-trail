@@ -84,3 +84,25 @@ func TestChatsDamagedFileIsSetAside(t *testing.T) {
 		t.Fatalf("damaged copy changed: %s", b)
 	}
 }
+
+func TestDeleteChat(t *testing.T) {
+	dir := t.TempDir()
+	for _, id := range []string{"a", "b"} {
+		if _, err := SaveChat(dir, id, json.RawMessage(`[{"role":"user","text":"`+id+`"}]`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := DeleteChat(dir, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteChat(dir, "a"); err != nil {
+		t.Fatal("deleting again:", err)
+	}
+	list, _ := ListChats(dir)
+	if len(list) != 1 || list[0].ID != "b" {
+		t.Fatalf("%+v", list)
+	}
+	if _, ok, _ := GetChat(dir, "a"); ok {
+		t.Fatal("still there")
+	}
+}

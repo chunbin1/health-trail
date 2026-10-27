@@ -3,9 +3,12 @@ package store
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 func open(t *testing.T) *Store {
@@ -88,7 +91,7 @@ func TestValidation(t *testing.T) {
 	if !errors.As(err, &ve) {
 		t.Errorf("dangling ref accepted: %v", err)
 	}
-	_, err = s.Create("conditions", Record{"name": "胃炎", "status": "好了"})
+	_, err = s.Create("conditions", Record{"name": "胃炎", "status": "done"})
 	if !errors.As(err, &ve) || !strings.Contains(err.Error(), "已痊愈") {
 		t.Errorf("bad enum: %v", err)
 	}
@@ -869,3 +872,77 @@ func TestOwnHeightUsedByAHabit(t *testing.T) {
 		t.Errorf("deleting it: err = %v, want told a check-in item uses it", err)
 	}
 }
+
+// CheckUpdate is Update without the write: the same patches pass and fail,
+// with the same message, and nothing changes until Update runs.
+func TestCheckUpdateMatchesUpdate(t *testing.T) {
+	s := open(t)
+	med, err := s.Create("medications", Record{"name": "多替诺雷", "status": "计划中"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := med["id"].(int64)
+	for _, patch := range []Record{
+		{"status": "很好"},
+		{"name": ""},
+		{"remind_times": "早上"},
+	} {
+		checkErr := s.CheckUpdate("medications", id, patch)
+		_, updateErr := s.Update("medications", id, patch)
+		if checkErr == nil || updateErr == nil || checkErr.Error() != updateErr.Error() {
+			t.Fatalf("%v: check %v, update %v", patch, checkErr, updateErr)
+		}
+	}
+	if err := s.CheckUpdate("medications", 999, Record{"status": "在用"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing record: %v", err)
+	}
+	if err := s.CheckUpdate("medications", id, Record{}); err != nil {
+		t.Fatalf("empty patch: %v", err)
+	}
+	ok := Record{"status": "在用", "remind_times": "09:00"}
+	if err := s.CheckUpdate("medications", id, ok); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Get("medications", id); got["status"] != "计划中" || got["remind_times"] != nil || got["updated_at"] != med["updated_at"] {
+		t.Fatalf("CheckUpdate wrote: %+v", got)
+	}
+	got, err := s.Update("medications", id, ok)
+	if err != nil || got["status"] != "在用" || got["remind_times"] != "09:00" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+// Every mistake a page can show has English, and the Chinese (what MCP and
+// the model read) stays as it was.
+func TestErrorsInEnglish(t *testing.T) {
+	s := open(t)
+	han := regexp.MustCompile(`\p{Han}`)
+	habit, err := s.Create("habits", Record{"name": "晨跑"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, e1 := s.Create("widgets", Record{})
+	_, e2 := s.Create("conditions", Record{"nam": "x"})
+	_, e3 := s.Create("conditions", Record{"status": "观察中"})
+	_, e4 := s.Create("conditions", Record{"name": "x", "status": "done"})
+	_, e5 := s.Create("symptoms", Record{"occurred_at": "2026-13-40 10:00", "description": "x"})
+	_, e6 := s.Search(" ", 10)
+	e7 := s.Delete("habits", idOf(habit))
+	_, e8 := s.Create("metric_kinds", Record{"name": "BMI"})
+	_, e9 := s.Create("metrics", Record{"metric_type": "vision", "value": 1, "measured_at": "today"})
+	for i, err := range []error{e1, e2, e3, e4, e5, e6, e7, e8, e9} {
+		var ve *ValidationError
+		if !errors.As(err, &ve) {
+			t.Errorf("%d: not a validation error: %v", i+1, err)
+			continue
+		}
+		if !han.MatchString(ve.Msg) {
+			t.Errorf("%d: the Chinese is gone: %q", i+1, ve.Msg)
+		}
+		if en := msg.In(err, "en"); en == "" || han.MatchString(en) {
+			t.Errorf("%d: English %q (Chinese %q)", i+1, en, ve.Msg)
+		}
+	}
+}
+
+func idOf(r Record) int64 { n, _ := r["id"].(int64); return n }

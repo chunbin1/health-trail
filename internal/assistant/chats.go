@@ -2,7 +2,6 @@ package assistant
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +9,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 const chatsFile = "chats.json"
@@ -36,10 +37,10 @@ type chatFile struct {
 func SaveChat(dir, id string, messages json.RawMessage) (Chat, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return Chat{}, errChat("没有对话编号")
+		return Chat{}, msg.New("没有对话编号", "No chat id")
 	}
 	if !json.Valid(messages) || len(messages) == 0 || messages[0] != '[' {
-		return Chat{}, errChat("对话内容无法保存")
+		return Chat{}, msg.New("对话内容无法保存", "Couldn't save the chat")
 	}
 	chatsMu.Lock()
 	defer chatsMu.Unlock()
@@ -86,6 +87,26 @@ func ListChats(dir string) ([]Chat, error) {
 		out[i] = c
 	}
 	return out, nil
+}
+
+// DeleteChat removes one conversation. One that is not there is already gone.
+func DeleteChat(dir, id string) error {
+	chatsMu.Lock()
+	defer chatsMu.Unlock()
+	file, err := readChats(dir)
+	if err != nil {
+		return err
+	}
+	out := file.Chats[:0]
+	for _, c := range file.Chats {
+		if c.ID != id {
+			out = append(out, c)
+		}
+	}
+	if len(out) == len(file.Chats) {
+		return nil
+	}
+	return writeChats(dir, chatFile{Chats: out})
 }
 
 // GetChat returns one conversation, including its messages.
@@ -143,12 +164,6 @@ func chatTokens(messages json.RawMessage) int {
 	return n
 }
 
-func errChat(s string) error { return &chatError{s} }
-
-type chatError struct{ s string }
-
-func (e *chatError) Error() string { return e.s }
-
 func readChats(dir string) (chatFile, error) {
 	b, err := os.ReadFile(filepath.Join(dir, chatsFile))
 	if err != nil {
@@ -164,7 +179,7 @@ func readChats(dir string) (chatFile, error) {
 		path := filepath.Join(dir, chatsFile)
 		bad := path + ".bad-" + time.Now().Format("20060102-150405")
 		if rerr := os.Rename(path, bad); rerr != nil {
-			return chatFile{}, fmt.Errorf("对话记录读不出来")
+			return chatFile{}, msg.New("对话记录读不出来", "Couldn't read the saved chats")
 		}
 		log.Printf("对话记录读不出来（%v），已改名为 %s", err, filepath.Base(bad))
 		return chatFile{}, nil

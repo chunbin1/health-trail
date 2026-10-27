@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lee/health-trail/internal/assistant"
@@ -66,7 +67,7 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 		if in.BaseURL != nil || in.APIKey != nil || in.Model != nil || in.ClearKey {
 			cfg, err = cfg.Update(in.BaseURL, in.APIKey, in.Model, in.ClearKey)
 			if err != nil {
-				writeError(w, err.Error())
+				writeError(w, a.errText(err))
 				return
 			}
 		}
@@ -111,7 +112,7 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 	mux.HandleFunc("GET /api/assistant/chats", wrap(func(w http.ResponseWriter, r *http.Request) {
 		list, err := assistant.ListChats(a.st.Dir)
 		if err != nil {
-			writeError(w, err.Error())
+			writeError(w, a.errText(err))
 			return
 		}
 		writeJSON(w, list)
@@ -119,7 +120,7 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 	mux.HandleFunc("GET /api/assistant/chats/{id}", wrap(func(w http.ResponseWriter, r *http.Request) {
 		c, ok, err := assistant.GetChat(a.st.Dir, r.PathValue("id"))
 		if err != nil {
-			writeError(w, err.Error())
+			writeError(w, a.errText(err))
 			return
 		}
 		if !ok {
@@ -127,6 +128,13 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 			return
 		}
 		writeJSON(w, c)
+	}))
+	mux.HandleFunc("DELETE /api/assistant/chats/{id}", wrap(func(w http.ResponseWriter, r *http.Request) {
+		if err := assistant.DeleteChat(a.st.Dir, r.PathValue("id")); err != nil {
+			writeError(w, a.errText(err))
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
 	}))
 	mux.HandleFunc("PUT /api/assistant/chats", wrap(func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
@@ -139,7 +147,7 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 		}
 		c, err := assistant.SaveChat(a.st.Dir, in.ID, in.Messages)
 		if err != nil {
-			writeError(w, err.Error())
+			writeError(w, a.errText(err))
 			return
 		}
 		writeJSON(w, c)
@@ -152,7 +160,7 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 			writeError(w, a.msg("无效的请求", "Invalid request"))
 			return
 		}
-		writeJSON(w, assistant.Commit(a.st, in.Items))
+		writeJSON(w, assistant.Commit(a.st, in.Items, a.settings.lang()))
 	}))
 	mux.HandleFunc("POST /api/assistant/speech/start", wrap(func(w http.ResponseWriter, r *http.Request) {
 		if !speech {
@@ -193,6 +201,15 @@ type draftRun struct {
 	draft assistant.Draft
 	err   string
 	done  chan struct{}
+	// the tools called so far, shown while the reply is on its way
+	mu    sync.Mutex
+	steps []assistant.Step
+}
+
+func (j *draftRun) stepsSoFar() []assistant.Step {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return append([]assistant.Step{}, j.steps...)
 }
 
 func (a *app) beginDraft(id string, turns []assistant.Turn) *draftRun {
@@ -221,12 +238,18 @@ func (a *app) beginDraft(id string, turns []assistant.Turn) *draftRun {
 	go func() {
 		cfg, err := assistant.Load(a.st.Dir)
 		if err == nil {
-			ctx, stop := context.WithTimeout(context.Background(), 90*time.Second)
-			job.draft, err = assistant.Propose(ctx, a.st, cfg, turns, time.Now())
+			// several rounds of reading, each one a request to the model
+			ctx, stop := context.WithTimeout(context.Background(), 5*time.Minute)
+			cfg.Lang = a.settings.lang()
+			job.draft, err = assistant.Propose(ctx, a.st, cfg, turns, time.Now(), func(s assistant.Step) {
+				job.mu.Lock()
+				job.steps = append(job.steps, s)
+				job.mu.Unlock()
+			})
 			stop()
 		}
 		if err != nil {
-			job.err = err.Error()
+			job.err = a.errText(err)
 		}
 		close(job.done)
 	}()
@@ -245,9 +268,9 @@ func (a *app) draftStatus() map[string]any {
 		if job.err != "" {
 			return map[string]any{"state": "error", "id": job.id, "text": job.text, "error": job.err}
 		}
-		return map[string]any{"state": "done", "id": job.id, "text": job.text, "items": job.draft.Items, "unclear": job.draft.Unclear, "reply": job.draft.Reply, "raw": job.draft.Raw, "usage": job.draft.Usage}
+		return map[string]any{"state": "done", "id": job.id, "text": job.text, "items": job.draft.Items, "unclear": job.draft.Unclear, "reply": job.draft.Reply, "steps": job.draft.Steps, "usage": job.draft.Usage}
 	default:
-		return map[string]any{"state": "pending", "id": job.id, "text": job.text}
+		return map[string]any{"state": "pending", "id": job.id, "text": job.text, "steps": job.stepsSoFar()}
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 // Guard decides who may reach the API, the MCP endpoint and the UI over the
@@ -28,6 +30,15 @@ import (
 type Guard struct {
 	Token string
 	Next  http.Handler
+	// Lang is the UI's language, for the refusals; nil is Chinese
+	Lang func() string
+}
+
+func (g *Guard) lang() string {
+	if g.Lang == nil {
+		return "zh"
+	}
+	return g.Lang()
 }
 
 const cookieName = "hv_token"
@@ -37,7 +48,7 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 
 	if o := r.Header.Get("Origin"); o != "" && !sameOrigin(o, r.Host) {
-		writeErr(w, http.StatusForbidden, "拒绝跨站请求")
+		writeErr(w, http.StatusForbidden, msg.Pick(g.lang(), "拒绝跨站请求", "Cross-site request refused"))
 		return
 	}
 	if t := r.URL.Query().Get("token"); t != "" && g.valid(t) {
@@ -70,11 +81,17 @@ func (g *Guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" {
-		writeErr(w, http.StatusUnauthorized, "需要访问令牌：请在电脑上的「连接」页面复制手机访问链接")
+		writeErr(w, http.StatusUnauthorized, msg.Pick(g.lang(), "需要访问令牌：请在电脑上的「连接」页面复制手机访问链接", "An access token is needed: copy the phone link from Connect AI on the computer"))
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusUnauthorized)
+	if g.lang() == "en" {
+		w.Write([]byte(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Health Trail</title>
+<body style="font:16px -apple-system,sans-serif;padding:2em;max-width:30em;margin:auto">
+<h2>An access token is needed</h2><p>On the computer, open Health Trail → Connect AI, then scan the code with the phone or open the link there.</p></body>`))
+		return
+	}
 	w.Write([]byte(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>健康足迹</title>
 <body style="font:16px -apple-system,sans-serif;padding:2em;max-width:30em;margin:auto">
 <h2>需要访问令牌</h2><p>请在电脑上打开健康足迹 →「连接」页面，用手机扫码或打开里面的访问链接。</p></body>`))

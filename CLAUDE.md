@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-单人的本地健康档案：健康问题、症状、就诊、用药、检查报告和检验指标、身体数据、打卡。数据存在本机的 SQLite 里。外部 AI 仍通过 MCP 读写这些数据。窗口里的「AI助手」可以选用一个 OpenAI 兼容接口，把说的话或打的字整理成记录；密钥在本机，语音用 Mac 本机识别。
+单人的本地健康档案：健康问题、症状、就诊、用药、检查报告和检验指标、身体数据、打卡。数据存在本机的 SQLite 里。外部 AI 仍通过 MCP 读写这些数据。窗口里的「AI助手」可以选用一个 OpenAI 兼容接口（要支持工具调用），用和 MCP 同一套工具查档案，把说的话或打的字整理成记录卡片；密钥在本机，语音用 Mac 本机识别。
 
 ## 结构
 
@@ -20,7 +20,7 @@ internal/desktop/        桌面 App 这一层
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
   assistant.go           窗口里的「AI助手」：配置、整理、确认后写入；serve 只给本机，手机拿不到
   speech_darwin.go       Mac 本机听写（SFSpeechRecognizer，要求设备端识别）
-internal/assistant/      调用 OpenAI 兼容接口、解析草稿、写入记录；密钥在数据目录的 assistant.json
+internal/assistant/      AI助手：进程内连 mcpserver，只读工具照常执行，add_record / add_lab_report / checkin / update_record 变成卡片（commit.go 确认后写入）；密钥在数据目录的 assistant.json
 internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
 internal/update/         查 GitHub 最新 Release、下载 zip、校验同一团队的 Developer ID 签名和公证、替换 .app、退出后重新打开
 internal/reminders/      打卡、用药、预约的系统通知（Wails 服务）
@@ -33,8 +33,9 @@ internal/store/          数据层，唯一的数据来源
   convert.go             字段类型转换、日期规范化、检验值和参考范围解析
   queries.go             总览、趋势、打卡统计、搜索、时间线
 internal/server/         REST API（/api/...）、安全层 guard.go、UI 静态文件
-internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
+internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）；也是 AI助手的工具：标了 ReadOnlyHint 的工具在 App 里不经确认直接执行，写入的工具千万别标
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
+internal/msg/            给人看的报错中英两套：msg.New / msg.Errorf，按界面语言用 msg.In 取
 frontend/                React + TS + Vite；embed.go 把构建结果（dist）嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
 scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_review_gate.py（AI 审阅门禁，见 RELEASING.md）
@@ -52,6 +53,7 @@ scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_re
 - **一份报告要么全部写入，要么一条不写**：批量写入用 `CreateMany`（事务）；`add_lab_report`（mcpserver 的 `importLabs`）失败时要删掉它新建的报告。
 - **界面统一**：颜色和图标用 `ui.tsx` 的 `KIND`（每类记录一个图标 + `--c-<kind>` 颜色）和 `styles.css` 里的 token，不要在组件里写死颜色。图表系列颜色要先用 dataviz 的 `validate_palette.js` 校验浅色和深色两套。
 - **界面文字中英两套**：前端写死的文字一律 `t('中文原文')`，并在 `i18n.tsx` 的 `EN` 里加英文（漏了类型检查不过）；schema 来的字段名、提示、枚举选项、单位用 `tx()` 显示。枚举存进数据库的值永远是中文，只翻译显示。语言保存在数据目录的 settings.json（`lang`）。MCP 的说明和 prompts 保持中文。
+- **后端的报错也是两套**：会显示到界面上的报错用 `msg.New(中文, 英文)` / `msg.Errorf`，store 的校验错误用 `invalid(中文, 英文, …)`（`store.ValidationError` 的 `En`）；接口按 settings.json 的语言用 `msg.In` 取，MCP 和发给模型的工具结果照旧只看中文。`TestNoChineseOnlyErrors` 会拦下只有中文的 `errors.New` / `fmt.Errorf`（mcpserver 除外）。
 - **README 中英两份**：`README.md` 是中文版，`README.en.md` 是英文版。改其中一份时同步改另一份，章节、链接和页内锚点一一对应；英文版里的界面名字用 `i18n.tsx` 的 `EN` 里的叫法。
 - **不编造医疗结论**：MCP 的 instructions 和 prompts 要求 Claude 只依据数据说话、提醒就医。改这些文字时保留这些约束。
 
@@ -65,7 +67,8 @@ make app         # 打包 健康足迹.app
 
 - 改了 store/server/mcpserver：`make test` 必须全绿。
 - 改了 MCP 工具：用逐条发送的 stdio 驱动做一次端到端测试（见 LESSONS #1），不要一次性把请求全部塞进 stdin。
-- 改了界面：用一个临时数据目录启动 `./health-trail serve -data <临时目录> -port 8731`，在浏览器里检查桌面宽度和 375px 手机宽度（不能横向溢出）。先确认数据加载完再判断（LESSONS #4），重新构建后强制刷新（LESSONS #5）。弹窗、抽屉、日期选择器都有动画：测量位置或截图前先 `document.getAnimations().forEach(a => a.finish())` 并稍等一下；截图里「没有出现」时，先用 `getBoundingClientRect` 和再截一张确认，再判断是 bug。需要容器宽度才能绘制的组件用 `useLayoutEffect` 在第一次绘制前量好。
-- 改了桌面窗口：`./health-trail -data <临时目录> -port 8732` 启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。要测日历、提醒事项这类系统权限，改用 `open -n 健康足迹.app --stderr <日志> --args -data <临时目录> -port 8734`（LESSONS #25）。不在默认数据目录的测试窗口不发系统通知（会清掉真实 App 排好的提醒），日历和提醒事项写进「健康足迹（测试）」。
+- **手动试用一律用统一的测试数据** `~/Library/Application Support/HealthTrail-Test`（Makefile 的 `TEST_DATA`）：里面是编出来的记录、AI助手的接口配置和对话，重启不丢，`make dev`、`make test-window` 和各个会话共用。不要每次另建临时目录、重新造数据；需要空目录或特殊数据的才另建（Go 测试用 `t.TempDir()`）。给用户试的测试窗口也用它，并告诉用户这是测试数据。同一时间只开一个用它的进程（`make dev` 和 `make test-window` 不要同时开，两边写同一个数据库会互相踩）。目录里有 AI助手的接口配置和密钥：不要拷进对外的备份、截图或提交。
+- 改了界面：`./health-trail serve -data "$HOME/Library/Application Support/HealthTrail-Test" -port 8731`，在浏览器里检查桌面宽度和 375px 手机宽度（不能横向溢出）。先确认数据加载完再判断（LESSONS #4），重新构建后强制刷新（LESSONS #5）。弹窗、抽屉、日期选择器都有动画：测量位置或截图前先 `document.getAnimations().forEach(a => a.finish())` 并稍等一下；截图里「没有出现」时，先用 `getBoundingClientRect` 和再截一张确认，再判断是 bug。需要容器宽度才能绘制的组件用 `useLayoutEffect` 在第一次绘制前量好。
+- 改了桌面窗口：`make test-window`（测试数据、端口 8732）启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。要测日历、提醒事项这类系统权限，改用 `open -n 健康足迹.app --stderr <日志> --args -data <测试数据目录> -port 8734`（LESSONS #25）。不在默认数据目录的测试窗口不发系统通知（会清掉真实 App 排好的提醒），日历和提醒事项写进「健康足迹（测试）」。
 - **PR 要过 AI 审阅才能合并、发布**：审阅由另一个模型照着 [docs/ai-reviewer.md](docs/ai-reviewer.md) 写，编码助手不要自己审，也不要开会话或子代理去跑 `/code-review`、发评审。编码助手只管推 PR，审阅出来后修里面提的问题，验证完再推；推了新提交要等对新提交的审阅。不要在 AI 审阅检查没通过时合并或打标签（`release.yml` 也会拦下）。
 - **永远不要用默认数据目录做测试**，那里是用户真实的健康数据：`~/Library/Application Support/HealthVault`。`make dev-real` 读写的就是这个目录，只给用户自己用，编码助手不要运行它；要测 `dev.sh --real` 这条路径，就把 `HEALTH_TRAIL_DATA` 设成临时目录。

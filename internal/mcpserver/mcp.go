@@ -104,10 +104,14 @@ func New(st *store.Store, version string, local bool) *mcp.Server {
 	return s
 }
 
+// FieldTable heads the list of record types and fields in a tool
+// description. The in-app assistant finds the list by it, to send it once.
+const FieldTable = "记录类型（type）及字段："
+
 // typesDoc describes every record type and its fields, from the schema.
 func typesDoc() string {
 	var b strings.Builder
-	b.WriteString("记录类型（type）及字段：\n")
+	b.WriteString(FieldTable + "\n")
 	for _, e := range store.Entities {
 		if e.Name == "checkins" {
 			continue

@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -25,6 +26,16 @@ type Server struct {
 	UI    fs.FS        // the built frontend (index.html at its root)
 	MCP   http.Handler // served at /mcp
 	Info  func(r *http.Request) map[string]any
+	// Lang is the UI's language ("en" or "zh"), for the errors a page shows;
+	// nil is Chinese
+	Lang func() string
+}
+
+func (s *Server) lang() string {
+	if s.Lang == nil {
+		return "zh"
+	}
+	return s.Lang()
 }
 
 // Handler serves everything with no access checks. Only the desktop
@@ -53,7 +64,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/attachments/{id}", s.download)
 	mux.HandleFunc("DELETE /api/attachments/{id}", s.deleteAttachment)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
-		writeErr(w, http.StatusNotFound, "没有这个接口："+r.Method+" "+r.URL.Path)
+		writeErr(w, http.StatusNotFound, msg.Pick(s.lang(), "没有这个接口：", "No such API: ")+r.Method+" "+r.URL.Path)
 	})
 	if s.MCP != nil {
 		mux.Handle("/mcp", s.MCP)
@@ -99,16 +110,17 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-func fail(w http.ResponseWriter, err error) {
+// fail writes err in the UI's language.
+func (s *Server) fail(w http.ResponseWriter, err error) {
 	var ve *store.ValidationError
 	switch {
 	case errors.As(err, &ve):
-		writeErr(w, http.StatusBadRequest, ve.Msg)
+		writeErr(w, http.StatusBadRequest, msg.In(ve, s.lang()))
 	case errors.Is(err, store.ErrNotFound):
-		writeErr(w, http.StatusNotFound, err.Error())
+		writeErr(w, http.StatusNotFound, msg.In(err, s.lang()))
 	default:
 		log.Printf("api: %v", err)
-		writeErr(w, http.StatusInternalServerError, "内部错误："+err.Error())
+		writeErr(w, http.StatusInternalServerError, msg.Pick(s.lang(), "内部错误：", "Internal error: ")+err.Error())
 	}
 }
 
@@ -118,7 +130,7 @@ func decode(r *http.Request, v any) error {
 	dec := json.NewDecoder(io.LimitReader(r.Body, 5<<20))
 	dec.UseNumber()
 	if err := dec.Decode(v); err != nil {
-		return &store.ValidationError{Msg: "请求不是有效的 JSON：" + err.Error()}
+		return &store.ValidationError{Msg: "请求不是有效的 JSON：" + err.Error(), En: "The request isn't valid JSON: " + err.Error()}
 	}
 	return nil
 }
@@ -126,7 +138,7 @@ func decode(r *http.Request, v any) error {
 func idParam(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		return 0, &store.ValidationError{Msg: "无效的 id"}
+		return 0, &store.ValidationError{Msg: "无效的 id", En: "Invalid id"}
 	}
 	return id, nil
 }
@@ -154,7 +166,7 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 	o, err := s.Store.Overview()
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, o)
@@ -164,7 +176,7 @@ func (s *Server) timeline(w http.ResponseWriter, r *http.Request) {
 	n, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	rows, err := s.Store.Timeline(n)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, rows)
@@ -173,7 +185,7 @@ func (s *Server) timeline(w http.ResponseWriter, r *http.Request) {
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	hits, err := s.Store.Search(r.URL.Query().Get("q"), 20)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, hits)
@@ -182,7 +194,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 func (s *Server) labItems(w http.ResponseWriter, r *http.Request) {
 	items, err := s.Store.LabItems()
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, items)
@@ -191,7 +203,7 @@ func (s *Server) labItems(w http.ResponseWriter, r *http.Request) {
 func (s *Server) labTrend(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.Store.LabTrend(r.URL.Query().Get("name"))
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, rows)
@@ -201,7 +213,7 @@ func (s *Server) metricSeries(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	rows, err := s.Store.MetricSeries(q.Get("type"), q.Get("from"), q.Get("to"))
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, rows)
@@ -214,12 +226,12 @@ func (s *Server) checkinDay(w http.ResponseWriter, r *http.Request) {
 	}
 	date, err := store.NormalizeDate(d)
 	if err != nil {
-		fail(w, &store.ValidationError{Msg: err.Error()})
+		s.fail(w, &store.ValidationError{Msg: err.Error()})
 		return
 	}
 	days, err := s.Store.HabitDays(date)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, map[string]any{"date": date, "habits": days})
@@ -230,7 +242,7 @@ func (s *Server) checkinStats(w http.ResponseWriter, r *http.Request) {
 	hid, _ := strconv.ParseInt(q.Get("habit_id"), 10, 64)
 	st, err := s.Store.CheckinStats(q.Get("from"), q.Get("to"), hid)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, st)
@@ -244,7 +256,7 @@ func (s *Server) checkin(w http.ResponseWriter, r *http.Request) {
 		Notes   string   `json:"notes"`
 	}
 	if err := decode(r, &in); err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	if in.Date == "" {
@@ -252,7 +264,7 @@ func (s *Server) checkin(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := s.Store.Checkin(in.HabitID, in.Date, in.Value, in.Notes)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, c)
@@ -262,12 +274,12 @@ func (s *Server) uncheck(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	hid, err := strconv.ParseInt(q.Get("habit_id"), 10, 64)
 	if err != nil {
-		fail(w, &store.ValidationError{Msg: "无效的 habit_id"})
+		s.fail(w, &store.ValidationError{Msg: "无效的 habit_id", En: "Invalid habit_id"})
 		return
 	}
 	ok, err := s.Store.Uncheck(hid, q.Get("date"))
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, map[string]bool{"removed": ok})
@@ -288,7 +300,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, total, err := s.Store.List(r.PathValue("entity"), lq)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, map[string]any{"rows": rows, "total": total})
@@ -297,12 +309,12 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 	var in store.Record
 	if err := decode(r, &in); err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	rec, err := s.Store.Create(r.PathValue("entity"), in)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -312,12 +324,12 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	id, err := idParam(r)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	rec, err := s.Store.Related(r.PathValue("entity"), id)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, rec)
@@ -326,17 +338,17 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 	id, err := idParam(r)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	var in store.Record
 	if err := decode(r, &in); err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	rec, err := s.Store.Update(r.PathValue("entity"), id, in)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, rec)
@@ -345,11 +357,11 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 	id, err := idParam(r)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	if err := s.Store.Delete(r.PathValue("entity"), id); err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, map[string]bool{"deleted": true})
@@ -366,17 +378,17 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, store.MaxAttachment+1<<20)
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
-		fail(w, &store.ValidationError{Msg: "上传失败：" + err.Error()})
+		s.fail(w, &store.ValidationError{Msg: "上传失败：" + err.Error(), En: "Upload failed: " + err.Error()})
 		return
 	}
 	ownerID, err := strconv.ParseInt(r.FormValue("owner_id"), 10, 64)
 	if err != nil {
-		fail(w, &store.ValidationError{Msg: "无效的 owner_id"})
+		s.fail(w, &store.ValidationError{Msg: "无效的 owner_id", En: "Invalid owner_id"})
 		return
 	}
 	f, hdr, err := r.FormFile("file")
 	if err != nil {
-		fail(w, &store.ValidationError{Msg: "缺少文件"})
+		s.fail(w, &store.ValidationError{Msg: "缺少文件", En: "No file was sent"})
 		return
 	}
 	defer f.Close()
@@ -386,7 +398,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	a, err := s.Store.AddAttachment(r.FormValue("owner_type"), ownerID, hdr.Filename, ct, f)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, a)
@@ -403,7 +415,7 @@ func (s *Server) uploadJSON(w http.ResponseWriter, r *http.Request) {
 		Data      string `json:"data"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		fail(w, &store.ValidationError{Msg: "上传失败：" + err.Error()})
+		s.fail(w, &store.ValidationError{Msg: "上传失败：" + err.Error(), En: "Upload failed: " + err.Error()})
 		return
 	}
 	data := in.Data
@@ -418,11 +430,11 @@ func (s *Server) uploadJSON(w http.ResponseWriter, r *http.Request) {
 	}, data)
 	raw, err := base64.StdEncoding.DecodeString(data)
 	if err != nil || len(raw) == 0 {
-		fail(w, &store.ValidationError{Msg: "图片数据读不出来"})
+		s.fail(w, &store.ValidationError{Msg: "图片数据读不出来", En: "Couldn't read the picture"})
 		return
 	}
 	if len(raw) > store.MaxAttachment {
-		fail(w, invalidSize())
+		s.fail(w, invalidSize())
 		return
 	}
 	ct := in.Mime
@@ -431,14 +443,14 @@ func (s *Server) uploadJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	a, err := s.Store.AddAttachment(in.OwnerType, in.OwnerID, in.Filename, ct, bytes.NewReader(raw))
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, a)
 }
 
 func invalidSize() error {
-	return &store.ValidationError{Msg: "文件超过 50 MB"}
+	return &store.ValidationError{Msg: "文件超过 50 MB", En: "The file is over 50 MB"}
 }
 
 // inlineTypes may be shown in the window; anything else is downloaded, so
@@ -451,12 +463,12 @@ var inlineTypes = map[string]bool{
 func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 	id, err := idParam(r)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	a, err := s.Store.Attachment(id)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	ct, _ := a["mime"].(string)
@@ -477,11 +489,11 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 	id, err := idParam(r)
 	if err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	if err := s.Store.DeleteAttachment(id); err != nil {
-		fail(w, err)
+		s.fail(w, err)
 		return
 	}
 	writeJSON(w, map[string]bool{"deleted": true})

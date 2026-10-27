@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -48,14 +49,14 @@ type Entry struct {
 // path, and outside the data folder, which a backup copies.
 func CheckDir(st *store.Store, dir string) error {
 	if dir == "" {
-		return errors.New("还没有设置备份位置")
+		return msg.New("还没有设置备份位置", "No backup folder is set yet")
 	}
 	if !filepath.IsAbs(dir) {
-		return fmt.Errorf("备份位置要写完整路径（以 / 开头），收到 %q", dir)
+		return msg.Errorf("备份位置要写完整路径（以 / 开头），收到 %q", "The backup folder must be a full path (starting with /), got %q", dir)
 	}
 	data, _ := filepath.Abs(st.Dir)
 	if rel, err := filepath.Rel(data, filepath.Clean(dir)); err == nil && !strings.HasPrefix(rel, "..") {
-		return errors.New("备份位置不能放在数据目录里面，换一个文件夹")
+		return msg.New("备份位置不能放在数据目录里面，换一个文件夹", "The backup folder can't be inside the data folder; choose another one")
 	}
 	return nil
 }
@@ -68,7 +69,7 @@ func Create(st *store.Store, dir, suffix string, now time.Time) (string, error) 
 		return "", err
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("无法创建备份文件夹：%w", err)
+		return "", msg.Errorf("无法创建备份文件夹：%v", "Couldn't create the backup folder: %v", err)
 	}
 	tmp, err := os.MkdirTemp("", "health-trail-backup-")
 	if err != nil {
@@ -77,7 +78,7 @@ func Create(st *store.Store, dir, suffix string, now time.Time) (string, error) 
 	defer os.RemoveAll(tmp)
 	snap := filepath.Join(tmp, dbName)
 	if _, err := st.DB.Exec("VACUUM INTO ?", snap); err != nil {
-		return "", fmt.Errorf("复制数据库失败：%w", err)
+		return "", msg.Errorf("复制数据库失败：%v", "Couldn't copy the database: %v", err)
 	}
 
 	name := Prefix + now.Format("2006-01-02-150405") + suffix + ".zip"
@@ -85,7 +86,7 @@ func Create(st *store.Store, dir, suffix string, now time.Time) (string, error) 
 	part := final + ".part" // a half-written backup never looks like a real one
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("无法写入备份位置：%w", err)
+		return "", msg.Errorf("无法写入备份位置：%v", "Couldn't write to the backup folder: %v", err)
 	}
 	err = writeZip(f, snap, st.FileDir)
 	if cerr := f.Close(); err == nil {
@@ -96,7 +97,7 @@ func Create(st *store.Store, dir, suffix string, now time.Time) (string, error) 
 	}
 	if err != nil {
 		os.Remove(part)
-		return "", fmt.Errorf("写入备份失败：%w", err)
+		return "", msg.Errorf("写入备份失败：%v", "Couldn't write the backup: %v", err)
 	}
 	return name, nil
 }
@@ -211,7 +212,7 @@ func Prune(dir string, keep int) error {
 func Restore(st *store.Store, path string) error {
 	zr, err := zip.OpenReader(path)
 	if err != nil {
-		return fmt.Errorf("打不开这个备份：%w", err)
+		return msg.Errorf("打不开这个备份：%v", "Couldn't open this backup: %v", err)
 	}
 	defer zr.Close()
 	tmp, err := os.MkdirTemp("", "health-trail-restore-")
@@ -234,7 +235,7 @@ func Restore(st *store.Store, path string) error {
 		}
 	}
 	if db == nil {
-		return errors.New("这不是健康足迹的备份：里面没有 health.db")
+		return msg.New("这不是健康足迹的备份：里面没有 health.db", "This isn't a Health Trail backup: there's no health.db in it")
 	}
 	snap := filepath.Join(tmp, dbName)
 	if err := extract(db, snap); err != nil {
@@ -249,7 +250,7 @@ func Restore(st *store.Store, path string) error {
 	for _, f := range files {
 		rel, _ := safeRel(strings.TrimPrefix(f.Name, "files/"))
 		if err := extract(f, filepath.Join(st.FileDir, rel)); err != nil {
-			return fmt.Errorf("恢复附件 %s 失败：%w", rel, err)
+			return msg.Errorf("恢复附件 %s 失败：%v", "Couldn't restore the attachment %s: %v", rel, err)
 		}
 	}
 	return nil
@@ -259,7 +260,7 @@ func Restore(st *store.Store, path string) error {
 func safeRel(name string) (string, error) {
 	rel := filepath.Clean(filepath.FromSlash(name))
 	if rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("备份里有不安全的文件路径：%q", name)
+		return "", msg.Errorf("备份里有不安全的文件路径：%q", "The backup has an unsafe file path: %q", name)
 	}
 	return rel, nil
 }
@@ -292,7 +293,7 @@ func check(path string) error {
 	defer db.Close()
 	var res string
 	if err := db.QueryRow("PRAGMA integrity_check").Scan(&res); err != nil || res != "ok" {
-		return fmt.Errorf("备份里的数据库已损坏，没有恢复（%v %s）", err, res)
+		return msg.Errorf("备份里的数据库已损坏，没有恢复（%v %s）", "The database in the backup is damaged, so nothing was restored (%v %s)", err, res)
 	}
 	return nil
 }
@@ -355,7 +356,7 @@ func copyRecords(st *store.Store, snap string) (err error) {
 		}
 		list := strings.Join(cols, ", ")
 		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO main.%q (%s) SELECT %s FROM r.%q", t, list, list, t)); err != nil {
-			return fmt.Errorf("恢复 %s 失败：%w", t, err)
+			return msg.Errorf("恢复 %s 失败：%v", "Couldn't restore %s: %v", t, err)
 		}
 	}
 	// the AUTOINCREMENT counters, so new records don't reuse restored ids

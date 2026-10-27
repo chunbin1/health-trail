@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MoreHorizontal, Search as SearchIcon, Settings as SettingsIcon, Sparkles, X } from 'lucide-react'
 import { api, type Overview as OV } from './api'
+import { hideWebMenu } from './contextmenu'
 import { t, tx, type Key } from './i18n'
 import { RecordDrawer } from './components/RecordDrawer'
 import { UpdateCard } from './components/UpdateCard'
@@ -147,6 +148,9 @@ export function App() {
   // when the Mac app has found a newer version (and a card above the row)
   const update = useUpdateStatus(page)
   const newer = !!update?.state.latest
+  // the update API is only in the Mac window: there, no Back / Reload menu
+  const inWindow = !!update
+  useEffect(() => { if (inWindow) return hideWebMenu() }, [inWindow])
   const gearLabel = newer ? t('设置 · 有新版本') : t('设置')
   const settingsLink = (
     <a href="#/settings" className={'icon-btn' + (page === 'settings' ? ' on' : '') + (newer ? ' has-dot' : '')} aria-label={gearLabel} title={gearLabel}>

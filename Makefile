@@ -7,8 +7,9 @@
 #   make dmg        dist/HealthTrail-<version>.dmg for other Macs: universal, Developer ID signed
 #   make notarize   make dmg, then have Apple notarize it so it opens without a warning,
 #                   and zip the app for the in-app update (dist/HealthTrail-<version>.zip)
-#   make dev        UI on Vite :5173 (hot reload) + API on :8722 with a throwaway data dir,
+#   make dev        UI on Vite :5173 (hot reload) + API on :8722 on the shared test data,
 #                   rebuilt and restarted when a .go file changes (scripts/dev.sh)
+#   make test-window  the app's window on the shared test data, port 8732
 #   make dev-real   the same on your real data, backed up first (never for tests)
 
 export PATH := /opt/homebrew/bin:$(PATH)
@@ -26,6 +27,12 @@ VERSION := $(patsubst v%,%,$(shell git describe --tags --always 2>/dev/null || e
 # CI finds the identity in the certificate it imports.
 -include local.mk
 DEV_ID  ?= -
+# The shared test data: made-up records, kept across restarts, used by make dev,
+# make test-window and every coding session that tries a change by hand. Never
+# the real data in ~/Library/Application Support/HealthVault (CLAUDE.md).
+# One process on it at a time: make dev and make test-window write the same
+# database. It also holds the AI assistant's key; keep it out of shared files.
+TEST_DATA ?= $(HOME)/Library/Application Support/HealthTrail-Test
 # saved once with: xcrun notarytool store-credentials health-trail --team-id <your team id>;
 # CI passes an App Store Connect API key instead (--key … --key-id … --issuer …)
 NOTARY_AUTH ?= --keychain-profile health-trail
@@ -34,7 +41,7 @@ DMG     := $(DIST)/HealthTrail-$(VERSION).dmg
 # what the app downloads to update itself (internal/update)
 ZIP     := $(DIST)/HealthTrail-$(VERSION).zip
 
-.PHONY: all ui bin app appstore-test dmg notarize test dev dev-real clean
+.PHONY: all ui bin app appstore-test dmg notarize test test-window dev dev-real clean
 
 all: bin
 
@@ -106,6 +113,11 @@ test: frontend/node_modules
 	cd frontend && npx tsc -b
 
 # the binary embeds frontend/dist, so it has to exist once before the first build
+# a test window on the shared test data; it is not the real app, so it sends
+# no system notifications and syncs to 「健康足迹（测试）」 calendars
+test-window: bin
+	./health-trail -data "$(TEST_DATA)" -port 8732
+
 dev: frontend/node_modules
 	@test -d frontend/dist || $(MAKE) ui
 	@./scripts/dev.sh

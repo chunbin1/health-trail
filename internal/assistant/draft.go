@@ -3,12 +3,12 @@ package assistant
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -18,7 +18,8 @@ const (
 	maxResponse = 100 << 10
 )
 
-// Item is one proposed record. Problem is set when it would not save as it is.
+// Item is one proposed record, or a change to one (kind "update"). Problem is
+// set when it would not save as it is.
 type Item struct {
 	Kind           string         `json:"kind"`
 	Type           string         `json:"type,omitempty"`
@@ -34,6 +35,10 @@ type Item struct {
 	Results        []LabResult    `json:"results,omitempty"`
 	Summary        string         `json:"summary,omitempty"`
 	Problem        string         `json:"problem,omitempty"`
+	// kind "update" changes record ID of Type: Fields are the new values,
+	// Before what they were when the card was made
+	ID     int64          `json:"id,omitempty"`
+	Before map[string]any `json:"before,omitempty"`
 }
 
 // LabResult is one line of a dictated lab report.
@@ -48,8 +53,7 @@ type LabResult struct {
 	Notes    string `json:"notes,omitempty"`
 }
 
-// Draft is what the model proposed, checked against the schema but not saved.
-// Usage is what the model service reported for this reply.
+// Usage is what the model service reported, summed over the rounds of one reply.
 type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
@@ -57,11 +61,20 @@ type Usage struct {
 	CachedTokens     int `json:"cached_tokens,omitempty"`
 }
 
+func (u *Usage) add(v Usage) {
+	u.PromptTokens += v.PromptTokens
+	u.CompletionTokens += v.CompletionTokens
+	u.TotalTokens += v.TotalTokens
+	u.CachedTokens += v.CachedTokens
+}
+
+// Draft is one reply: the answer, the records the model put together
+// (checked against the schema, not saved), and the tools it called.
 type Draft struct {
 	Items   []Item `json:"items"`
 	Unclear string `json:"unclear,omitempty"`
 	Reply   string `json:"reply,omitempty"`
-	Raw     string `json:"raw,omitempty"`
+	Steps   []Step `json:"steps"`
 	Usage   Usage  `json:"usage"`
 }
 
@@ -78,102 +91,291 @@ type Image struct {
 	Data string `json:"data"`
 }
 
-// Propose asks the saved interface to turn the latest turn into items.
-// turns is the conversation so far, ending with the user.
-func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now time.Time) (Draft, error) {
+// a reply may take this many requests: reading, then answering
+const maxRounds = 8
+
+// Propose answers the latest turn. The model reads the archive with the MCP
+// tools as many rounds as it needs; what it would write comes back as Items.
+// onStep, if set, hears each tool call as it happens.
+func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now time.Time, onStep func(Step)) (Draft, error) {
 	turns, err := cleanTurns(turns)
 	if err != nil {
 		return Draft{}, err
 	}
 	if !cfg.Configured() {
-		return Draft{}, errors.New("先填写接口地址、密钥和模型")
+		return Draft{}, msg.New("先填写接口地址、密钥和模型", "Enter the API address, key and model first")
 	}
-	system := Instructions(st, now)
-	content, usage, err := complete(ctx, cfg, system, turns)
-	logExchange(st.Dir, cfg, system, turns, content, usage, err)
+	tb, err := openTools(ctx, st)
 	if err != nil {
 		return Draft{}, err
 	}
-	d, err := parseDraft(content)
-	if err != nil {
-		if strings.TrimSpace(content) == "" {
+	defer tb.close()
+	system := Instructions(st, tb.instructions, now)
+	msgs := []any{map[string]any{"role": "system", "content": system}}
+	x := newExchange(system, tb.defs, turns)
+	for _, t := range turns {
+		msgs = append(msgs, map[string]any{"role": t.Role, "content": contentOf(t)})
+	}
+	d := Draft{Items: []Item{}, Steps: []Step{}}
+	w := newDrafting(st, turns, now)
+	// whether this reply has looked anything up yet
+	read := false
+	// whether the model was told it claimed something with no card
+	nudged := false
+	for round := 0; ; round++ {
+		last := round == maxRounds-1
+		choice := "auto"
+		if last {
+			choice = "none"
+		}
+		m, u, err := chat(ctx, cfg, msgs, tb.defs, choice)
+		d.Usage.add(u)
+		x.request(u, m.Content)
+		if err != nil {
+			logExchange(st.Dir, cfg, x, d, err)
 			return Draft{}, err
 		}
-		// A plain answer, not a record, is still an answer.
-		return Draft{Reply: strings.TrimSpace(content), Items: []Item{}, Raw: content, Usage: usage}, nil
-	}
-	d.Raw, d.Usage = content, usage
-	if len(d.Items) > maxItems {
-		return Draft{}, fmt.Errorf("一次最多整理 %d 条，请分开说", maxItems)
-	}
-	for i := range d.Items {
-		d.Items[i] = normalize(d.Items[i])
-	}
-	d.Items = dropConditions(st, turns, d.Items)
-	d.Items = dropDuplicateMeds(st, d.Items)
-	d.Items = fillConditionDates(d.Items, now)
-	d.Items = fillMedicationStatus(d.Items)
-	for i := range d.Items {
-		if p := problem(st, d.Items[i], now); p != "" {
-			d.Items[i].Problem = p
+		if len(m.Calls) == 0 || last {
+			d.Reply = strings.TrimSpace(m.Content)
+			if !last && !nudged && len(w.items) == 0 && claimsDone(d.Reply) {
+				nudged = true
+				x.note("回复说已经做好了，却没有卡片：提醒它再来一次")
+				msgs = append(msgs, m.Raw, map[string]any{"role": "user", "content": claimNudge})
+				continue
+			}
+			break
+		}
+		msgs = append(msgs, m.Raw)
+		// a round that only put cards together, all of them fine, is the
+		// end of the reply: asking the model again would resend everything
+		// for one sentence. Unless something was looked up and the answer
+		// isn't written yet.
+		onlyCards := true
+		for _, c := range m.Calls {
+			if !draftTools[c.Name] {
+				onlyCards = false
+			}
+			if tb.read[c.Name] {
+				read = true
+			}
+		}
+		failedAny := false
+		for _, c := range m.Calls {
+			out, failed := "", false
+			args, err := argsOf(c.Args)
+			// the write tools first: they never reach the store from here,
+			// whatever their annotations say
+			switch {
+			case err != nil:
+				out, failed = err.Error(), true
+			case c.Name == "update_record":
+				out, failed = w.update(args)
+			case draftTools[c.Name]:
+				out, failed = w.draft(c.Name, args)
+			case tb.read[c.Name]:
+				out, failed = tb.run(ctx, c.Name, args)
+			default:
+				out, failed = "这里没有 "+c.Name+" 这个工具", true
+			}
+			step := stepOf(c.Name, args)
+			step.Error = failed
+			failedAny = failedAny || failed
+			x.call(c.Name, c.Args, out, failed)
+			d.Steps = append(d.Steps, step)
+			if onStep != nil {
+				onStep(step)
+			}
+			msgs = append(msgs, map[string]any{"role": "tool", "tool_call_id": c.ID, "content": out})
+		}
+		if onlyCards && !failedAny && (!read || strings.TrimSpace(m.Content) != "") {
+			d.Reply = strings.TrimSpace(m.Content)
+			break
 		}
 	}
-	clearBatchMetricProblems(d.Items)
-	if len(d.Items) == 0 && d.Unclear == "" && d.Reply == "" {
-		d.Unclear = "没有从这段话里整理出可以保存的记录"
+	d.Items = w.items
+	d.Reply = plainReply(d.Reply)
+	if len(d.Items) == 0 && claimsDone(d.Reply) {
+		d.Reply += msg.Pick(cfg.Lang, claimNote, claimNoteEn)
 	}
+	if len(d.Items) == 0 && d.Reply == "" {
+		d.Unclear = msg.Pick(cfg.Lang, "没有从这段话里整理出可以保存的记录", "Nothing to save came out of this")
+	}
+	logExchange(st.Dir, cfg, x, d, nil)
 	return d, nil
 }
 
-// dropConditions keeps a diagnosis off a medicine question, and never writes
-// a health issue whose name is already on file.
-func dropConditions(st *store.Store, turns []Turn, items []Item) []Item {
+// drafting collects what the write tools were called with. Nothing is
+// written here; a call that would not save is told why, so the model can fix
+// it in the next round instead of leaving a broken card.
+type drafting struct {
+	st    *store.Store
+	now   time.Time
+	items []Item
+	// a question about medicine: a diagnosis stays in the reply
+	medicine bool
+	conds    map[string]int64
+	meds     map[string]int64
+}
+
+func newDrafting(st *store.Store, turns []Turn, now time.Time) *drafting {
 	ask := ""
 	for _, t := range turns {
-		if t.Role == "user" || t.Role == "" {
+		if t.Role == "user" {
 			ask = t.Text
 		}
 	}
-	skipNew := medicineAsk(ask) && !diagnosisAsk(ask) && !recordAsk(ask)
-	have := map[string]bool{}
-	if rows, _, err := st.List("conditions", store.ListQuery{Limit: 200}); err == nil {
-		for _, r := range rows {
-			have[sameName(text(r["name"]))] = true
-		}
+	return &drafting{
+		st: st, now: now,
+		medicine: medicineAsk(ask) && !diagnosisAsk(ask) && !recordAsk(ask),
+		conds:    namesOf(st, "conditions"),
+		meds:     namesOf(st, "medications"),
 	}
-	dropped := map[string]bool{}
-	out := make([]Item, 0, len(items))
-	for _, it := range items {
-		if it.Kind == "record" && it.Type == "conditions" {
-			name := sameName(text(it.Fields["name"]))
-			if skipNew {
-				if name != "" {
-					dropped[name] = true
-				}
-				continue
-			}
-			if name != "" && have[name] {
-				continue
-			}
-			if name != "" {
-				have[name] = true
-			}
-		}
-		out = append(out, it)
+}
+
+func namesOf(st *store.Store, entity string) map[string]int64 {
+	out := map[string]int64{}
+	rows, _, err := st.List(entity, store.ListQuery{Limit: 500})
+	if err != nil {
+		return out
 	}
-	// a medicine question drops the new diagnosis; don't leave other rows
-	// pointing at a name that was never written
-	for i, it := range out {
-		n := sameName(it.ConditionName)
-		if n != "" && dropped[n] && !have[n] {
-			it.ConditionName = ""
-			if it.Fields != nil {
-				delete(it.Fields, "condition_name")
-			}
-			out[i] = it
+	for _, r := range rows {
+		if n := sameName(text(r["name"])); n != "" {
+			out[n] = idOf(r)
 		}
 	}
 	return out
+}
+
+func (w *drafting) draft(tool string, args map[string]any) (string, bool) {
+	if len(w.items) >= maxItems {
+		return fmt.Sprintf("一次最多整理 %d 条，剩下的请在回复里告诉用户分开说", maxItems), true
+	}
+	m := cloneMap(args)
+	switch tool {
+	case "add_record":
+		m["kind"] = "record"
+	case "add_lab_report":
+		if id := idOf(store.Record{"id": args["report_id"]}); id != 0 {
+			return "在 App 里只能新建报告：去掉 report_id，用 report 填报告的日期和标题", true
+		}
+		m["kind"] = "lab_report"
+	case "checkin":
+		m["kind"] = "checkin"
+	}
+	it := itemFromMap(m)
+	if p := w.check(&it); p != "" {
+		return p, true
+	}
+	w.items = append(w.items, it)
+	return fmt.Sprintf("已整理成第 %d 条，交给用户确认后写入，现在还没有 id。"+
+		"这次回复里别的记录要关联它，在 fields 里填 condition_name 或 medication_name（名称）。", len(w.items)), false
+}
+
+// update turns update_record into a card that shows the change. It is
+// checked the way Update would check it, and only saved by the person.
+func (w *drafting) update(args map[string]any) (string, bool) {
+	if len(w.items) >= maxItems {
+		return fmt.Sprintf("一次最多整理 %d 条，剩下的请在回复里告诉用户分开说", maxItems), true
+	}
+	typ := strings.TrimSpace(text(args["type"]))
+	if a, ok := aliasOf(typ); ok && a != "checkin" && a != "lab_report" {
+		typ = a
+	}
+	if !recordTypeOK(typ) && typ != "lab_results" {
+		return "这里只能修改这些类型：" + strings.Join(recordTypes, "、") + "、lab_results", true
+	}
+	id := idOf(store.Record{"id": args["id"]})
+	fields, _ := args["fields"].(map[string]any)
+	if len(fields) == 0 {
+		return "fields 里写要改的字段和新的值", true
+	}
+	cur, err := w.st.Get(typ, id)
+	if err != nil {
+		return fmt.Sprintf("没有 %s #%d 这条记录", typ, id), true
+	}
+	if err := w.st.CheckUpdate(typ, id, store.Record(fields)); err != nil {
+		return err.Error(), true
+	}
+	before := map[string]any{}
+	for k := range fields {
+		before[k] = cur[k]
+	}
+	w.items = append(w.items, Item{Kind: "update", Type: typ, ID: id, Fields: fields, Before: before, Summary: titleOf(typ, cur)})
+	return fmt.Sprintf("已整理成第 %d 条修改，等用户点保存后才会改，现在还没改。", len(w.items)), false
+}
+
+// check fills what the model may leave out and says what would stop the
+// item from saving. It also keeps a diagnosis off a medicine question and
+// never drafts a second health issue or medicine with a name on file.
+func (w *drafting) check(it *Item) string {
+	var have map[string]int64
+	name := ""
+	if it.Kind == "record" && (it.Type == "conditions" || it.Type == "medications") {
+		name = sameName(text(it.Fields["name"]))
+		label, ref := "健康问题", "condition_id"
+		have = w.conds
+		if it.Type == "medications" {
+			have, label, ref = w.meds, "药", "medication_id"
+		}
+		if it.Type == "conditions" && w.medicine {
+			return "用户这一轮在问药或怎么治：诊断只写在回复里，不要新建健康问题"
+		}
+		if id, ok := have[name]; ok && name != "" {
+			if id == 0 {
+				return fmt.Sprintf("这次已经整理过「%s」了，不要再写一条", text(it.Fields["name"]))
+			}
+			return fmt.Sprintf("档案里已经有这个%s（%s #%d），不要再写一条；要关联它就填 %s %d", label, it.Type, id, ref, id)
+		}
+	}
+	*it = fillConditionDates([]Item{*it}, w.now)[0]
+	*it = fillMedicationStatus([]Item{*it})[0]
+	if p := problem(w.st, *it, w.now); p != "" && !w.newMetric(*it, p) {
+		return p
+	}
+	if n := sameName(it.ConditionName); n != "" {
+		if _, ok := w.conds[n]; !ok {
+			return fmt.Sprintf("没有叫「%s」的健康问题，档案里没有，这次也没整理", it.ConditionName)
+		}
+	}
+	if n := sameName(it.MedicationName); n != "" {
+		if _, ok := w.meds[n]; !ok {
+			return fmt.Sprintf("没有叫「%s」的药，档案里没有，这次也没整理", it.MedicationName)
+		}
+	}
+	if name != "" {
+		// 0: put together in this reply, not on file yet
+		have[name] = 0
+	}
+	if it.Kind == "record" && it.Type == "doses" {
+		// the card's title: a dose's own title is only the time
+		it.Summary = w.medName(*it)
+	}
+	return ""
+}
+
+func (w *drafting) medName(it Item) string {
+	if it.MedicationName != "" {
+		return it.MedicationName
+	}
+	r, err := w.st.Get("medications", idOf(store.Record{"id": it.Fields["medication_id"]}))
+	if err != nil {
+		return ""
+	}
+	return text(r["name"])
+}
+
+// newMetric accepts a reading of a metric kind drafted earlier in this reply.
+// Checked on its own, that reading's metric_type looks unknown.
+func (w *drafting) newMetric(it Item, problem string) bool {
+	if it.Kind != "record" || it.Type != "metrics" || !strings.Contains(problem, "不在可选值中") {
+		return false
+	}
+	for _, d := range w.items {
+		if d.Kind == "record" && d.Type == "metric_kinds" && text(d.Fields["name"]) == text(it.Fields["metric_type"]) {
+			return true
+		}
+	}
+	return false
 }
 
 // fillConditionDates gives a health issue a start date. The model is asked
@@ -196,31 +398,6 @@ func fillConditionDates(items []Item, now time.Time) []Item {
 	return items
 }
 
-// dropDuplicateMeds drops a medicine whose name is already on file, and a
-// second copy of the same name in this reply.
-func dropDuplicateMeds(st *store.Store, items []Item) []Item {
-	have := map[string]bool{}
-	if rows, _, err := st.List("medications", store.ListQuery{Limit: 200}); err == nil {
-		for _, r := range rows {
-			have[sameName(text(r["name"]))] = true
-		}
-	}
-	out := make([]Item, 0, len(items))
-	for _, it := range items {
-		if it.Kind == "record" && it.Type == "medications" {
-			name := sameName(text(it.Fields["name"]))
-			if name != "" && have[name] {
-				continue
-			}
-			if name != "" {
-				have[name] = true
-			}
-		}
-		out = append(out, it)
-	}
-	return out
-}
-
 // fillMedicationStatus marks a suggested medicine as not yet started when the
 // model leaves the status out. A medicine the person says they take should
 // already say 在用.
@@ -241,7 +418,13 @@ func fillMedicationStatus(items []Item) []Item {
 }
 
 func medicineAsk(s string) bool {
-	for _, w := range []string{"药", "怎么治", "怎么吃"} {
+	return hasAny(s, "药", "怎么治", "怎么吃", "medicine", "medication", "drug", "pill", "treat", "prescri")
+}
+
+// hasAny tells whether s has one of the words; English in any case.
+func hasAny(s string, words ...string) bool {
+	s = strings.ToLower(s)
+	for _, w := range words {
 		if strings.Contains(s, w) {
 			return true
 		}
@@ -250,44 +433,15 @@ func medicineAsk(s string) bool {
 }
 
 func diagnosisAsk(s string) bool {
-	for _, w := range []string{"什么问题", "什么病", "是不是", "诊断", "可能是"} {
-		if strings.Contains(s, w) {
-			return true
-		}
-	}
-	return false
+	return hasAny(s, "什么问题", "什么病", "是不是", "诊断", "可能是", "what's wrong", "what is wrong", "diagnos", "could it be", "do i have")
 }
 
 func recordAsk(s string) bool {
-	for _, w := range []string{"记下", "记一下", "记录", "帮我记", "保存"} {
-		if strings.Contains(s, w) {
-			return true
-		}
-	}
-	return false
+	return hasAny(s, "记下", "记一下", "记录", "帮我记", "保存", "record", "log ", "note down", "write down", "save")
 }
 
 func sameName(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(s), ""))
-}
-
-// clearBatchMetricProblems accepts a reading of a metric kind created in
-// the same draft. Checked one row at a time, that reading looks unknown.
-func clearBatchMetricProblems(items []Item) {
-	names := map[string]bool{}
-	for _, it := range items {
-		if it.Kind == "record" && it.Type == "metric_kinds" {
-			names[text(it.Fields["name"])] = true
-		}
-	}
-	if len(names) == 0 {
-		return
-	}
-	for i, it := range items {
-		if it.Kind == "record" && it.Type == "metrics" && names[text(it.Fields["metric_type"])] && strings.Contains(it.Problem, "不在可选值中") {
-			items[i].Problem = ""
-		}
-	}
 }
 
 func problem(st *store.Store, it Item, now time.Time) string {
@@ -347,7 +501,7 @@ const (
 
 func cleanTurns(in []Turn) ([]Turn, error) {
 	if len(in) == 0 {
-		return nil, errors.New("先说或写一点内容")
+		return nil, msg.New("先说或写一点内容", "Say or type something first")
 	}
 	if len(in) > maxTurns {
 		in = in[len(in)-maxTurns:]
@@ -357,7 +511,7 @@ func cleanTurns(in []Turn) ([]Turn, error) {
 	for _, t := range in {
 		role := strings.TrimSpace(t.Role)
 		if role != "user" && role != "assistant" {
-			return nil, errors.New("对话里有无法识别的一方")
+			return nil, msg.New("对话里有无法识别的一方", "The chat has a speaker it doesn't know")
 		}
 		text := strings.TrimSpace(t.Text)
 		if role == "assistant" {
@@ -373,25 +527,25 @@ func cleanTurns(in []Turn) ([]Turn, error) {
 		}
 		images += len(pics)
 		if images > maxImages*2 {
-			return nil, fmt.Errorf("一次对话最多附 %d 张图片", maxImages*2)
+			return nil, msg.Errorf("一次对话最多附 %d 张图片", "A chat can have at most %d pictures", maxImages*2)
 		}
 		if text == "" && len(pics) == 0 {
 			continue
 		}
 		if utf8.RuneCountInString(text) > maxRunes {
-			return nil, fmt.Errorf("一次最多整理 %d 个字", maxRunes)
+			return nil, msg.Errorf("一次最多整理 %d 个字", "At most %d characters at a time", maxRunes)
 		}
 		out = append(out, Turn{Role: "user", Text: text, Images: pics})
 	}
 	if len(out) == 0 || out[len(out)-1].Role != "user" {
-		return nil, errors.New("先说或写一点内容")
+		return nil, msg.New("先说或写一点内容", "Say or type something first")
 	}
 	return out, nil
 }
 
 func cleanImages(in []Image) ([]Image, error) {
 	if len(in) > maxImages {
-		return nil, fmt.Errorf("一次最多 %d 张图片", maxImages)
+		return nil, msg.Errorf("一次最多 %d 张图片", "At most %d pictures at a time", maxImages)
 	}
 	out := make([]Image, 0, len(in))
 	for _, im := range in {
@@ -409,14 +563,14 @@ func cleanImages(in []Image) ([]Image, error) {
 		switch mime {
 		case "image/jpeg", "image/png", "image/gif", "image/webp":
 		default:
-			return nil, errors.New("只能发送图片（JPG、PNG、GIF、WebP）")
+			return nil, msg.New("只能发送图片（JPG、PNG、GIF、WebP）", "Only pictures can be sent (JPG, PNG, GIF, WebP)")
 		}
 		raw, err := base64.StdEncoding.DecodeString(data)
 		if err != nil || len(raw) == 0 {
-			return nil, errors.New("这张图片读不出来")
+			return nil, msg.New("这张图片读不出来", "Couldn't read this picture")
 		}
 		if len(raw) > maxImageBytes {
-			return nil, errors.New("这张图片太大")
+			return nil, msg.New("这张图片太大", "This picture is too big")
 		}
 		out = append(out, Image{MIME: mime, Data: base64.StdEncoding.EncodeToString(raw)})
 	}

@@ -37,7 +37,7 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 		return nil, nil
 	}
 	if len(items) > 30 {
-		return nil, invalid("一次最多保存 30 条")
+		return nil, invalid("一次最多保存 30 条", "At most 30 can be saved at once")
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -81,7 +81,7 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 		}
 		e, err := entity(it.Entity)
 		if err != nil {
-			return nil, prefixErr(pos(n), err)
+			return nil, prefixErr(n, err)
 		}
 		fields := cloneRecord(it.Fields)
 		if it.ConditionName != "" && fields["condition_id"] == nil {
@@ -90,7 +90,7 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 				return nil, err
 			}
 			if !ok {
-				return nil, invalid("第 %d 条：没有叫「%s」的健康问题", n, it.ConditionName)
+				return nil, invalid("第 %d 条：没有叫「%s」的健康问题", "Item %d: there's no health issue called %q", n, it.ConditionName)
 			}
 			fields["condition_id"] = id
 		}
@@ -100,13 +100,13 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 				return nil, err
 			}
 			if !ok {
-				return nil, invalid("第 %d 条：没有叫「%s」的药物", n, it.MedicationName)
+				return nil, invalid("第 %d 条：没有叫「%s」的药物", "Item %d: there's no medication called %q", n, it.MedicationName)
 			}
 			fields["medication_id"] = id
 		}
 		r, err := s.buildWithNames(e, fields, known, kindNames)
 		if err != nil {
-			return nil, prefixErr(pos(n), err)
+			return nil, prefixErr(n, err)
 		}
 		if t, ok := r["metric_type"].(string); ok && r["unit"] == nil && (e.Name == "metrics" || e.Name == "habits") {
 			if u, ok := kindUnits[t]; ok {
@@ -114,11 +114,11 @@ func (s *Store) CreateInOrder(items []CaptureRow) ([]Record, error) {
 			}
 		}
 		if err := editable(e, r); err != nil {
-			return nil, prefixErr(pos(n), err)
+			return nil, prefixErr(n, err)
 		}
 		id, err := insert(tx, e, r)
 		if err != nil {
-			return nil, prefixErr(pos(n), err)
+			return nil, prefixErr(n, err)
 		}
 		if known[e.Name] == nil {
 			known[e.Name] = map[int64]struct{}{}

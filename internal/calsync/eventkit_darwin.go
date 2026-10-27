@@ -238,6 +238,8 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+
+	"github.com/lee/health-trail/internal/msg"
 )
 
 // EventKit is the Mac's Calendar and Reminders, through EventKit. What is
@@ -256,7 +258,7 @@ func result(out, cerr *C.char) (string, error) {
 		return "", errors.New(C.GoString(cerr))
 	}
 	if out == nil {
-		return "", errors.New("EventKit 没有返回结果")
+		return "", msg.New("EventKit 没有返回结果", "EventKit returned nothing")
 	}
 	defer C.free(unsafe.Pointer(out))
 	return C.GoString(out), nil

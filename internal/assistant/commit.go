@@ -1,11 +1,11 @@
 package assistant
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/lee/health-trail/internal/mcpserver"
+	"github.com/lee/health-trail/internal/msg"
 	"github.com/lee/health-trail/internal/store"
 )
 
@@ -27,16 +27,17 @@ type Result struct {
 	FailedIndex *int    `json:"failed_index,omitempty"`
 }
 
-// Commit writes items. Ordinary records share one transaction. Check-ins and
-// lab reports run after it; if one of those fails, earlier rows stay saved.
-func Commit(st *store.Store, items []Item) Result {
+// Commit writes items. Ordinary records share one transaction. Changes,
+// check-ins and lab reports run after it; if one of those fails, earlier
+// rows stay saved. Errors are in lang, the UI's language.
+func Commit(st *store.Store, items []Item, lang string) Result {
 	out := Result{Saved: []Saved{}}
 	if len(items) == 0 {
-		out.Error = "没有要保存的记录"
+		out.Error = msg.Pick(lang, "没有要保存的记录", "Nothing to save")
 		return out
 	}
 	if len(items) > maxItems {
-		out.Error = fmt.Sprintf("一次最多保存 %d 条", maxItems)
+		out.Error = msg.Sprintf(lang, msg.Pick(lang, "一次最多保存 %d 条", "At most %d can be saved at once"), maxItems)
 		return out
 	}
 	for i := range items {
@@ -44,9 +45,9 @@ func Commit(st *store.Store, items []Item) Result {
 	}
 	for i, it := range items {
 		switch it.Kind {
-		case "record", "checkin", "lab_report":
+		case "record", "checkin", "lab_report", "update":
 		default:
-			return fail(out, i, fmt.Sprintf("第 %d 条：不能记这种类型", i+1))
+			return fail(out, i, msg.Sprintf(lang, msg.Pick(lang, "第 %d 条：不能记这种类型", "Item %d: this kind of record can't be saved"), i+1))
 		}
 	}
 	var rows []store.CaptureRow
@@ -55,7 +56,7 @@ func Commit(st *store.Store, items []Item) Result {
 			continue
 		}
 		if !recordTypeOK(it.Type) {
-			out.Error = fmt.Sprintf("第 %d 条：不能记这种类型", i+1)
+			out.Error = msg.Sprintf(lang, msg.Pick(lang, "第 %d 条：不能记这种类型", "Item %d: this kind of record can't be saved"), i+1)
 			n := i
 			out.FailedIndex = &n
 			return out
@@ -69,7 +70,7 @@ func Commit(st *store.Store, items []Item) Result {
 	if len(rows) > 0 {
 		saved, err := st.CreateInOrder(rows)
 		if err != nil {
-			out.Error = err.Error()
+			out.Error = msg.In(err, lang)
 			return out
 		}
 		j := 0
@@ -85,12 +86,25 @@ func Commit(st *store.Store, items []Item) Result {
 		}
 	}
 	for i, it := range items {
+		if it.Kind != "update" {
+			continue
+		}
+		row, err := st.Update(it.Type, it.ID, store.Record(it.Fields))
+		if err != nil {
+			return fail(out, i, msg.Sprintf(lang, msg.Pick(lang, "第 %d 条：%v", "Item %d: %v"), i+1, err))
+		}
+		out.Saved = append(out.Saved, Saved{
+			Index: i, Kind: "update", Type: it.Type,
+			ID: idOf(row), Title: titleOf(it.Type, row),
+		})
+	}
+	for i, it := range items {
 		if it.Kind != "checkin" {
 			continue
 		}
 		h, err := st.FindHabit(it.Habit)
 		if err != nil {
-			return fail(out, i, fmt.Sprintf("没有叫「%s」的打卡项", strings.TrimSpace(it.Habit)))
+			return fail(out, i, msg.Sprintf(lang, msg.Pick(lang, "没有叫「%s」的打卡项", "There's no check-in item called %q"), strings.TrimSpace(it.Habit)))
 		}
 		date := it.Date
 		if date == "" {
@@ -98,11 +112,11 @@ func Commit(st *store.Store, items []Item) Result {
 		}
 		val, err := floatPtr(it.Value)
 		if err != nil {
-			return fail(out, i, "数量需要数字")
+			return fail(out, i, msg.Pick(lang, "数量需要数字", "The amount must be a number"))
 		}
 		row, err := st.Checkin(idOf(h), date, val, it.Notes)
 		if err != nil {
-			return fail(out, i, err.Error())
+			return fail(out, i, msg.In(err, lang))
 		}
 		out.Saved = append(out.Saved, Saved{
 			Index: i, Kind: "checkin", Type: "checkins",
@@ -120,7 +134,7 @@ func Commit(st *store.Store, items []Item) Result {
 		}
 		res, err := mcpserver.ImportLabs(st, "", it.Report, it.Panel, labs)
 		if err != nil {
-			return fail(out, i, err.Error())
+			return fail(out, i, msg.In(err, lang))
 		}
 		rep, _ := res["report"].(store.Record)
 		out.Saved = append(out.Saved, Saved{
@@ -132,9 +146,9 @@ func Commit(st *store.Store, items []Item) Result {
 	return out
 }
 
-func fail(out Result, index int, msg string) Result {
+func fail(out Result, index int, text string) Result {
 	out.OK = false
-	out.Error = msg
+	out.Error = text
 	out.FailedIndex = &index
 	return out
 }
@@ -177,7 +191,7 @@ func floatPtr(v any) (*float64, error) {
 		}
 		return &n, nil
 	default:
-		return nil, fmt.Errorf("数量需要数字")
+		return nil, msg.New("数量需要数字", "The amount must be a number")
 	}
 }
 

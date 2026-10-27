@@ -8,6 +8,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/lee/health-trail/internal/folders"
+	"github.com/lee/health-trail/internal/msg"
 )
 
 // folderRoutes are the window's: the open dialog pops up on the Mac, so a
@@ -32,7 +33,7 @@ func (a *app) folderRoutes(mux *http.ServeMux, wapp func() *application.App) {
 			Path string `json:"path"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Path == "" {
-			writeError(w, "要说明移除哪个文件夹（path）")
+			writeError(w, a.msg("要说明移除哪个文件夹（path）", "Say which folder to remove (path)"))
 			return
 		}
 		if err := a.grants.Remove(in.Path); err != nil {
@@ -46,3 +47,6 @@ func (a *app) folderRoutes(mux *http.ServeMux, wapp func() *application.App) {
 
 // msg is a message for the window, in its language.
 func (a *app) msg(zh, en string) string { return a.settings.msg(zh, en) }
+
+// errText is err in the UI's language (see package msg).
+func (a *app) errText(err error) string { return msg.In(err, a.settings.lang()) }
