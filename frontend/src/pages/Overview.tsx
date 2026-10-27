@@ -304,7 +304,7 @@ function Meds({ days, current }: { days: MedDay[]; current: Rec[] }) {
       </div>
       {days.length + others.length === 0 && <Empty compact>{t('没有在用的药物')}</Empty>}
       {days.length > 0 && <div className="small muted">{t('吃了哪一顿，就点哪个时间')}</div>}
-      <div className="list">
+      {days.length > 0 && <div className="list">
         {days.map(({ medication: m, slots }) => (
           <div key={m.id} className="row-item no-ico" onClick={() => openRecord('medications', m.id)}>
             <div className="body">
@@ -325,9 +325,9 @@ function Meds({ days, current }: { days: MedDay[]; current: Rec[] }) {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
       {others.length > 0 && days.length > 0 && <div className="small muted" style={{ marginTop: 12 }}>{t('其他在用的药')}</div>}
-      <div className="list">
+      {others.length > 0 && <div className="list">
         {others.slice(0, OTHERS).map((r) => (
           <div key={r.id} className="row-item no-ico" onClick={() => openRecord('medications', r.id)}>
             <div className="body">
@@ -338,7 +338,7 @@ function Meds({ days, current }: { days: MedDay[]; current: Rec[] }) {
             <TakeDose med={r} />
           </div>
         ))}
-      </div>
+      </div>}
       {others.length > OTHERS && <a href="#/medications" className="muted small" style={{ display: 'inline-block', marginTop: 8 }}>{t('还有 {n} 种', { n: others.length - OTHERS })}</a>}
     </section>
   )
