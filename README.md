@@ -222,7 +222,7 @@ make test     # go vet、go test、前端类型检查
 make dmg      # 同时支持 Apple 芯片和 Intel 的 dmg（发布时用 Developer ID 签名）
 ```
 
-开发时用 `make dev`：界面在 http://localhost:5173 ，改前端保存后马上生效；后端在 `127.0.0.1:8722`，改了 `.go` 文件会自动重新编译和重启。数据放在临时目录，不会碰真实数据。
+开发时用 `make dev`：界面在 http://localhost:5173 ，改前端保存后马上生效；后端在 `127.0.0.1:8722`，改了 `.go` 文件会自动重新编译和重启。数据用 `~/Library/Application Support/HealthTrail-Test` 里的测试数据（`make test-window` 打开的测试窗口也用它），不会碰真实数据。
 
 想用自己的真实数据边用边调试，用 `make dev-real`：每次启动前会先把数据库和附件备份到 `~/Library/Application Support/HealthVault-dev-backups/<时间>`，保留最近 10 份。
 

@@ -222,7 +222,7 @@ make test     # go vet, go test, frontend type check
 make dmg      # dmg for both Apple silicon and Intel (signed with a Developer ID for releases)
 ```
 
-For development, use `make dev`: the UI runs at http://localhost:5173 and frontend changes take effect as soon as you save; the backend runs at `127.0.0.1:8722` and recompiles and restarts automatically when a `.go` file changes. Data lives in a temporary folder, so your real data is never touched.
+For development, use `make dev`: the UI runs at http://localhost:5173 and frontend changes take effect as soon as you save; the backend runs at `127.0.0.1:8722` and recompiles and restarts automatically when a `.go` file changes. Data comes from the test data in `~/Library/Application Support/HealthTrail-Test` (the test window from `make test-window` uses it too), so your real data is never touched.
 
 To debug while using your own real data, use `make dev-real`: before each start it backs up the database and attachments to `~/Library/Application Support/HealthVault-dev-backups/<time>`, keeping the most recent 10.
 
