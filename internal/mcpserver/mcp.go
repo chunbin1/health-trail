@@ -437,6 +437,12 @@ func (t *tools) checkinStats(ctx context.Context, _ *mcp.CallToolRequest, in sta
 // (reportID), or a new one made from `report`. A report it creates is
 // removed again if the results can't be saved, so a failed import leaves
 // nothing behind.
+// ImportLabs saves lab results under a report. A report it creates is removed
+// again if the results can't be saved.
+func ImportLabs(st *store.Store, reportID string, report store.Record, panel string, rows []store.Record) (store.Record, error) {
+	return importLabs(st, reportID, report, panel, rows)
+}
+
 func importLabs(st *store.Store, reportID string, report store.Record, panel string, rows []store.Record) (store.Record, error) {
 	if len(rows) == 0 {
 		return nil, &store.ValidationError{Msg: "没有要保存的指标"}

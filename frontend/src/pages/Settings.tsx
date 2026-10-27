@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Database, FolderOpen, Languages, Power, RefreshCw, Smartphone } from 'lucide-react'
-import { api, fmtDate, type CalSync, type UpdateStatus } from '../api'
+import { Database, FolderOpen, Languages, Mic, Power, RefreshCw, Smartphone } from 'lucide-react'
+import { api, fmtDate, type AssistantConfig, type CalSync, type UpdateStatus } from '../api'
 import { t, type Lang } from '../i18n'
 import { useApp, useLoad } from '../state'
 import { Switch } from '../ui'
 import { NotifyWarning } from '../components/NotifyWarning'
 import { ask, tell } from '../components/Dialog'
+import { AssistantSetup } from '../components/AssistantSetup'
 import { BackupSettings } from './Backups'
 import { Section } from './Connect'
 
@@ -244,6 +245,21 @@ function AllowedFolders() {
   )
 }
 
+// The OpenAI-compatible service used by 记一笔. The key stays on this computer.
+function CaptureService() {
+  const { data, error, reload } = useLoad(() => api.assistant(), [])
+  const [cfg, setCfg] = useState<AssistantConfig | null>(null)
+  if (error) return <div className="error">{error}</div>
+  const view = cfg || data
+  if (!view) return null
+  return (
+    <Section icon={<Mic size={20} />} title={t('记一笔|nav')}
+      sub={t('把你说的话或打的字整理成档案里的记录。密钥只存在这台电脑上，不放进备份。声音用 Mac 本机识别，不经过这个接口。')}>
+      <AssistantSetup cfg={view} onSaved={(c) => { setCfg(c); reload() }} />
+    </Section>
+  )
+}
+
 // Settings: the language, backups, and where the data lives. (Phone access
 // is hidden until it's reworked.)
 export function Settings() {
@@ -266,6 +282,8 @@ export function Settings() {
               {LANGS.map((l) => <option key={l.id} value={l.id} lang={l.id === 'en' ? 'en' : 'zh-CN'}>{l.name}</option>)}
             </select>
           } />
+
+        <CaptureService />
 
         <AtLogin />
 

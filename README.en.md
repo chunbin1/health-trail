@@ -172,6 +172,14 @@ Add a stdio MCP server: set the command to the program path above and the argume
 
 The AI only speaks from your data, and suggests seeing a doctor when something looks abnormal. **Its analysis is no substitute for a doctor's diagnosis.**
 
+### Record inside the app
+
+When you don't want to open another AI, use Capture in the sidebar (Today has an entry too). Say a sentence or type one. The app turns it into records — symptoms, medications, check-ins, lab reports and so on — and saves them only after you've looked them over and edited what you want.
+
+Speech uses the Mac's own dictation, so the audio is not uploaded. When you organize a note, that text and the names of existing health issues, medications and check-ins are sent to the service you configured. The service must speak OpenAI-style Chat Completions. You set the address, key and model name in Capture or in Settings. The key stays on this computer and is not included in backups. Opening `serve` in a browser can only type; dictation is only in the Mac window.
+
+**What it writes down is no substitute for a doctor's diagnosis.**
+
 ## How it works
 
 ```mermaid
@@ -188,7 +196,7 @@ A single Go program provides the window (Wails v3, the system WebView + React), 
 
 ## Privacy and security
 
-- **Your data stays on your computer**: by default in `~/Library/Application Support/HealthVault`; you can move it with the `-data` flag or the `HEALTH_TRAIL_DATA` environment variable. The app itself uploads nothing and collects no usage statistics. Its only network access is checking GitHub for a new version every few hours and when the window comes to the front, if the last check was over half an hour ago (it only asks for the version number, and you can turn this off in Settings → Software update).
+- **Your data stays on your computer**: by default in `~/Library/Application Support/HealthVault`; you can move it with the `-data` flag or the `HEALTH_TRAIL_DATA` environment variable. The app collects no usage statistics. It connects to the network in two cases: checking GitHub for a new version every few hours and when the window comes to the front, if the last check was over half an hour ago (it only asks for the version number, and you can turn this off in Settings → Software update); and the service you fill in for Capture. Organizing a note sends that text and the names of a few existing records to that service. Speech is recognized on the Mac and is not uploaded. The key is stored in `assistant.json` in the data folder and is not included in backups.
 - **The AI sees the records it reads**: when an AI reads records, their content is sent to its provider for processing (Claude to Anthropic, Codex to OpenAI). Which AI you use and what you let it read is up to you.
 - **The local server is open to this Mac only**: by default it listens only on `127.0.0.1`; other websites in your browser can't read or write your data, and the server rejects DNS rebinding and cross-site requests.
 - **Attachments never run as web pages**: only images, PDFs and plain text open directly in the page; every other type is returned as a download.

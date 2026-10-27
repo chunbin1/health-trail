@@ -17,7 +17,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -83,19 +85,22 @@ func RunMCP(dataDir string) {
 }
 
 type app struct {
-	st       *store.Store
-	srv      *server.Server
-	listener *listener
-	settings *settings
-	backups  *backups
-	updates  *updates
-	grants   *folders.Grants    // folders the person let the sandboxed app read
-	shell    *shell             // the window and menu bar icon, in the app only
-	remind   *reminders.Service // in the app only
-	cal      *calsync.Sync      // in the app only
-	token    string
-	port     string
-	openDir  string // copies of attachments opened from the window, in the app only
+	st          *store.Store
+	srv         *server.Server
+	listener    *listener
+	settings    *settings
+	backups     *backups
+	updates     *updates
+	grants      *folders.Grants    // folders the person let the sandboxed app read
+	shell       *shell             // the window and menu bar icon, in the app only
+	remind      *reminders.Service // in the app only
+	cal         *calsync.Sync      // in the app only
+	token       string
+	port        string
+	openDir     string // copies of attachments opened from the window, in the app only
+	ear         Ear
+	speechMu    sync.Mutex
+	speechTimer *time.Timer
 }
 
 func newApp(dataDir, port string) *app {
@@ -104,7 +109,7 @@ func newApp(dataDir, port string) *app {
 	if err != nil {
 		log.Fatalf("读取访问令牌失败：%v", err)
 	}
-	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir), grants: folders.New(dataDir)}
+	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir), grants: folders.New(dataDir), ear: platformEar()}
 	a.updates = newUpdates(a.settings)
 	a.grants.Open()
 	// phone access is hidden until it's reworked: a choice saved earlier no
@@ -209,6 +214,7 @@ func (a *app) handler() http.Handler {
 func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 	h := a.handler()
 	mux := http.NewServeMux()
+	a.assistantRoutes(mux, true)
 	mux.HandleFunc("POST /api/backup/choose-dir", func(w http.ResponseWriter, r *http.Request) {
 		title := "选择备份文件夹"
 		if a.settings.lang() == "en" {
@@ -389,6 +395,11 @@ func tomlString(s string) string {
 func RunServe(dataDir, port string, lanFlag bool) {
 	a := newApp(dataDir, port)
 	defer a.st.Close()
+	// serve is how the browser and `make dev` reach the app. Dictation stays
+	// in the window; the text API is here for this computer only (see
+	// assistantRoutes). The Mac app's own socket keeps using handler(), which
+	// does not have these routes, so a phone with the token cannot call them.
+	a.listener.handler = &server.Guard{Token: a.token, Next: a.serveHandler()}
 	if lanFlag {
 		a.settings.LAN = true
 	}

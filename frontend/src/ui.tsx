@@ -1,13 +1,14 @@
 import type { CSSProperties, ReactNode } from 'react'
 import {
   Activity, CalendarCheck2, CalendarClock, FileText, HeartPulse, Hospital, LayoutGrid, LineChart as LineIcon,
-  Pill, PillBottle, Plug, Search, Stethoscope, TestTube2, type LucideIcon,
+  Mic, Pill, PillBottle, Plug, Search, Stethoscope, TestTube2, type LucideIcon,
 } from 'lucide-react'
 
 // Each kind of record has one icon and one identity color (--c-<kind>),
 // used wherever that kind appears: nav, lists, drawers, the timeline.
 export const KIND: Record<string, { icon: LucideIcon; color: string }> = {
   overview: { icon: LayoutGrid, color: 'var(--accent)' },
+  capture: { icon: Mic, color: 'var(--accent)' },
   checkins: { icon: CalendarCheck2, color: 'var(--c-checkins)' },
   habits: { icon: CalendarCheck2, color: 'var(--c-habits)' },
   conditions: { icon: HeartPulse, color: 'var(--c-conditions)' },

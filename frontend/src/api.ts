@@ -190,6 +190,62 @@ export interface UpdateStatus {
 
 export class ApiError extends Error {}
 
+// In-app capture: a sentence in, proposed records out, saved only after confirm.
+export interface AssistantConfig {
+  configured: boolean
+  base_url: string
+  model: string
+  has_key: boolean
+  speech: boolean
+}
+
+export interface LabDraft {
+  item_name?: string
+  value?: string | number
+  unit?: string
+  ref_range?: string
+  flag?: string
+  panel?: string
+  test_date?: string
+  notes?: string
+}
+
+export interface DraftItem {
+  kind: 'record' | 'checkin' | 'lab_report' | string
+  type?: string
+  fields?: Record<string, any>
+  condition_name?: string
+  medication_name?: string
+  habit?: string
+  date?: string
+  value?: number | string | null
+  notes?: string
+  report?: Record<string, any>
+  panel?: string
+  results?: LabDraft[]
+  summary?: string
+  problem?: string
+}
+
+export interface Draft {
+  items: DraftItem[]
+  unclear?: string
+}
+
+export interface CommitResult {
+  ok: boolean
+  error?: string
+  saved: { index: number; kind: string; type?: string; id?: number; title?: string }[]
+  failed_index?: number
+}
+
+export interface SpeechState {
+  available: boolean
+  listening: boolean
+  text: string
+  error?: string
+}
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, headers: {} }
   if (body instanceof FormData) {
@@ -269,6 +325,14 @@ export const api = {
   removeAttachment: (id: number) => req<unknown>('DELETE', `/api/attachments/${id}`),
   // the Mac window only: opens the file in its Mac app (or the Finder)
   openAttachment: (id: number) => req<{ revealed: boolean }>('POST', `/api/attachments/${id}/open`),
+  assistant: () => req<AssistantConfig>('GET', '/api/assistant'),
+  setAssistant: (body: { base_url?: string; api_key?: string; model?: string; clear_key?: boolean }) =>
+    req<AssistantConfig>('PUT', '/api/assistant', body),
+  assistantDraft: (text: string) => req<Draft>('POST', '/api/assistant/draft', { text }),
+  assistantCommit: (items: DraftItem[]) => req<CommitResult>('POST', '/api/assistant/commit', { items }),
+  speechStart: () => req<SpeechState>('POST', '/api/assistant/speech/start'),
+  speechStop: () => req<SpeechState>('POST', '/api/assistant/speech/stop'),
+  speech: () => req<SpeechState>('GET', '/api/assistant/speech'),
 }
 
 // ---- formatting helpers
