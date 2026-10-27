@@ -271,6 +271,60 @@ func TestCardsOnlyRoundEndsTheReply(t *testing.T) {
 	}
 }
 
+func TestClaimWithoutCardIsSentBack(t *testing.T) {
+	st := openStore(t)
+	appt := `{"type":"appointments","fields":{"title":"复查","scheduled_at":"2026-12-15 09:00","appt_type":"检查"}}`
+	ask := []Turn{{Role: "user", Text: "可以"}}
+
+	// says it booked, makes no card: told once, then makes the card
+	f := &fakeModel{t: t, replies: []string{answer("这个预约已经创建好了，12月14日晚上提醒您。"), callsSaying("整理好了，保存后生效。", "add_record", appt)}}
+	d, err := Propose(context.Background(), st, f.cfg(f.start()), ask, day, nil)
+	if err != nil || len(f.bodies) != 2 || len(d.Items) != 1 || d.Reply != "整理好了，保存后生效。" {
+		t.Fatalf("requests %d err %v draft %+v", len(f.bodies), err, d)
+	}
+	if !strings.Contains(f.bodies[1], "App 检查") {
+		t.Fatal("second request does not say why")
+	}
+
+	// still no card: the reply says nothing was saved
+	f = &fakeModel{t: t, replies: []string{answer("已为您设置提醒。")}}
+	d, err = Propose(context.Background(), st, f.cfg(f.start()), ask, day, nil)
+	if err != nil || len(f.bodies) != 2 || len(d.Items) != 0 || !strings.HasSuffix(d.Reply, claimNote) {
+		t.Fatalf("requests %d err %v draft %+v", len(f.bodies), err, d)
+	}
+
+	// an offer or a question is not a claim
+	f = &fakeModel{t: t, replies: []string{answer("我来帮您预约，几点方便？")}}
+	d, _ = Propose(context.Background(), st, f.cfg(f.start()), ask, day, nil)
+	if len(f.bodies) != 1 || strings.Contains(d.Reply, claimNote) {
+		t.Fatalf("requests %d draft %+v", len(f.bodies), d)
+	}
+}
+
+func TestClaimsDone(t *testing.T) {
+	for s, want := range map[string]bool{
+		"这个预约已经创建好了":      true,
+		"我已经为您安排了以下预约":    true,
+		"已为您设置每天早上9点提醒":   true,
+		"提醒设好了":           true,
+		"这条已经记录过了，不用再记":   false,
+		"我来帮您预约检查":        false,
+		"整理好了，保存后生效":      false,
+		"建议1-2个月后复查，要预约吗": false,
+	} {
+		if got := claimsDone(s); got != want {
+			t.Errorf("%q: %v", s, got)
+		}
+	}
+}
+
+func TestReplyLosesMarkdown(t *testing.T) {
+	got := plainReply("## 复查\n**检查日期**：12月15日\n- 血尿酸\n  * 肾功能\n1-2 个月")
+	if want := "复查\n检查日期：12月15日\n· 血尿酸\n  · 肾功能\n1-2 个月"; got != want {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestFieldTableSentOnce(t *testing.T) {
 	st := openStore(t)
 	tb, err := openTools(context.Background(), st)

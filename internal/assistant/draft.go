@@ -120,6 +120,8 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	w := newDrafting(st, turns, now)
 	// whether this reply has looked anything up yet
 	read := false
+	// whether the model was told it claimed something with no card
+	nudged := false
 	for round := 0; ; round++ {
 		last := round == maxRounds-1
 		choice := "auto"
@@ -135,6 +137,12 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		}
 		if len(m.Calls) == 0 || last {
 			d.Reply = strings.TrimSpace(m.Content)
+			if !last && !nudged && len(w.items) == 0 && claimsDone(d.Reply) {
+				nudged = true
+				x.note("回复说已经做好了，却没有卡片：提醒它再来一次")
+				msgs = append(msgs, m.Raw, map[string]any{"role": "user", "content": claimNudge})
+				continue
+			}
 			break
 		}
 		msgs = append(msgs, m.Raw)
@@ -185,6 +193,10 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		}
 	}
 	d.Items = w.items
+	d.Reply = plainReply(d.Reply)
+	if len(d.Items) == 0 && claimsDone(d.Reply) {
+		d.Reply += claimNote
+	}
 	if len(d.Items) == 0 && d.Reply == "" {
 		d.Unclear = "没有从这段话里整理出可以保存的记录"
 	}

@@ -35,6 +35,7 @@ type round struct {
 	usage Usage
 	said  string
 	calls []loggedCall
+	note  string
 }
 
 type loggedCall struct {
@@ -56,6 +57,12 @@ func newExchange(system string, defs []any, turns []Turn) *exchange {
 
 func (x *exchange) request(u Usage, said string) {
 	x.rounds = append(x.rounds, round{usage: u, said: strings.TrimSpace(said)})
+}
+
+func (x *exchange) note(s string) {
+	if len(x.rounds) > 0 {
+		x.rounds[len(x.rounds)-1].note = s
+	}
 }
 
 func (x *exchange) call(name, args, out string, failed bool) {
@@ -107,6 +114,9 @@ func logExchange(dir string, cfg Config, x *exchange, d Draft, callErr error) {
 				out = clip(out, logResultMax) + fmt.Sprintf("（共 %d 字）", n)
 			}
 			fmt.Fprintf(&b, "  %s%s\n", mark, out)
+		}
+		if r.note != "" {
+			b.WriteString("（" + r.note + "）\n")
 		}
 	}
 	if d.Reply != "" {
