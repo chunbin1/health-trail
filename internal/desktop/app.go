@@ -101,6 +101,10 @@ type app struct {
 	ear         Ear
 	speechMu    sync.Mutex
 	speechTimer *time.Timer
+	// the capture draft keeps running after the page goes away, so coming
+	// back still finds it
+	draftMu sync.Mutex
+	draft   *draftRun
 }
 
 func newApp(dataDir, port string) *app {

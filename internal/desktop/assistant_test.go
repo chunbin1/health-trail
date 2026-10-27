@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -40,7 +41,7 @@ func TestAssistantNotOnThePhone(t *testing.T) {
 	w := httptest.NewRecorder()
 	a.windowHandler(nil).ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/assistant",
 		strings.NewReader(`{"base_url":"https://api.example.com/v1","api_key":"sk-test-secret","model":"m"}`)))
-	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "sk-test-secret") || !strings.Contains(w.Body.String(), `"configured":true`) {
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "sk-test-secret") || !strings.Contains(w.Body.String(), `"configured":true`) || !strings.Contains(w.Body.String(), `"auto_save":true`) {
 		t.Fatalf("put: %d %s", w.Code, w.Body)
 	}
 	raw, _ := os.ReadFile(dir + "/assistant.json")
@@ -49,8 +50,13 @@ func TestAssistantNotOnThePhone(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	a.windowHandler(nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/assistant", nil))
-	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "sk-test-secret") {
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "sk-test-secret") || !strings.Contains(w.Body.String(), `"auto_save":true`) {
 		t.Fatalf("get: %d %s", w.Code, w.Body)
+	}
+	w = httptest.NewRecorder()
+	a.windowHandler(nil).ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/assistant", strings.NewReader(`{"auto_save":false}`)))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"auto_save":false`) {
+		t.Fatalf("auto off: %d %s", w.Code, w.Body)
 	}
 
 	// serve answers this computer and refuses a phone
@@ -116,6 +122,68 @@ func TestSpeechSession(t *testing.T) {
 	time.Sleep(80 * time.Millisecond)
 	if fake.listening() {
 		t.Fatal("limit did not stop listening")
+	}
+}
+
+// Leaving the page (or the window going to the back) drops the HTTP request.
+// The draft still finishes, and the page can read it when it comes back.
+func TestDraftSurvivesClientLeaving(t *testing.T) {
+	a := newApp(t.TempDir(), "0")
+	defer a.st.Close()
+	h := a.windowHandler(nil)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var startOnce, releaseOnce sync.Once
+	letGo := func() { releaseOnce.Do(func() { close(release) }) }
+	defer letGo()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startOnce.Do(func() { close(started) })
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"choices":[{"message":{"content":"{\"items\":[{\"kind\":\"record\",\"type\":\"symptoms\",\"fields\":{\"occurred_at\":\"2026-10-27 09:00\",\"description\":\"头痛\",\"severity\":4}}],\"unclear\":\"\"}"}}]}`))
+	}))
+	defer srv.Close()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/assistant",
+		strings.NewReader(`{"base_url":"`+srv.URL+`","api_key":"k","model":"m"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatal(w.Body)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodPost, "/api/assistant/draft", strings.NewReader(`{"text":"今天头痛"}`))
+	req = req.WithContext(ctx)
+	returned := make(chan struct{})
+	go func() {
+		h.ServeHTTP(httptest.NewRecorder(), req)
+		close(returned)
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("draft did not reach the model")
+	}
+	cancel()
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler kept the dropped request")
+	}
+	letGo()
+
+	deadline := time.Now().Add(2 * time.Second)
+	var body string
+	for {
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/assistant/draft", nil))
+		body = w.Body.String()
+		if strings.Contains(body, `"state":"done"`) && strings.Contains(body, "头痛") {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("draft after leaving: %s", body)
+		}
+		time.Sleep(15 * time.Millisecond)
 	}
 }
 

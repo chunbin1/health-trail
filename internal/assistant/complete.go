@@ -20,36 +20,56 @@ var chatClient = &http.Client{
 	},
 }
 
-func complete(ctx context.Context, cfg Config, system, user string) (string, error) {
-	body := chatBody(cfg.Model, system, user, true)
-	content, status, raw, err := postChat(ctx, cfg, body)
+func complete(ctx context.Context, cfg Config, system string, turns []Turn) (string, Usage, error) {
+	body := chatBody(cfg.Model, system, turns, true)
+	content, usage, status, raw, err := postChat(ctx, cfg, body)
 	if err != nil {
-		return "", err
+		return "", Usage{}, err
 	}
 	if status == http.StatusBadRequest {
-		content, status, raw, err = postChat(ctx, cfg, chatBody(cfg.Model, system, user, false))
+		content, usage, status, raw, err = postChat(ctx, cfg, chatBody(cfg.Model, system, turns, false))
 		if err != nil {
-			return "", err
+			return "", Usage{}, err
 		}
 	}
 	if status < 200 || status >= 300 {
-		return "", upstreamError(status, raw, cfg.APIKey)
+		return "", Usage{}, upstreamError(status, raw, cfg.APIKey)
 	}
 	if strings.TrimSpace(content) == "" {
-		return "", errorsNew("接口没有返回内容")
+		return "", Usage{}, errorsNew("接口没有返回内容")
 	}
-	return content, nil
+	return content, usage, nil
 }
 
 func errorsNew(s string) error { return fmt.Errorf("%s", s) }
 
-func chatBody(model, system, user string, format bool) []byte {
+func contentOf(t Turn) any {
+	if t.Role != "user" || len(t.Images) == 0 {
+		return t.Text
+	}
+	parts := []any{}
+	if t.Text != "" {
+		parts = append(parts, map[string]any{"type": "text", "text": t.Text})
+	} else {
+		parts = append(parts, map[string]any{"type": "text", "text": "请整理这张图片。"})
+	}
+	for _, im := range t.Images {
+		parts = append(parts, map[string]any{
+			"type":      "image_url",
+			"image_url": map[string]string{"url": "data:" + im.MIME + ";base64," + im.Data},
+		})
+	}
+	return parts
+}
+
+func chatBody(model, system string, turns []Turn, format bool) []byte {
+	msgs := []any{map[string]any{"role": "system", "content": system}}
+	for _, t := range turns {
+		msgs = append(msgs, map[string]any{"role": t.Role, "content": contentOf(t)})
+	}
 	m := map[string]any{
-		"model": model,
-		"messages": []map[string]string{
-			{"role": "system", "content": system},
-			{"role": "user", "content": user},
-		},
+		"model":    model,
+		"messages": msgs,
 	}
 	if format {
 		m["temperature"] = 0
@@ -59,28 +79,52 @@ func chatBody(model, system, user string, format bool) []byte {
 	return b
 }
 
-func postChat(ctx context.Context, cfg Config, body []byte) (content string, status int, raw string, err error) {
+func postChat(ctx context.Context, cfg Config, body []byte) (content string, usage Usage, status int, raw string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", 0, "", fmt.Errorf("没能发起请求")
+		return "", Usage{}, 0, "", fmt.Errorf("没能发起请求")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	res, err := chatClient.Do(req)
 	if err != nil {
-		return "", 0, "", fmt.Errorf("连不上接口：%s", redact(err.Error(), cfg.APIKey))
+		return "", Usage{}, 0, "", fmt.Errorf("连不上接口：%s", redact(err.Error(), cfg.APIKey))
 	}
 	defer res.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(res.Body, maxResponse+1))
 	if err != nil {
-		return "", res.StatusCode, "", fmt.Errorf("读取接口回复失败")
+		return "", Usage{}, res.StatusCode, "", fmt.Errorf("读取接口回复失败")
 	}
 	if len(b) > maxResponse {
-		return "", res.StatusCode, "", fmt.Errorf("接口的回复太长")
+		return "", Usage{}, res.StatusCode, "", fmt.Errorf("接口的回复太长")
 	}
 	raw = string(b)
 	content = messageContent(b)
-	return content, res.StatusCode, raw, nil
+	return content, usageOf(b), res.StatusCode, raw, nil
+}
+
+func usageOf(b []byte) Usage {
+	var resp struct {
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+			Details          struct {
+				CachedTokens int `json:"cached_tokens"`
+			} `json:"prompt_tokens_details"`
+		} `json:"usage"`
+	}
+	if json.Unmarshal(b, &resp) != nil {
+		return Usage{}
+	}
+	u := Usage{
+		PromptTokens: resp.Usage.PromptTokens, CompletionTokens: resp.Usage.CompletionTokens,
+		TotalTokens: resp.Usage.TotalTokens, CachedTokens: resp.Usage.Details.CachedTokens,
+	}
+	if u.TotalTokens == 0 {
+		u.TotalTokens = u.PromptTokens + u.CompletionTokens
+	}
+	return u
 }
 
 func messageContent(b []byte) string {

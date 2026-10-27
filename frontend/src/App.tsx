@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useState } from 'react'
-import { MoreHorizontal, Search as SearchIcon, Settings as SettingsIcon } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { MoreHorizontal, Search as SearchIcon, Settings as SettingsIcon, Sparkles, X } from 'lucide-react'
 import { api, type Overview as OV } from './api'
 import { t, tx, type Key } from './i18n'
 import { RecordDrawer } from './components/RecordDrawer'
@@ -17,7 +17,7 @@ import { useApp, useLoad, useRoute } from './state'
 import { Empty, KindIcon, KIND } from './ui'
 
 const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string }[] }[] = [
-  { group: '', items: [{ page: 'overview', label: '今天' }, { page: 'capture', label: '记一笔|nav' }, { page: 'checkins', label: '打卡' }] },
+  { group: '', items: [{ page: 'overview', label: '今天' }, { page: 'capture', label: 'AI助手' }, { page: 'checkins', label: '打卡' }] },
   {
     group: '记录',
     items: [
@@ -81,9 +81,48 @@ export function App() {
   const page = route.page
   // 全部打卡项 is part of 打卡 in the sidebar and the tab bar
   const navPage = page === 'habits' ? 'checkins' : page
+  // AI助手 stays mounted once opened, whether as the page or the floating
+  // panel. Leaving the page must not throw away the sentence or the reply
+  // still on its way.
+  const [assistOpen, setAssistOpen] = useState(false)
+  const [captureOn, setCaptureOn] = useState(page === 'capture')
+  const assist = useLoad(() => api.assistant().catch(() => null), [page])
+  const assistReload = useRef(assist.reload)
+  assistReload.current = assist.reload
+  useEffect(() => {
+    const on = () => assistReload.current()
+    window.addEventListener('assistant-config', on)
+    return () => window.removeEventListener('assistant-config', on)
+  }, [])
+  const configured = !!assist.data?.configured
+  useEffect(() => {
+    if (page === 'capture' || assistOpen) setCaptureOn(true)
+  }, [page, assistOpen])
+  useEffect(() => {
+    if (page === 'capture' || !configured) setAssistOpen(false)
+  }, [page, configured])
+  useEffect(() => {
+    if (!assistOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.querySelector('.mode-menu')) setAssistOpen(false)
+    }
+    const onDown = (e: MouseEvent) => {
+      const t = e.target
+      if (!(t instanceof Element)) return
+      // the date popper is drawn outside the panel; a click there is still inside the chat
+      if (t.closest('.assist-dock, .assist-ball, .dt-popper')) return
+      setAssistOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDown)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDown)
+    }
+  }, [assistOpen])
   let body
   switch (page) {
-    case 'capture': body = <Capture />; break
+    case 'capture': body = null; break
     case 'checkins': body = <Checkins />; break
     case 'habits': body = <AllHabits />; break
     case 'reports': body = <Reports />; break
@@ -138,7 +177,14 @@ export function App() {
       </nav>
       <div className="main-wrap">
         <div className="drag-strip drag" />
-        <main className="main">{body}</main>
+        <main className="main">
+          {captureOn && (
+            <div className={page === 'capture' ? undefined : 'assist-dock'} hidden={page !== 'capture' && !assistOpen}>
+              <Capture panel={page !== 'capture'} onClose={() => setAssistOpen(false)} />
+            </div>
+          )}
+          {body}
+        </main>
       </div>
 
       <nav className="tabbar">
@@ -161,6 +207,14 @@ export function App() {
           <div className="foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>
         </div>
       </div>
+
+      {configured && page !== 'capture' && (
+        <button type="button" className={'assist-ball' + (assistOpen ? ' open' : '')}
+          aria-expanded={assistOpen} aria-label={assistOpen ? t('关闭') : t('AI助手')}
+          onClick={() => setAssistOpen((v) => !v)}>
+          {assistOpen ? <X size={22} /> : <Sparkles size={22} />}
+        </button>
+      )}
 
       {route.open && <RecordDrawer key={route.open.entity + route.open.id} entityName={route.open.entity} id={route.open.id} />}
     </div>

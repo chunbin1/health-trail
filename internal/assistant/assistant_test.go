@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -102,7 +103,7 @@ func TestDraftAndRedact(t *testing.T) {
 	}))
 	defer srv.Close()
 	cfg := Config{BaseURL: srv.URL + "/v1", APIKey: "sk-secret", Model: "m"}
-	d, err := Propose(context.Background(), st, cfg, "今天头痛", time.Date(2026, 10, 27, 9, 0, 0, 0, time.Local))
+	d, err := Propose(context.Background(), st, cfg, []Turn{{Role: "user", Text: "今天头痛"}}, time.Date(2026, 10, 27, 9, 0, 0, 0, time.Local))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +119,7 @@ func TestDraftAndRedact(t *testing.T) {
 	}))
 	defer bad.Close()
 	cfg.BaseURL = bad.URL
-	_, err = Propose(context.Background(), st, cfg, "今天头痛", time.Now())
+	_, err = Propose(context.Background(), st, cfg, []Turn{{Role: "user", Text: "今天头痛"}}, time.Now())
 	if err == nil || strings.Contains(err.Error(), "sk-secret") {
 		t.Fatalf("error should hide the key: %v", err)
 	}
@@ -176,6 +177,142 @@ func TestCommitRollsBackAndPartial(t *testing.T) {
 	if len(sym) != 1 || len(cond) != 1 || sym[0]["condition_id"] != cond[0]["id"] {
 		b, _ := json.Marshal(sym)
 		t.Fatalf("link %s", b)
+	}
+}
+
+func TestProposeSendsImageAndRejectsOtherFiles(t *testing.T) {
+	if _, err := cleanImages([]Image{{MIME: "image/svg+xml", Data: "PHN2Zy8+"}}); err == nil {
+		t.Fatal("svg was accepted")
+	}
+	// a 1x1 jpeg
+	jpg := "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="
+	var saw bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		saw = strings.Contains(string(b), "image_url") && strings.Contains(string(b), "data:image/jpeg;base64,")
+		io.WriteString(w, `{"usage":{"prompt_tokens":11,"completion_tokens":4,"total_tokens":15},"choices":[{"message":{"content":"{\"items\":[],\"unclear\":\"看不清\"}"}}]}`)
+	}))
+	defer srv.Close()
+	st := openStore(t)
+	d, err := Propose(context.Background(), st, Config{BaseURL: srv.URL, APIKey: "k", Model: "m"}, []Turn{{
+		Role: "user", Text: "这是化验单", Images: []Image{{MIME: "image/jpeg", Data: jpg}},
+	}}, time.Now())
+	if err != nil || !saw || d.Unclear == "" || d.Usage.TotalTokens != 15 || d.Raw == "" {
+		t.Fatalf("saw=%v err=%v draft=%+v", saw, err, d)
+	}
+}
+
+func TestExchangeLogOmitsKeyAndImageBytes(t *testing.T) {
+	jpg := "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"usage":{"prompt_tokens":20,"completion_tokens":5,"total_tokens":25,"prompt_tokens_details":{"cached_tokens":8}},"choices":[{"message":{"content":"{\"items\":[],\"unclear\":\"日志测试\"}"}}]}`)
+	}))
+	defer srv.Close()
+	st := openStore(t)
+	key := "sk-log-secret-should-not-appear"
+	_, err := Propose(context.Background(), st, Config{BaseURL: srv.URL, APIKey: key, Model: "glm-4.6v"}, []Turn{{
+		Role: "user", Text: "帮我记下头痛", Images: []Image{{MIME: "image/jpeg", Data: jpg}},
+	}}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(st.Dir, "assistant.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, want := range []string{"glm-4.6v", "帮我记下头痛", "日志测试", "缓存命中 8", "[图片 image/jpeg"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("log missing %q\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, key) || strings.Contains(s, jpg[:40]) {
+		t.Fatalf("log leaked the key or the picture:\n%s", s)
+	}
+	fi, _ := os.Stat(filepath.Join(st.Dir, "assistant.log"))
+	if fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %o", fi.Mode().Perm())
+	}
+}
+
+func TestLooseAppointmentShape(t *testing.T) {
+	raw := `{"items":[{"kind":"appointment","scheduled_at":"2026-10-28 14:00","title":"口腔科的治疗","appt_type":"门诊","place":"口腔科"}],"unclear":""}`
+	d, err := parseDraft(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Items) != 1 || d.Items[0].Kind != "record" || d.Items[0].Type != "appointments" {
+		t.Fatalf("%+v", d.Items)
+	}
+	if d.Items[0].Fields["title"] != "口腔科的治疗" || d.Items[0].Fields["scheduled_at"] != "2026-10-28 14:00" {
+		t.Fatalf("fields %+v", d.Items[0].Fields)
+	}
+	st := openStore(t)
+	if p := problem(st, normalize(d.Items[0]), time.Date(2026, 10, 27, 15, 0, 0, 0, time.Local)); p != "" {
+		t.Fatal(p)
+	}
+}
+
+func TestAnswerStaysAnAnswer(t *testing.T) {
+	var body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		io.WriteString(w, `{"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5},"choices":[{"message":{"content":"{\"reply\":\"档案里记下过头痛。这不能代替医生诊断或开药。\",\"items\":[],\"unclear\":\"\"}"}}]}`)
+	}))
+	defer srv.Close()
+	st := openStore(t)
+	d, err := Propose(context.Background(), st, Config{BaseURL: srv.URL, APIKey: "k", Model: "m"}, []Turn{{Role: "user", Text: "我可能是什么问题，有什么药推荐"}}, time.Now())
+	if err != nil || d.Unclear != "" || len(d.Items) != 0 || !strings.Contains(d.Reply, "不能代替医生") {
+		t.Fatalf("err=%v draft=%+v", err, d)
+	}
+	if !strings.Contains(body, "近期档案") || !strings.Contains(body, "结果仅供参考") || !strings.Contains(body, "需要去医院") {
+		t.Fatal("prompt did not include the archive or the limit")
+	}
+	if !strings.Contains(body, "写成一条健康问题") || !strings.Contains(body, "观察中") {
+		t.Fatal("prompt did not ask to record a diagnosis as a condition")
+	}
+}
+
+func TestMedicineQuestionDropsCondition(t *testing.T) {
+	st := openStore(t)
+	if _, err := st.Create("conditions", store.Record{"name": "高尿酸血症", "status": "观察中"}); err != nil {
+		t.Fatal(err)
+	}
+	dup := []Item{{Kind: "record", Type: "conditions", Fields: map[string]any{"name": "高尿酸血症", "status": "观察中"}}}
+	if got := dropConditions(st, []Turn{{Role: "user", Text: "给我推荐药品"}}, dup); len(got) != 0 {
+		t.Fatalf("medicine turn kept %+v", got)
+	}
+	if got := dropConditions(st, []Turn{{Role: "user", Text: "我现在有什么问题"}}, dup); len(got) != 0 {
+		t.Fatalf("duplicate kept %+v", got)
+	}
+	fresh := []Item{{Kind: "record", Type: "conditions", Fields: map[string]any{"name": "痛风", "status": "观察中"}}}
+	if got := dropConditions(st, []Turn{{Role: "user", Text: "我现在有什么问题"}}, fresh); len(got) != 1 {
+		t.Fatalf("new diagnosis dropped %+v", got)
+	}
+	day := time.Date(2026, 10, 27, 15, 0, 0, 0, time.Local)
+	filled := fillConditionDates([]Item{
+		{Kind: "record", Type: "conditions", Fields: map[string]any{"name": "痛风"}},
+		{Kind: "record", Type: "conditions", Fields: map[string]any{"name": "高尿酸血症", "onset_date": "2026-10-25"}},
+	}, day)
+	if filled[0].Fields["onset_date"] != "2026-10-27" || filled[1].Fields["onset_date"] != "2026-10-25" {
+		t.Fatalf("%+v %+v", filled[0].Fields, filled[1].Fields)
+	}
+	if _, err := st.Create("medications", store.Record{"name": "非布司他", "status": "计划中"}); err != nil {
+		t.Fatal(err)
+	}
+	meds := []Item{
+		{Kind: "record", Type: "medications", Fields: map[string]any{"name": "非布司他"}},
+		{Kind: "record", Type: "medications", Fields: map[string]any{"name": "苯溴马隆"}},
+		{Kind: "record", Type: "medications", Fields: map[string]any{"name": "苯溴马隆", "status": "在用"}},
+	}
+	kept := fillMedicationStatus(dropDuplicateMeds(st, meds))
+	if len(kept) != 1 || kept[0].Fields["name"] != "苯溴马隆" || kept[0].Fields["status"] != "计划中" {
+		t.Fatalf("meds %+v", kept)
+	}
+	blank := fillMedicationStatus([]Item{{Kind: "record", Type: "medications", Fields: map[string]any{"name": "别嘌醇"}}})
+	if blank[0].Fields["status"] != "计划中" {
+		t.Fatalf("status %+v", blank[0].Fields)
 	}
 }
 

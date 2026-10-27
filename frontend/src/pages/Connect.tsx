@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Check, Copy, MessageSquare, Plug, ShieldCheck, SquareTerminal } from 'lucide-react'
-import { api } from '../api'
+import { api, type AssistantConfig } from '../api'
+import { AssistantSetup } from '../components/AssistantSetup'
 import { t, tr } from '../i18n'
 import { useApp, useLoad } from '../state'
 import { IconButton } from '../ui'
@@ -56,6 +57,25 @@ function storedAI(): AI {
   return 'claude-chat'
 }
 
+// The OpenAI-compatible service used by AI助手, shown above the MCP setups.
+function AssistantAPI() {
+  const { data, error, reload } = useLoad(() => api.assistant(), [])
+  const [cfg, setCfg] = useState<AssistantConfig | null>(null)
+  const view = cfg || data
+  return (
+    <>
+      <div>
+        <h2>{t('方式一 · API')}</h2>
+        <div className="sub" style={{ marginTop: 4 }}>{t('给窗口里的 AI 助手用。填一个兼容 OpenAI 的接口：地址、密钥和模型。密钥只存在这台电脑上。声音用 Mac 本机识别，不经过这个接口；图片会发给它。')}</div>
+      </div>
+      <section className="card">
+        {error && <div className="error">{error}</div>}
+        {view && <AssistantSetup cfg={view} onSaved={(c) => { setCfg(c); reload() }} />}
+      </section>
+    </>
+  )
+}
+
 export function Connect() {
   const { data: info, error } = useLoad(() => api.info(), [])
   const [ai, setAI] = useState<AI>(storedAI)
@@ -72,9 +92,14 @@ export function Connect() {
   return (
     <>
       <div className="page-head">
-        <div className="titles"><h1>{t('连接 AI')}</h1><div className="sub">{t('让 Claude、Codex 等 AI 读写你的健康档案，帮你录入和分析')}</div></div>
+        <div className="titles"><h1>{t('连接 AI')}</h1><div className="sub">{t('两种方式都可以：用 API 接窗口里的 AI 助手，或用 MCP 让 Claude、Codex 等读写档案。')}</div></div>
       </div>
       <div className="stack" style={{ maxWidth: 760 }}>
+        <AssistantAPI />
+        <div>
+          <h2>{t('方式二 · MCP')}</h2>
+          <div className="sub" style={{ marginTop: 4 }}>{t('让 Claude、Codex 等外部 AI 通过 MCP 读写这台电脑上的档案。选你用的那个，把配置抄过去。')}</div>
+        </div>
         <div className="notice">
           <ShieldCheck size={18} />
           <span>

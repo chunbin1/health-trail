@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Database, FolderOpen, Languages, Mic, Power, RefreshCw, Smartphone } from 'lucide-react'
+import { Database, FolderOpen, Languages, Power, RefreshCw, Smartphone, Sparkles } from 'lucide-react'
 import { api, fmtDate, type AssistantConfig, type CalSync, type UpdateStatus } from '../api'
 import { t, type Lang } from '../i18n'
 import { useApp, useLoad } from '../state'
@@ -245,7 +245,7 @@ function AllowedFolders() {
   )
 }
 
-// The OpenAI-compatible service used by 记一笔. The key stays on this computer.
+// The OpenAI-compatible service used by AI助手. The key stays on this computer.
 function CaptureService() {
   const { data, error, reload } = useLoad(() => api.assistant(), [])
   const [cfg, setCfg] = useState<AssistantConfig | null>(null)
@@ -253,8 +253,8 @@ function CaptureService() {
   const view = cfg || data
   if (!view) return null
   return (
-    <Section icon={<Mic size={20} />} title={t('记一笔|nav')}
-      sub={t('把你说的话或打的字整理成档案里的记录。密钥只存在这台电脑上，不放进备份。声音用 Mac 本机识别，不经过这个接口。')}>
+    <Section icon={<Sparkles size={20} />} title={t('AI助手')}
+      sub={t('把你说的话、打的字或发的图片整理成档案里的记录。密钥只存在这台电脑上，不放进备份。声音用 Mac 本机识别，不经过这个接口；图片会发给它。')}>
       <AssistantSetup cfg={view} onSaved={(c) => { setCfg(c); reload() }} />
     </Section>
   )

@@ -132,6 +132,7 @@ svg.lucide { flex: none; }
 /* ============ shell ============ */
 
 .app { display: flex; min-height: 100%; }
+.app:has(.capture-page) { height: 100%; overflow: hidden; }
 
 .sidebar {
   width: 232px; flex: none;
@@ -176,6 +177,7 @@ html.mac-window .drag input, html.mac-window .drag button, html.mac-window .drag
 html.mac-window .drag-strip { display: block; position: absolute; left: 0; right: 0; top: 0; height: 36px; }
 
 .main-wrap { flex: 1; min-width: 0; position: relative; }
+.main-wrap:has(.capture-page) { min-height: 0; overflow: hidden; }
 .main { padding: 32px 40px 72px; max-width: 1160px; margin: 0 auto; }
 html.mac-window .main { padding-top: 40px; }
 
@@ -707,3 +709,148 @@ button.slot:disabled { opacity: .6; cursor: default; }
 /* a newer version: a dot on the settings gear */
 .icon-btn.has-dot { position: relative; }
 .icon-btn .dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--sidebar); }
+
+/* 记一笔 chat */
+.chat-log { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* A scrollable flex column shrinks its rows in WKWebView until the lines overlap. */
+.chat-log > * { flex-shrink: 0; }
+.chat-log button.row-item { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.chat-turn { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bubble-assistant { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.bubble-user {
+  margin-left: auto; max-width: min(520px, 100%);
+  background: var(--accent-soft); border-radius: 14px 14px 4px 14px; padding: 10px 12px;
+  overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.chat-pics { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.chat-pics img { max-width: min(220px, 100%); max-height: 160px; border-radius: 8px; display: block; object-fit: cover; }
+.chat-bar { position: sticky; bottom: 0; z-index: 2; background: var(--canvas); padding-top: 8px; }
+
+/* The assistant page is pinned to the window, to the right of the app
+   sidebar. Messages scroll inside the right column; the input is the last
+   row of that column, so a long chat cannot push it off screen. */
+html:has(.capture-page),
+html:has(.capture-page) body { overflow: hidden; scrollbar-gutter: auto; }
+.main:has(> .capture-page) { padding: 0; max-width: none; overflow: hidden; }
+.capture-page {
+  position: fixed; z-index: 1;
+  top: 0; right: 0; bottom: 0; left: 232px;
+  display: flex; flex-direction: row; overflow: hidden;
+  padding: 20px 0 12px 24px;
+  background: var(--canvas);
+}
+html.mac-window .capture-page { top: 36px; padding-top: 8px; }
+.chat-side {
+  width: 232px; flex: none; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 0 12px 8px 0; border-right: 1px solid var(--line);
+}
+.chat-side > .btn { width: 100%; }
+.chat-side-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; }
+.chat-side-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; border: 0; background: transparent; cursor: pointer; text-align: left;
+  border-radius: 8px; padding: 8px 10px; font: inherit; color: var(--ink);
+}
+.chat-side-item:hover { background: var(--surface-2); }
+.chat-side-item.on { background: var(--surface); box-shadow: var(--shadow); }
+.chat-side-item .title {
+  font-size: 13.5px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%;
+}
+.chat-main {
+  flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; padding-left: 28px;
+}
+.capture-page .chat-main > .page-head { flex: none; flex-direction: row; align-items: center; margin-bottom: 0; padding-right: 16px; }
+.capture-page .page-head .sub,
+.capture-page .chat-top .notice { display: none; }
+.chat-top { flex: none; display: flex; flex-direction: column; gap: 12px; padding-right: 16px; }
+.chat-top:not(:has(.card, .error)) { display: none; }
+.chat-main > .stack {
+  flex: 1 1 0; min-height: 0; overflow: hidden;
+  display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px;
+}
+.capture-page .chat-log {
+  min-height: 0; overflow: auto; overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+.capture-page .chat-log::-webkit-scrollbar { width: 6px; }
+.capture-page .chat-log::-webkit-scrollbar-track { background: transparent; }
+.capture-page .chat-log::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; }
+.capture-page .chat-bar { background: var(--canvas); padding-right: 16px; }
+.phone-only { display: none; }
+@media (max-width: 760px) {
+  .capture-page {
+    left: 0;
+    bottom: calc(62px + env(safe-area-inset-bottom));
+    padding: 16px 0 8px 16px;
+  }
+  .chat-side { display: none; }
+  .chat-main { padding-left: 0; }
+  .phone-only { display: inline-flex; }
+}
+
+/* Floating assistant: a ball at the lower right, only once an API is configured. */
+.assist-ball {
+  position: fixed; z-index: 36; right: 20px; bottom: 20px;
+  width: 48px; height: 48px; border: 0; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center; color: var(--accent-ink); background: var(--accent);
+  box-shadow: var(--shadow-lg);
+}
+.assist-ball:hover { background: var(--accent-hover); }
+.assist-dock[hidden] { display: none; }
+.assist-dock {
+  position: fixed; z-index: 35; right: 20px; bottom: 80px;
+  width: min(400px, calc(100vw - 40px)); height: min(640px, calc(100vh - 120px));
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg);
+}
+.assist-dock .page-head { margin: 0; padding: 12px 14px 0; flex-wrap: nowrap; }
+.assist-dock .page-head h1 { font-size: 16px; }
+.assist-dock .page-head .sub, .assist-dock .notice { display: none; }
+.assist-dock > .capture-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.assist-dock .chat-main { flex: 1; min-height: 0; padding-left: 0; }
+.assist-dock .chat-main > .page-head { flex: none; }
+.assist-dock .chat-main > .stack { flex: 1; min-height: 0; max-width: none !important; display: flex; flex-direction: column; gap: 8px; padding: 8px 14px 12px; }
+.assist-dock .chat-log { flex: 1; min-height: 0; overflow: auto; }
+.assist-dock .chat-bar { position: static; background: var(--surface); padding-top: 0; }
+@media (max-width: 760px) {
+  .assist-ball { right: 16px; bottom: calc(78px + env(safe-area-inset-bottom)); }
+  .assist-dock {
+    left: 12px; right: 12px; width: auto;
+    bottom: calc(138px + env(safe-area-inset-bottom));
+    height: min(68vh, 560px);
+  }
+}
+.mode-picker { position: relative; }
+.mode-trigger {
+  height: 28px; padding: 0 8px; border: 0; background: transparent; cursor: pointer;
+  color: var(--ink-2); font: inherit; font-size: 13px; border-radius: 8px;
+}
+.mode-trigger:hover, .mode-trigger[aria-expanded='true'] { background: var(--surface-3); color: var(--ink); }
+.mode-menu {
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 4;
+  width: 280px; max-width: min(280px, calc(100vw - 32px));
+  background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 6px;
+}
+.mode-head { font-size: 12px; color: var(--ink-3); font-weight: 500; padding: 6px 10px 4px; }
+.mode-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  border: 0; background: transparent; border-radius: 8px; padding: 8px 10px;
+  cursor: pointer; font: inherit; color: var(--ink);
+}
+.mode-item:hover { background: var(--surface-2); }
+.mode-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.mode-title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+.mode-badge {
+  font-size: 11px; font-weight: 500; color: var(--ink-2);
+  background: var(--surface-3); border-radius: 999px; padding: 1px 6px;
+}
+.mode-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+.mode-side { display: flex; align-items: center; gap: 8px; color: var(--ink-3); flex: none; }
+.mode-side svg { color: var(--series-2); }
+.mode-key { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 8px; text-align: right; }
+.chat-thumb { position: relative; }
+.chat-thumb .icon-btn { position: absolute; top: 4px; right: 4px; background: var(--surface); }

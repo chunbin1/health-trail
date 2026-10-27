@@ -179,14 +179,23 @@ static int startEngine(const char *locale) {
 	return 0;
 }
 
+// Authorization and the audio engine have to run on the main thread.
+// Asking from a background thread makes macOS abort the process.
 static int speechStart(const char *locale) {
-	int auth = ensureAuth();
-	if (auth != 0) return auth;
-	if ([NSThread isMainThread]) return startEngine(locale);
-	__block int code = 0;
-	dispatch_sync(dispatch_get_main_queue(), ^{
-		code = startEngine(locale);
+	if ([NSThread isMainThread]) {
+		int auth = ensureAuth();
+		if (auth != 0) return auth;
+		return startEngine(locale);
+	}
+	__block int code = 5;
+	dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+	NSString *loc = locale ? [NSString stringWithUTF8String:locale] : @"zh-CN";
+	dispatch_async(dispatch_get_main_queue(), ^{
+		int auth = ensureAuth();
+		code = auth != 0 ? auth : startEngine(loc.UTF8String);
+		dispatch_semaphore_signal(sem);
 	});
+	dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC));
 	return code;
 }
 

@@ -82,6 +82,8 @@ type settings struct {
 	Lang string     `json:"lang,omitempty"` // UI language: "" (Chinese) or "en"
 	// looking for updates by itself is on unless switched off
 	NoUpdateCheck bool `json:"no_update_check,omitempty"`
+	// AI助手 writes a reply as soon as it arrives, unless this is set
+	NoAutoSave bool `json:"no_autosave,omitempty"`
 	// body metrics left off the 今天 page, from before Lists (read into
 	// Lists["today_metrics"] until that is chosen)
 	HiddenMetrics []string `json:"hidden_metrics,omitempty"`
@@ -128,6 +130,19 @@ func (s *settings) autoUpdate() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return !s.NoUpdateCheck
+}
+
+func (s *settings) autoSave() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.NoAutoSave
+}
+
+func (s *settings) setAutoSave(on bool) error {
+	s.mu.Lock()
+	s.NoAutoSave = !on
+	s.mu.Unlock()
+	return s.save()
 }
 
 func loadSettings(dir string) *settings {

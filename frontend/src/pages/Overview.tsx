@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from 'react'
-import { Check, ChevronRight, Mic, Plus, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Check, ChevronRight, Plus, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, MONTHS, nowLocal, today, type MedDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { tell } from '../components/Dialog'
@@ -224,7 +224,6 @@ export function Overview() {
           <h1>{greeting()}<IconButton small label={t('调整首页')} onClick={() => setArranging(true)}><SlidersHorizontal size={15} /></IconButton></h1>
         </div>
         <div className="row">
-          <a className="btn primary" href="#/capture"><Mic size={14} />{t('记一笔|nav')}</a>
           {QUICK.map(([k, label]) => (
             <button key={k} className="btn" onClick={() => setAdding(k)}>
               <Plus size={14} style={{ color: `var(--c-${k})` }} strokeWidth={2.6} />{t(label)}
@@ -238,7 +237,7 @@ export function Overview() {
       {empty && (
         <div className="notice" style={{ marginBottom: 20 }}>
           <Sparkles size={18} />
-          <span>{tr('这里会汇总你的健康状况。可以用 {capture} 说话或打字记下，也可以到 {link} 接好外部 AI，把体检报告截图发给它。', { capture: <a href="#/capture">{t('记一笔|nav')}</a>, link: <a href="#/connect">{t('连接 AI|link')}</a> })}</span>
+          <span>{tr('这里会汇总你的健康状况。可以用 {capture} 说话或打字记下，也可以到 {link} 接好外部 AI，把体检报告截图发给它。', { capture: <a href="#/capture">{t('AI助手')}</a>, link: <a href="#/connect">{t('连接 AI|link')}</a> })}</span>
         </div>
       )}
 

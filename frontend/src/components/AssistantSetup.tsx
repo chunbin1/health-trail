@@ -3,7 +3,7 @@ import { api, type AssistantConfig } from '../api'
 import { t } from '../i18n'
 import { useApp } from '../state'
 
-// The address, key and model for 记一笔. An empty key keeps the one already
+// The address, key and model for AI助手. An empty key keeps the one already
 // saved; the key itself is never sent back to the page.
 export function AssistantSetup({ cfg, onSaved }: { cfg: AssistantConfig; onSaved: (c: AssistantConfig) => void }) {
   const { toast } = useApp()

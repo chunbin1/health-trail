@@ -29,6 +29,9 @@ func parseDraft(content string) (Draft, error) {
 		itemsRaw = raw["records"]
 	}
 	d := Draft{}
+	if s, _ := raw["reply"].(string); s != "" {
+		d.Reply = strings.TrimSpace(s)
+	}
 	if s, _ := raw["unclear"].(string); s != "" {
 		d.Unclear = strings.TrimSpace(s)
 	}
@@ -86,10 +89,39 @@ func itemFromMap(m map[string]any) Item {
 			})
 		}
 	}
-	return normalize(it)
+	return normalizeRaw(it, m)
 }
 
-func normalize(it Item) Item {
+// kindAlias is what models write instead of the stored type name.
+var kindAlias = map[string]string{
+	"appointment": "appointments", "appointments": "appointments", "预约": "appointments",
+	"condition": "conditions", "conditions": "conditions", "健康问题": "conditions",
+	"symptom": "symptoms", "symptoms": "symptoms", "症状": "symptoms",
+	"visit": "visits", "visits": "visits", "就诊": "visits",
+	"medication": "medications", "medications": "medications", "用药": "medications",
+	"dose": "doses", "doses": "doses", "服药": "doses",
+	"report": "reports", "reports": "reports", "检查报告": "reports",
+	"metric": "metrics", "metrics": "metrics", "身体数据": "metrics",
+	"habit": "habits", "habits": "habits",
+	"lab": "lab_report", "labs": "lab_report", "lab_report": "lab_report", "化验单": "lab_report",
+	"checkin": "checkin", "checkins": "checkin", "打卡": "checkin",
+}
+
+func aliasOf(kind string) (string, bool) {
+	s, ok := kindAlias[strings.ToLower(strings.TrimSpace(kind))]
+	if ok {
+		return s, true
+	}
+	s, ok = kindAlias[strings.TrimSpace(kind)]
+	return s, ok
+}
+
+func normalize(it Item) Item { return normalizeRaw(it, nil) }
+
+func normalizeRaw(it Item, raw map[string]any) Item {
+	if raw == nil {
+		raw = map[string]any{}
+	}
 	switch it.Kind {
 	case "", "record":
 		if it.Type != "" {
@@ -100,8 +132,36 @@ func normalize(it Item) Item {
 	case "checkin", "checkins":
 		it.Kind = "checkin"
 	}
+	if typ, ok := aliasOf(it.Kind); ok && it.Kind != "record" {
+		switch typ {
+		case "checkin", "lab_report":
+			it.Kind = typ
+		default:
+			if it.Type == "" {
+				it.Type = typ
+			}
+			it.Kind = "record"
+		}
+	}
+	if typ, ok := aliasOf(it.Type); ok && typ != "checkin" && typ != "lab_report" {
+		it.Type = typ
+		it.Kind = "record"
+	}
 	if it.Fields == nil {
 		it.Fields = map[string]any{}
+	}
+	// models often put the columns next to kind, not inside fields
+	if it.Kind == "record" {
+		if e := store.EntityByName(it.Type); e != nil {
+			for _, f := range e.Fields {
+				if _, ok := it.Fields[f.Name]; ok {
+					continue
+				}
+				if v, ok := raw[f.Name]; ok && v != nil && strings.TrimSpace(textOf(v)) != "" {
+					it.Fields[f.Name] = v
+				}
+			}
+		}
 	}
 	if it.ConditionName == "" {
 		it.ConditionName = strings.TrimSpace(textOf(it.Fields["condition_name"]))

@@ -3,6 +3,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -354,6 +356,14 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
+	// The Mac window loads through a custom URL scheme. A multipart file
+	// arrives on a stream that is not ready yet, and the scheme handler
+	// treats that as an empty body ("multipart: NextPart: EOF"). A JSON
+	// body, the same way the chat already sends a picture, arrives whole.
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		s.uploadJSON(w, r)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, store.MaxAttachment+1<<20)
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		fail(w, &store.ValidationError{Msg: "上传失败：" + err.Error()})
@@ -380,6 +390,55 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, a)
+}
+
+func (s *Server) uploadJSON(w http.ResponseWriter, r *http.Request) {
+	// base64 is about 4/3 of the file, plus the surrounding JSON
+	r.Body = http.MaxBytesReader(w, r.Body, store.MaxAttachment*4/3+1<<20)
+	var in struct {
+		OwnerType string `json:"owner_type"`
+		OwnerID   int64  `json:"owner_id"`
+		Filename  string `json:"filename"`
+		Mime      string `json:"mime"`
+		Data      string `json:"data"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		fail(w, &store.ValidationError{Msg: "上传失败：" + err.Error()})
+		return
+	}
+	data := in.Data
+	if i := strings.Index(data, ","); i >= 0 && strings.HasPrefix(data, "data:") {
+		data = data[i+1:]
+	}
+	data = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, data)
+	raw, err := base64.StdEncoding.DecodeString(data)
+	if err != nil || len(raw) == 0 {
+		fail(w, &store.ValidationError{Msg: "图片数据读不出来"})
+		return
+	}
+	if len(raw) > store.MaxAttachment {
+		fail(w, invalidSize())
+		return
+	}
+	ct := in.Mime
+	if t := mime.TypeByExtension(filepath.Ext(in.Filename)); t != "" {
+		ct = t
+	}
+	a, err := s.Store.AddAttachment(in.OwnerType, in.OwnerID, in.Filename, ct, bytes.NewReader(raw))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, a)
+}
+
+func invalidSize() error {
+	return &store.ValidationError{Msg: "文件超过 50 MB"}
 }
 
 // inlineTypes may be shown in the window; anything else is downloaded, so

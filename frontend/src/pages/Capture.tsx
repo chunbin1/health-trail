@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { Mic, X } from 'lucide-react'
-import { api, type AssistantConfig, type DraftItem, type Field, type LabDraft } from '../api'
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
+import { Check, ImagePlus, Mic, SendHorizontal, X } from 'lucide-react'
+import { api, fmtDate, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
 import { AssistantSetup } from '../components/AssistantSetup'
 import { t, tx } from '../i18n'
@@ -8,30 +8,297 @@ import { openRecord, useApp, useLoad } from '../state'
 import { IconButton, KindIcon } from '../ui'
 
 const FLAGS = ['正常', '偏高', '偏低', '异常']
+const CAPTURE_KEY = 'health-trail.capture'
+const KINDS = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
-export function Capture() {
+interface Pic { mime: string; data: string; url: string }
+
+interface ChatMsg {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  images?: Pic[]
+  imageCount?: number
+  items?: DraftItem[] | null
+  unclear?: string
+  reply?: string
+  raw?: string
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cached_tokens?: number }
+  error?: string
+  saved?: Record<number, { type?: string; id?: number }>
+  locked?: boolean
+  open?: Record<number, boolean>
+}
+
+interface KeptCapture {
+  id: string
+  messages: ChatMsg[]
+  draft: string
+  pendingId: string
+}
+
+function loadCapture(): KeptCapture {
+  const empty = { id: '', messages: [], draft: '', pendingId: '' }
+  try {
+    const raw = sessionStorage.getItem(CAPTURE_KEY)
+    if (!raw) return empty
+    const v = JSON.parse(raw) as KeptCapture
+    return { id: v.id || '', messages: v.messages || [], draft: v.draft || '', pendingId: v.pendingId || '' }
+  } catch {
+    return empty
+  }
+}
+
+function remember(d: KeptCapture) {
+  try {
+    const slim: KeptCapture = {
+      id: d.id,
+      draft: d.draft,
+      pendingId: d.pendingId,
+      messages: d.messages.map((m) => ({
+        ...m,
+        images: undefined,
+        imageCount: m.images?.length || m.imageCount || 0,
+      })),
+    }
+    if (!slim.messages.length && !slim.draft && !slim.pendingId && !slim.id) sessionStorage.removeItem(CAPTURE_KEY)
+    else sessionStorage.setItem(CAPTURE_KEY, JSON.stringify(slim))
+  } catch {
+    // private mode: the mounted page still keeps it
+  }
+}
+
+function turnsOf(msgs: ChatMsg[]): ChatTurn[] {
+  const out: ChatTurn[] = []
+  const users = msgs.filter((m) => m.role === 'user')
+  const keepPics = new Set(users.slice(-2).map((m) => m.id))
+  for (const m of msgs.slice(-12)) {
+    if (m.role === 'user') {
+      out.push({
+        role: 'user',
+        text: m.text,
+        images: keepPics.has(m.id) ? m.images?.filter((p) => p.data).map((p) => ({ mime: p.mime, data: p.data })) : undefined,
+      })
+    } else if (m.reply || m.items || m.unclear) {
+      const mark = m.saved && Object.keys(m.saved).length ? '（用户已保存）' : '（用户还没保存）'
+      const body = [m.reply, JSON.stringify({ items: m.items || [], unclear: m.unclear || '' })].filter(Boolean).join('\n')
+      out.push({ role: 'assistant', text: body + mark })
+    }
+  }
+  return out
+}
+
+function fitImage(file: File): Promise<Pic> {
+  if (!KINDS.includes(file.type)) return Promise.reject(new Error(t('只能发送图片（JPG、PNG、GIF、WebP）')))
+  if (file.size > 12 * 1024 * 1024) return Promise.reject(new Error(t('这张图片太大')))
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const max = 1600
+      const scale = Math.min(1, max / Math.max(img.width, img.height, 1))
+      const w = Math.max(1, Math.round(img.width * scale))
+      const h = Math.max(1, Math.round(img.height * scale))
+      const c = document.createElement('canvas')
+      c.width = w
+      c.height = h
+      const g = c.getContext('2d')
+      if (!g) {
+        URL.revokeObjectURL(url)
+        reject(new Error(t('这张图片读不出来')))
+        return
+      }
+      g.drawImage(img, 0, 0, w, h)
+      URL.revokeObjectURL(url)
+      const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+      const dataUrl = c.toDataURL(mime, 0.82)
+      resolve({ mime, data: dataUrl.split(',')[1] || '', url: dataUrl })
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error(t('这张图片读不出来')))
+    }
+    img.src = url
+  })
+}
+
+function SaveMode({ auto, onChange }: { auto: boolean; onChange: (on: boolean) => void }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  const pick = useRef(onChange)
+  pick.current = onChange
+  useEffect(() => {
+    if (!open) return
+    const down = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const key = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); setOpen(false); return }
+      if (e.key !== '1' && e.key !== '2') return
+      e.preventDefault()
+      pick.current(e.key === '1')
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', down)
+    document.addEventListener('keydown', key)
+    return () => {
+      document.removeEventListener('mousedown', down)
+      document.removeEventListener('keydown', key)
+    }
+  }, [open])
+  const modes = [
+    { on: true, key: '1', title: t('自动保存'), desc: t('回复一到就写入档案，用药要另外点保存'), recommend: true },
+    { on: false, key: '2', title: t('手动保存'), desc: t('看过、改过之后再保存'), recommend: false },
+  ]
+  return (
+    <div className="mode-picker" ref={box}>
+      <button type="button" className="mode-trigger" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}>
+        {auto ? t('自动保存') : t('手动保存')}
+      </button>
+      {open && (
+        <div className="mode-menu" role="menu">
+          <div className="mode-head">{t('模式')}</div>
+          {modes.map((m) => (
+            <button type="button" role="menuitem" key={m.key} className="mode-item" onClick={() => { onChange(m.on); setOpen(false) }}>
+              <span className="mode-copy">
+                <span className="mode-title">
+                  {m.title}
+                  {m.recommend && <span className="mode-badge">{t('推荐')}</span>}
+                </span>
+                <span className="mode-desc">{m.desc}</span>
+              </span>
+              <span className="mode-side">
+                {auto === m.on && <Check size={16} />}
+                <span className="mode-key">{m.key}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => void } = {}) {
   const { entity, changed, toast } = useApp()
   const { data, error, reload } = useLoad(() => api.assistant(), [])
+  const kept = useRef(loadCapture()).current
   const [cfg, setCfg] = useState<AssistantConfig | null>(null)
   const [showSetup, setShowSetup] = useState(false)
-  const [text, setText] = useState('')
-  const [items, setItems] = useState<DraftItem[] | null>(null)
-  const [unclear, setUnclear] = useState('')
+  const [chatId, setChatId] = useState(kept.id || String(Date.now()))
+  const [past, setPast] = useState<ChatHead[] | null>(null)
+  const [chats, setChats] = useState<ChatHead[]>([])
+  const [messages, setMessages] = useState<ChatMsg[]>(kept.messages)
+  const [text, setText] = useState(kept.draft)
+  const [pics, setPics] = useState<Pic[]>([])
+  const [pendingId, setPendingId] = useState(kept.pendingId)
   const [listening, setListening] = useState(false)
   const [micBusy, setMicBusy] = useState(false)
-  const [organizing, setOrganizing] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [locked, setLocked] = useState(false)
-  const [saved, setSaved] = useState<Record<number, { type?: string; id?: number }>>({})
+  const [savingId, setSavingId] = useState('')
   const [err, setErr] = useState('')
-  const [open, setOpen] = useState<Record<number, boolean>>({})
+  const textRef = useRef(kept.draft)
+  const pendingRef = useRef(kept.pendingId)
+  const applied = useRef('')
+  const autoTried = useRef(new Set<string>())
+  const fileRef = useRef<HTMLInputElement>(null)
+  const savingRef = useRef('')
+  const endRef = useRef<HTMLDivElement>(null)
   const view = cfg || data
+  const auto = !!view && view.auto_save !== false
+  const waiting = !!pendingId
+
+  useEffect(() => {
+    remember({ id: chatId, messages, draft: text, pendingId })
+  }, [chatId, messages, text, pendingId])
+
+  // Pictures are left out of the browser's short-term copy. If this chat had
+  // any, load the copy kept on this computer so they show again.
+  useEffect(() => {
+    const missing = kept.messages.some((m) => (m.imageCount || 0) > 0 && !m.images?.some((p) => p.url))
+    if (!kept.id || !missing) return
+    api.assistantChat(kept.id).then((c) => setMessages((c.messages || []).map(restorePics)), () => {})
+    // kept is the copy from the first render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (panel) return
+    api.assistantChats().then(setChats, () => {})
+  }, [panel])
+
+  useEffect(() => {
+    if (!messages.length) return
+    api.saveAssistantChat({ id: chatId, messages: wireOf(messages) }).then((c) => {
+      setChats((list) => {
+        const i = list.findIndex((x) => x.id === c.id)
+        if (i < 0) return [c, ...list]
+        const next = list.slice()
+        next[i] = c
+        return next
+      })
+    }, () => {})
+  }, [chatId, messages])
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages, pendingId])
+
+  // Automatic saving is on unless switched off. A reply that failed to save
+  // stays on screen with the button, and is not tried again by itself.
+  useEffect(() => {
+    if (!auto) return
+    const last = messages[messages.length - 1]
+    if (!last || last.role !== 'assistant' || autoTried.current.has(last.id)) return
+    if (!last.items?.length || savedAll(last) || last.locked) return
+    const rest = last.items.filter((it, i) => !last.saved?.[i] && !isMedication(it))
+    if (!rest.length || rest.some((it) => it.problem)) return
+    autoTried.current.add(last.id)
+    save(last, true)
+    // save is recreated each render and reads the latest messages for pictures
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, auto])
+
+  useEffect(() => {
+    if (!pendingId) return
+    const since = Date.now()
+    let stop = false
+    const look = async () => {
+      let s: DraftStatus | null = null
+      try {
+        s = await api.assistantDraftStatus()
+      } catch {
+        return
+      }
+      if (stop || s.id !== pendingRef.current) return
+      if (s.state === 'done') {
+        takeReply(s.id, s)
+        return
+      }
+      if (s.state === 'error') {
+        setErr(s.error || t('整理被中断了，刚写的还在，再点一次「发送」。'))
+        setPendingId('')
+        pendingRef.current = ''
+        return
+      }
+      if (s.state === 'none' && Date.now() - since > 60_000) {
+        setErr(t('整理被中断了，刚写的还在，再点一次「发送」。'))
+        setPendingId('')
+        pendingRef.current = ''
+      }
+    }
+    look()
+    const id = setInterval(look, 600)
+    return () => {
+      stop = true
+      clearInterval(id)
+    }
+  }, [pendingId])
 
   useEffect(() => {
     if (!listening) return
     const id = setInterval(() => {
       api.speech().then((s) => {
-        if (s.text) setText(s.text)
+        if (s.text) writeText(s.text)
         if (s.error) setErr(s.error)
         if (!s.listening) setListening(false)
       }, () => {})
@@ -42,17 +309,51 @@ export function Capture() {
   if (error) return <div className="error">{error}</div>
   if (!view) return null
 
-  function resetPreview() {
-    setItems(null)
-    setUnclear('')
-    setLocked(false)
-    setSaved({})
-    setOpen({})
+  function writeText(v: string) {
+    textRef.current = v
+    setText(v)
+  }
+
+  function takeReply(id: string, d: { items?: DraftItem[]; unclear?: string; reply?: string; raw?: string; usage?: ChatMsg['usage'] }) {
+    if (!id || applied.current === id) return
+    applied.current = id
+    setMessages((ms) => [...ms, {
+      id: id + '-a', role: 'assistant', text: '', items: d.items || [], unclear: d.unclear || '',
+      reply: d.reply || '', usage: d.usage,
+    }])
+    setPendingId('')
+    pendingRef.current = ''
     setErr('')
   }
 
+  async function addFiles(files: File[]) {
+    setErr('')
+    const room = 4 - pics.length
+    if (room <= 0) {
+      setErr(t('一次最多 4 张图片'))
+      return
+    }
+    const next: Pic[] = []
+    for (const f of files.slice(0, room)) {
+      try {
+        next.push(await fitImage(f))
+      } catch (e: any) {
+        setErr(e.message)
+      }
+    }
+    if (files.length > room) setErr(t('一次最多 4 张图片'))
+    setPics((cur) => [...cur, ...next].slice(0, 4))
+  }
+
+  function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = [...e.clipboardData.files]
+    if (!files.length) return
+    e.preventDefault()
+    addFiles(files)
+  }
+
   async function mic() {
-    if (micBusy) return
+    if (micBusy || waiting) return
     setMicBusy(true)
     setErr('')
     try {
@@ -60,11 +361,11 @@ export function Capture() {
         const s = await api.speechStart()
         setListening(s.listening)
         if (s.error) setErr(s.error)
-        if (s.text) setText(s.text)
+        if (s.text) writeText(s.text)
       } else {
         const s = await api.speechStop()
         setListening(false)
-        if (s.text) setText(s.text)
+        if (s.text) writeText(s.text)
       }
     } catch (e: any) {
       setListening(false)
@@ -74,169 +375,352 @@ export function Capture() {
     }
   }
 
-  async function organize() {
-    if (organizing || micBusy || locked) return
-    setOrganizing(true)
+  async function send() {
+    if (waiting || micBusy) return
     setErr('')
+    let said = textRef.current
+    if (listening) {
+      const s = await api.speechStop()
+      setListening(false)
+      if (s.text) said = s.text
+    }
+    said = said.trim()
+    if (!said && !pics.length) {
+      setErr(t('先写一点内容，或点麦克风说。'))
+      return
+    }
+    const id = String(Date.now())
+    const user: ChatMsg = { id, role: 'user', text: said, images: pics }
+    const history = [...messages, user]
+    setMessages(history)
+    writeText('')
+    setPics([])
+    setPendingId(id)
+    pendingRef.current = id
+    remember({ id: chatId, messages: history, draft: '', pendingId: id })
     try {
-      let said = text
-      if (listening) {
-        const s = await api.speechStop()
-        setListening(false)
-        if (s.text) said = s.text
-        setText(said)
-      }
-      if (!said.trim()) {
-        setErr(t('先写一点内容，或点麦克风说。'))
-        return
-      }
-      const d = await api.assistantDraft(said.trim())
-      setItems(d.items || [])
-      setUnclear(d.unclear || '')
-      setSaved({})
-      setOpen({})
-      setLocked(false)
-    } catch (e: any) {
-      setErr(e.message)
-    } finally {
-      setOrganizing(false)
+      const d = await api.assistantDraft({ id, messages: turnsOf(history) })
+      takeReply(id, d)
+    } catch {
+      setPendingId(id)
+      pendingRef.current = id
     }
   }
 
-  async function save() {
-    if (saving || locked || !items?.length) return
-    if (items.some((it) => it.problem)) {
+  function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
+  }
+
+  function picsBefore(msg: ChatMsg): Pic[] {
+    const i = messages.findIndex((m) => m.id === msg.id)
+    for (let j = i - 1; j >= 0; j--) {
+      if (messages[j].role === 'user') return (messages[j].images || []).filter((p) => p.data)
+    }
+    return []
+  }
+
+  async function save(msg: ChatMsg, autoSave = false) {
+    if (savingRef.current || savingId || msg.locked || savedAll(msg) || !msg.items?.length) return
+    const pending = msg.items.map((it, i) => ({ it, i })).filter(({ it, i }) => !msg.saved?.[i] && !(autoSave && isMedication(it)))
+    if (!pending.length) return
+    if (pending.some(({ it }) => it.problem)) {
       setErr(t('请先改掉标出的问题，再保存。'))
       return
     }
-    setSaving(true)
+    const prior = messages.slice(0, messages.findIndex((m) => m.id === msg.id)).reverse().find((m) => m.role === 'user')
+    if ((prior?.imageCount || prior?.images?.length) && !prior.images?.some((p) => p.data)) {
+      setErr(t('这张图片已经不在这次对话里，请重新发一次再保存。'))
+      return
+    }
+    savingRef.current = msg.id
+    setSavingId(msg.id)
     setErr('')
     try {
-      const res = await api.assistantCommit(items.map(cleanItem))
-      const done: Record<number, { type?: string; id?: number }> = {}
-      for (const s of res.saved || []) done[s.index] = { type: s.type, id: s.id }
-      setSaved(done)
+      const res = await api.assistantCommit(pending.map(({ it }) => cleanItem(it)))
+      const done: Record<number, { type?: string; id?: number }> = { ...msg.saved }
+      for (const s of res.saved || []) {
+        const at = pending[s.index]
+        if (at) done[at.i] = { type: s.type, id: s.id }
+      }
+      const wrote = !!res.saved?.length
+      const unfinished = msg.items.some((_, i) => !done[i])
+      setMessages((ms) => ms.map((m) => m.id === msg.id ? { ...m, saved: done, locked: (!res.ok && wrote) || (res.ok && !unfinished) } : m))
       if (!res.ok) {
         setErr(res.error || '')
-        if ((res.saved || []).length) {
-          setLocked(true)
-          changed()
+        if (wrote) changed()
+        return
+      }
+      const pics = picsBefore(msg)
+      const reports = (res.saved || []).filter((s) => s.type === 'reports' && s.id)
+      const targets = reports.length ? reports : (res.saved || []).filter((s) => s.id).slice(0, 1)
+      try {
+        for (const s of targets) {
+          for (let n = 0; n < pics.length; n++) {
+            const p = pics[n]
+            const ext = p.mime === 'image/png' ? 'png' : p.mime === 'image/gif' ? 'gif' : p.mime === 'image/webp' ? 'webp' : 'jpg'
+            await api.uploadBase64(s.type!, s.id!, `图片${n + 1}.${ext}`, p.mime, p.data)
+          }
         }
+      } catch (e: any) {
+        changed()
+        setErr(t('记录已保存，但图片没能存成附件：{error}', { error: e.message }))
         return
       }
       changed()
       toast(t('已记入档案'))
-      setText('')
-      resetPreview()
     } catch (e: any) {
       setErr(e.message)
     } finally {
-      setSaving(false)
+      savingRef.current = ''
+      setSavingId('')
     }
   }
 
-  function patch(i: number, next: DraftItem) {
-    setItems((cur) => cur?.map((it, n) => (n === i ? { ...next, problem: '' } : it)) || null)
+  function patch(msgId: string, i: number, next: DraftItem) {
+    setMessages((ms) => ms.map((m) => m.id === msgId ? { ...m, items: m.items?.map((it, n) => n === i ? { ...next, problem: '' } : it) } : m))
+  }
+
+  function newChat() {
+    if (messages.length) api.saveAssistantChat({ id: chatId, messages: wireOf(messages) }).catch(() => {})
+    setChatId(String(Date.now()))
+    setPast(null)
+    setMessages([])
+    setPendingId('')
+    pendingRef.current = ''
+    writeText('')
+    setPics([])
+    setErr('')
+  }
+
+  async function openPast() {
+    setErr('')
+    try {
+      setPast(await api.assistantChats())
+    } catch (e: any) {
+      setErr(e.message)
+    }
+  }
+
+  async function openPastChat(id: string) {
+    setErr('')
+    try {
+      const c = await api.assistantChat(id)
+      setChatId(c.id)
+      setMessages((c.messages || []).map(restorePics))
+      setPendingId('')
+      pendingRef.current = ''
+      setPast(null)
+    } catch (e: any) {
+      setErr(e.message)
+    }
   }
 
   const micLabel = listening ? t('结束听写') : micBusy ? t('正在听…') : t('开始听')
 
   return (
-    <>
+    <div className={panel ? 'capture-panel' : 'capture-page'}>
+      {!panel && (
+        <aside className="chat-side">
+          <button type="button" className="btn sm" onClick={newChat}>{t('新对话')}</button>
+          <div className="chat-side-list">
+            {chats.length === 0 && <div className="sub">{t('还没有对话记录')}</div>}
+            {chats.map((c) => (
+              <button type="button" key={c.id} className={'chat-side-item' + (c.id === chatId ? ' on' : '')} onClick={() => { if (c.id !== chatId) openPastChat(c.id) }}>
+                <span className="title">{c.title}</span>
+                <span className="small muted">{chatMeta(c)}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+      )}
+      <div className="chat-main">
       <div className="page-head">
         <div className="titles">
-          <h1>{t('记一笔|nav')}</h1>
-          <div className="sub">{t('说一句或打一段字，整理成记录，你确认以后才写入。')}</div>
+          <h1>{t('AI助手')}</h1>
+          <div className="sub">{t('像聊天一样说，也可以问档案里的报告和症状，或发化验单、处方的照片。要记下的内容，自动保存开着时会写入档案。用药建议不会自动写入，要点保存。')}</div>
         </div>
+        {view.configured && !showSetup && (
+          <button type="button" className="btn ghost sm" onClick={() => setShowSetup(true)}>{t('修改接口')}</button>
+        )}
+        {!panel && (
+          <button type="button" className="btn ghost sm phone-only" onClick={() => { past ? setPast(null) : openPast() }}>{past ? t('返回') : t('历史')}</button>
+        )}
+        {panel && messages.length > 0 && !past && (
+          <button type="button" className="btn sm" onClick={newChat}>
+            {t('新对话')}
+          </button>
+        )}
+        {panel && onClose && (
+          <IconButton label={t('关闭')} onClick={onClose}><X size={16} /></IconButton>
+        )}
       </div>
-      <div className="stack" style={{ maxWidth: 760 }}>
+      <div className="chat-top">
         <div className="notice">
-          <Mic size={18} />
-          <span>{t('声音只在这台 Mac 上识别，不会上传。整理时，这段文字，以及已有健康问题、用药和打卡项的名称，会发给你填写的接口。整理出来的内容不能代替医生的诊断。')}</span>
+          <ImagePlus size={18} />
+          <span>{t('声音只在这台 Mac 上识别，不会上传。文字和图片会发给你填写的接口，同时带上已有健康问题、用药和打卡项的名称。整理出来的内容不能代替医生的诊断。')}</span>
         </div>
-
         {(!view.configured || showSetup) && (
           <section className="card">
             {!view.configured && <p className="sub" style={{ marginTop: 0 }}>{t('还没有填写接口。填好以后就可以在这里说话或打字记档案。')}</p>}
             <AssistantSetup cfg={view} onSaved={(c) => { setCfg(c); setShowSetup(false); reload() }} />
           </section>
         )}
-
-        {view.configured && !showSetup && (
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
-            <button type="button" className="btn ghost sm" onClick={() => setShowSetup(true)}>{t('修改接口')}</button>
-          </div>
-        )}
+        {err && <div className="error">{err}</div>}
+      </div>
+      <div className="stack">
+        <div className="chat-log">
+          {past ? (
+            past.length === 0
+              ? <div className="sub">{t('还没有对话记录')}</div>
+              : <div className="card flush">{past.map((c) => (
+                <button type="button" key={c.id} className="row-item no-ico" onClick={() => openPastChat(c.id)}>
+                  <span className="body">{c.title}</span>
+                  <span className="small muted nowrap">{chatMeta(c)}</span>
+                </button>
+              ))}</div>
+          ) : messages.map((m) => m.role === 'user' ? (
+            <div key={m.id} className="bubble-user">
+              {(m.images?.length || m.imageCount) ? (
+                <div className="chat-pics" style={{ marginBottom: m.text ? 8 : 0 }}>
+                  {m.images?.filter((p) => p.url).map((p, i) => <img key={i} src={p.url} alt="" />)}
+                  {!m.images?.some((p) => p.url) && m.imageCount ? <span className="small muted">{t('（图片）')}</span> : null}
+                </div>
+              ) : null}
+              {m.text}
+            </div>
+          ) : (
+            <div key={m.id} className="chat-turn">
+              {m.reply && <div className="bubble-assistant">{m.reply}</div>}
+              {m.unclear && <div className="notice"><span>{m.unclear}</span></div>}
+              {m.items && m.items.length === 0 && !m.unclear && !m.reply && <div className="sub">{t('没有整理出可以保存的记录。')}</div>}
+              {m.items?.map((it, i) => (
+                <section key={i} className="card">
+                  <div className="card-head">
+                    <KindIcon kind={iconKind(it)} size="sm" />
+                    <h2 style={{ flex: 1, minWidth: 0 }}>{itemTitle(it, entity)}</h2>
+                    {itemDate(it, entity) && <span className="small muted nowrap">{itemDate(it, entity)}</span>}
+                    {m.saved?.[i] && <span className="tag">{t('已保存')}</span>}
+                    {!m.locked && !savedAll(m) && (
+                      <IconButton label={t('去掉')} small onClick={() => setMessages((ms) => ms.map((x) => x.id === m.id ? { ...x, items: x.items?.filter((_, n) => n !== i) } : x))}>
+                        <X size={14} />
+                      </IconButton>
+                    )}
+                  </div>
+                  {it.problem && <div className="error" style={{ marginBottom: 8 }}>{it.problem}</div>}
+                  {m.saved?.[i]?.id && m.saved[i].type && (
+                    <button type="button" className="btn ghost sm" onClick={() => openRecord(m.saved![i].type!, m.saved![i].id!)}>{t('查看')}</button>
+                  )}
+                  {!m.locked && !savedAll(m) && (
+                    <button type="button" className="btn ghost sm" onClick={() => setMessages((ms) => ms.map((x) => x.id === m.id ? { ...x, open: { ...x.open, [i]: !x.open?.[i] } } : x))}>
+                      {m.open?.[i] ? t('收起') : t('修改')}
+                    </button>
+                  )}
+                  {(m.open?.[i] || it.problem) && !m.locked && (
+                    <ItemEditor item={it} onChange={(next) => patch(m.id, i, next)} />
+                  )}
+                </section>
+              ))}
+              {!!m.items?.length && !savedAll(m) && (
+                <div className="row">
+                  <button type="button" className="btn primary sm" disabled={!!savingId || !!m.locked} onClick={() => save(m)}>
+                    {savingId === m.id ? t('正在保存…') : t('保存到档案')}
+                  </button>
+                </div>
+              )}
+              {m.locked && !savedAll(m) && <div className="notice warn"><span>{t('已经写进档案的已标出。为避免记重，这次不能再保存。还没写上的，请到对应的页面补记。')}</span></div>}
+              {!!m.usage?.total_tokens && (
+                <div className="small muted">{t('输入 {prompt} · 输出 {completion} · 合计 {total} · 缓存 {cached}', {
+                  prompt: m.usage.prompt_tokens, completion: m.usage.completion_tokens, total: m.usage.total_tokens,
+                  cached: m.usage.cached_tokens || 0,
+                })}</div>
+              )}
+            </div>
+          ))}
+          {waiting && <div className="sub">{t('正在思考…')}</div>}
+          <div ref={endRef} />
+        </div>
 
         {view.configured && (
-          <section className="card">
-            <textarea className="input" style={{ width: '100%' }} rows={4} value={text}
-              placeholder={t('说或输入要记的事，例如：今天早上头痛，大概 4 分')}
-              onChange={(e) => setText(e.target.value)} />
-            <div className="row" style={{ marginTop: 12 }}>
+          <div className="chat-bar">
+            {pics.length > 0 && (
+              <div className="chat-pics" style={{ marginBottom: 8 }}>
+                {pics.map((p, i) => (
+                  <div key={i} className="chat-thumb">
+                    <img src={p.url} alt="" />
+                    <IconButton label={t('去掉')} small onClick={() => setPics(pics.filter((_, n) => n !== i))}><X size={12} /></IconButton>
+                  </div>
+                ))}
+              </div>
+            )}
+            <textarea className="input" style={{ width: '100%' }} rows={3} value={text}
+              placeholder={t('输入消息，或发一张化验单。Enter 发送')}
+              onChange={(e) => writeText(e.target.value)} onKeyDown={onKey} onPaste={onPaste} />
+            <div className="row" style={{ marginTop: 8 }}>
+              <SaveMode auto={auto} onChange={(on) => {
+                api.setAssistant({ auto_save: on }).then((c) => setCfg(c), (e) => setErr(e.message))
+              }} />
+              <input ref={fileRef} type="file" accept={KINDS.join(',')} multiple hidden onChange={(e) => { addFiles([...e.target.files || []]); e.target.value = '' }} />
+              <button type="button" className="btn sm" disabled={waiting} onClick={() => fileRef.current?.click()}>
+                <ImagePlus size={14} />{t('添加图片')}
+              </button>
               {view.speech && (
-                <button type="button" className={'btn sm' + (listening ? ' primary' : '')} disabled={micBusy && !listening} onClick={mic}>
+                <button type="button" className={'btn sm' + (listening ? ' primary' : '')} disabled={(micBusy && !listening) || waiting} onClick={mic}>
                   <Mic size={14} />{micLabel}
                 </button>
               )}
-              <button type="button" className="btn primary sm" disabled={organizing || locked || micBusy} onClick={organize}>
-                {organizing ? t('正在整理…') : t('整理')}
+              <button type="button" className="btn primary sm" disabled={waiting || micBusy} onClick={send}>
+                <SendHorizontal size={14} />{waiting ? t('正在思考…') : t('发送')}
               </button>
-            </div>
-          </section>
-        )}
-
-        {err && <div className="error">{err}</div>}
-        {locked && <div className="notice warn"><span>{t('已经写进档案的已标出。为避免记重，这次不能再保存。还没写上的，请到对应的页面补记。')}</span></div>}
-        {unclear && <div className="notice"><span>{unclear}</span></div>}
-
-        {items && items.length === 0 && <div className="sub">{t('没有整理出可以保存的记录。')}</div>}
-
-        {items && items.length > 0 && (
-          <div className="stack">
-            {items.map((it, i) => (
-              <section key={i} className="card">
-                <div className="card-head">
-                  <KindIcon kind={iconKind(it)} size="sm" />
-                  <h2 style={{ flex: 1, minWidth: 0 }}>{itemTitle(it, entity)}</h2>
-                  {saved[i] && <span className="tag">{t('已保存')}</span>}
-                  {!locked && (
-                    <IconButton label={t('去掉')} small onClick={() => setItems(items.filter((_, n) => n !== i))}>
-                      <X size={14} />
-                    </IconButton>
-                  )}
-                </div>
-                {it.problem && <div className="error" style={{ marginBottom: 8 }}>{it.problem}</div>}
-                {saved[i]?.id && saved[i]?.type && (
-                  <button type="button" className="btn ghost sm" onClick={() => openRecord(saved[i].type!, saved[i].id!)}>{t('已保存')}</button>
-                )}
-                {!locked && (
-                  <button type="button" className="btn ghost sm" onClick={() => setOpen({ ...open, [i]: !open[i] })}>
-                    {open[i] ? t('收起') : t('修改')}
-                  </button>
-                )}
-                {(open[i] || it.problem) && !locked && (
-                  <ItemEditor item={it} onChange={(next) => patch(i, next)} />
-                )}
-              </section>
-            ))}
-            <div className="row">
-              <button type="button" className="btn primary" disabled={saving || locked} onClick={save}>
-                {saving ? t('正在保存…') : t('保存到档案')}
-              </button>
-              <button type="button" className="btn" disabled={saving} onClick={resetPreview}>{t('放弃')}</button>
             </div>
           </div>
         )}
       </div>
-    </>
+      </div>
+    </div>
   )
+}
+
+function chatMeta(c: ChatHead) {
+  return c.tokens ? c.updated + ' · ' + t('{n} token', { n: c.tokens }) : c.updated
+}
+
+function restorePics(m: ChatMsgWire): ChatMsg {
+  const images = m.images?.filter((p) => p.data).map((p) => ({
+    mime: p.mime, data: p.data, url: `data:${p.mime};base64,${p.data}`,
+  }))
+  return { ...m, images, imageCount: images?.length || m.imageCount }
+}
+
+function wireOf(messages: ChatMsg[]): ChatMsgWire[] {
+  return messages.map((m) => ({
+    id: m.id, role: m.role, text: m.text,
+    images: m.images?.filter((p) => p.data).map((p) => ({ mime: p.mime, data: p.data })),
+    imageCount: m.images?.length || m.imageCount || 0,
+    items: m.items, unclear: m.unclear, reply: m.reply, usage: m.usage, saved: m.saved, locked: m.locked,
+  }))
+}
+
+function isMedication(it: DraftItem) {
+  return it.type === 'medications' || it.kind === 'medications'
+}
+
+function savedAll(m: ChatMsg) {
+  return !!m.items?.length && !!m.saved && m.items.every((_, i) => m.saved![i])
 }
 
 function iconKind(it: DraftItem) {
   if (it.kind === 'checkin') return 'checkins'
   if (it.kind === 'lab_report') return 'lab_results'
   return it.type || 'search'
+}
+
+function itemDate(it: DraftItem, entity: (name: string) => Entity | undefined) {
+  const e = it.type ? entity(it.type) : undefined
+  const raw = e?.dateKey && it.fields ? it.fields[e.dateKey] : ''
+  return raw ? fmtDate(String(raw).slice(0, 10)) : ''
 }
 
 function itemTitle(it: DraftItem, entity: (name: string) => { label: string; titleKey: string } | undefined) {
