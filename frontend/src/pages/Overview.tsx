@@ -46,11 +46,12 @@ function timelineTitle(type: string, title: string) {
 const CARDS: { key: string; label: Key; wide?: boolean }[] = [
   { key: 'stats', label: '数字概览', wide: true },
   { key: 'checkins', label: '今日打卡', wide: true },
-  { key: 'meds_today', label: '今天的用药' },
+  // one card for medicines: today's times, then the others in use. It
+  // keeps the old today's-medicines key so a saved order still places it.
+  { key: 'meds_today', label: '在用药物' },
   { key: 'appointments', label: '接下来的预约' },
   { key: 'labs', label: '需要留意的指标' },
   { key: 'conditions', label: '进行中的健康问题' },
-  { key: 'medications', label: '在用药物' },
   { key: 'follow_ups', label: '待复诊' },
   { key: 'metrics', label: '身体数据', wide: true },
   { key: 'timeline', label: '最近记录', wide: true },
@@ -105,7 +106,7 @@ export function Overview() {
         <HabitGrid days={o.today_checkins} date={o.today} />
       </section>
     ),
-    meds_today: o.meds_today.length > 0 && <MedsToday days={o.meds_today} />,
+    meds_today: <Meds days={o.meds_today} current={o.current_medications} />,
     appointments: (
       <Panel title={t('接下来的预约')} rows={o.upcoming_appointments} kind="appointments" more="#/appointments"
         empty={t('没有待去的预约。跟 AI 说「下周三下午 3 点做胃镜」就能记下，到时间前会提醒')}
@@ -144,17 +145,6 @@ export function Overview() {
     conditions: (
       <Panel title={t('进行中的健康问题')} rows={o.active_conditions} kind="conditions" more="#/conditions" empty={t('没有进行中的健康问题')}
         render={(r) => <><div className="body title">{r.name}</div>{r.status && <span className="tag k" style={kindStyle('conditions')}>{tx(r.status)}</span>}</>} />
-    ),
-    medications: (
-      <Panel title={t('在用药物')} rows={o.current_medications} kind="medications" more="#/medications" empty={t('没有在用的药物')}
-        render={(r) => <>
-          <div className="body">
-            <div className="title">{r.name}</div>
-            <div className="meta">{[r.dosage, r.frequency].filter(Boolean).join(' · ')}</div>
-            {r.last_taken && <div className="meta">{t('上次 {date} · {total}', { date: fmtDate(r.last_taken), total: t('共 {n} 颗', { n: fmtNum(r.taken_total) }) })}</div>}
-          </div>
-          <TakeDose med={r} />
-        </>} />
     ),
     follow_ups: o.upcoming_follow_ups.length > 0 && (
       <Panel title={t('待复诊')} rows={o.upcoming_follow_ups} kind="visits" empty=""
@@ -275,15 +265,21 @@ function When({ at }: { at: string }) {
   return null
 }
 
-// Today's medicines with reminder times: each time taken (with when) or
-// not. A time not taken yet is a button that logs that dose: at this moment
-// if it is the time nearest now, else at the time itself, so a dose made up
-// late lands on its own time and not on the next one.
-function MedsToday({ days }: { days: MedDay[] }) {
+// The medicines in use. First those with reminder times today: each time
+// taken (with when) or not. A time not taken yet is a button that logs that
+// dose: at this moment if it is the time nearest now, else at the time
+// itself, so a dose made up late lands on its own time and not on the next
+// one. Then the rest (as needed, no reminder times), each logged now.
+// how many of the medicines without times today the card lists
+const OTHERS = 4
+
+function Meds({ days, current }: { days: MedDay[]; current: Rec[] }) {
   const { changed, toast } = useApp()
   const [busy, setBusy] = useState('')
   const now = nowLocal()
   const minutes = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
+  const timed = new Set(days.map((d) => d.medication.id))
+  const others = current.filter((m) => !timed.has(m.id))
 
   async function take(m: Rec, times: string[], time: string) {
     const nearest = times.reduce((a, b) => (Math.abs(minutes(b) - minutes(now.slice(11))) < Math.abs(minutes(a) - minutes(now.slice(11))) ? b : a))
@@ -301,12 +297,13 @@ function MedsToday({ days }: { days: MedDay[] }) {
   }
 
   return (
-    <section className="card" style={{ paddingBottom: 8 }}>
+    <section className="card" style={{ paddingBottom: days.length + others.length ? 8 : 18 }}>
       <div className="card-head" style={{ marginBottom: 4 }}>
-        <h2><KindIcon kind="medications" size="sm" />{t('今天的用药')}</h2>
+        <h2><KindIcon kind="medications" size="sm" />{t('在用药物')}</h2>
         <a href="#/medications" className="card-link">{t('全部')}<ChevronRight size={14} /></a>
       </div>
-      <div className="small muted">{t('吃了哪一顿，就点哪个时间')}</div>
+      {days.length + others.length === 0 && <Empty compact>{t('没有在用的药物')}</Empty>}
+      {days.length > 0 && <div className="small muted">{t('吃了哪一顿，就点哪个时间')}</div>}
       <div className="list">
         {days.map(({ medication: m, slots }) => (
           <div key={m.id} className="row-item no-ico" onClick={() => openRecord('medications', m.id)}>
@@ -329,6 +326,20 @@ function MedsToday({ days }: { days: MedDay[] }) {
           </div>
         ))}
       </div>
+      {others.length > 0 && days.length > 0 && <div className="small muted" style={{ marginTop: 12 }}>{t('其他在用的药')}</div>}
+      <div className="list">
+        {others.slice(0, OTHERS).map((r) => (
+          <div key={r.id} className="row-item no-ico" onClick={() => openRecord('medications', r.id)}>
+            <div className="body">
+              <div className="title">{r.name}</div>
+              <div className="meta">{[r.dosage, r.frequency].filter(Boolean).join(' · ')}</div>
+              {r.last_taken && <div className="meta">{t('上次 {date} · {total}', { date: fmtDate(r.last_taken), total: t('共 {n} 颗', { n: fmtNum(r.taken_total) }) })}</div>}
+            </div>
+            <TakeDose med={r} />
+          </div>
+        ))}
+      </div>
+      {others.length > OTHERS && <a href="#/medications" className="muted small" style={{ display: 'inline-block', marginTop: 8 }}>{t('还有 {n} 种', { n: others.length - OTHERS })}</a>}
     </section>
   )
 }
