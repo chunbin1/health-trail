@@ -459,23 +459,64 @@ func prefixErr(p string, err error) error {
 }
 
 func (s *Store) Update(entityName string, id int64, patch Record) (Record, error) {
-	e, err := entity(entityName)
+	e, cur, merged, err := s.patched(entityName, id, patch)
+	if err != nil || merged == nil {
+		return cur, err
+	}
+	merged["updated_at"] = now()
+	keys := sortedKeys(merged)
+	sets := make([]string, len(keys))
+	vals := make([]any, 0, len(keys)+1)
+	for i, k := range keys {
+		sets[i] = k + " = ?"
+		vals = append(vals, merged[k])
+	}
+	vals = append(vals, id)
+	tx, err := s.DB.Begin()
 	if err != nil {
 		return nil, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(fmt.Sprintf("UPDATE %s SET %s WHERE id = ?", e.Name, strings.Join(sets, ", ")), vals...); err != nil {
+		return nil, dbErr(e, err)
+	}
+	if e.Name == "metric_kinds" {
+		if err := renameMetric(tx, cur, merged); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return s.Get(e.Name, id)
+}
+
+// CheckUpdate says whether Update would accept patch, without writing.
+func (s *Store) CheckUpdate(entityName string, id int64, patch Record) error {
+	_, _, _, err := s.patched(entityName, id, patch)
+	return err
+}
+
+// patched is the record as Update would write it, checked. merged is nil
+// when the patch changes nothing.
+func (s *Store) patched(entityName string, id int64, patch Record) (*Entity, Record, Record, error) {
+	e, err := entity(entityName)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	cur, err := s.Get(e.Name, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	if err := editable(e, cur); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	p, err := s.clean(e, patch)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	if len(p) == 0 {
-		return cur, nil
+		return e, cur, nil, nil
 	}
 	merged := Record{}
 	for _, f := range e.Fields {
@@ -510,40 +551,15 @@ func (s *Store) Update(entityName string, id int64, patch Record) (Record, error
 	}
 	s.prepare(e, merged)
 	if err := required(e, merged); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	if err := check(e, merged, cur); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	if err := editable(e, merged); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	merged["updated_at"] = now()
-	keys := sortedKeys(merged)
-	sets := make([]string, len(keys))
-	vals := make([]any, 0, len(keys)+1)
-	for i, k := range keys {
-		sets[i] = k + " = ?"
-		vals = append(vals, merged[k])
-	}
-	vals = append(vals, id)
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(fmt.Sprintf("UPDATE %s SET %s WHERE id = ?", e.Name, strings.Join(sets, ", ")), vals...); err != nil {
-		return nil, dbErr(e, err)
-	}
-	if e.Name == "metric_kinds" {
-		if err := renameMetric(tx, cur, merged); err != nil {
-			return nil, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return s.Get(e.Name, id)
+	return e, cur, merged, nil
 }
 
 // renameMetric carries a changed name or unit of a metric the user added

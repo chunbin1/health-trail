@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-单人的本地健康档案：健康问题、症状、就诊、用药、检查报告和检验指标、身体数据、打卡。数据存在本机的 SQLite 里。外部 AI 仍通过 MCP 读写这些数据。窗口里的「AI助手」可以选用一个 OpenAI 兼容接口，把说的话或打的字整理成记录；密钥在本机，语音用 Mac 本机识别。
+单人的本地健康档案：健康问题、症状、就诊、用药、检查报告和检验指标、身体数据、打卡。数据存在本机的 SQLite 里。外部 AI 仍通过 MCP 读写这些数据。窗口里的「AI助手」可以选用一个 OpenAI 兼容接口（要支持工具调用），用和 MCP 同一套工具查档案，把说的话或打的字整理成记录卡片；密钥在本机，语音用 Mac 本机识别。
 
 ## 结构
 
@@ -20,7 +20,7 @@ internal/desktop/        桌面 App 这一层
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
   assistant.go           窗口里的「AI助手」：配置、整理、确认后写入；serve 只给本机，手机拿不到
   speech_darwin.go       Mac 本机听写（SFSpeechRecognizer，要求设备端识别）
-internal/assistant/      调用 OpenAI 兼容接口、解析草稿、写入记录；密钥在数据目录的 assistant.json
+internal/assistant/      AI助手：进程内连 mcpserver，只读工具照常执行，add_record / add_lab_report / checkin / update_record 变成卡片（commit.go 确认后写入）；密钥在数据目录的 assistant.json
 internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
 internal/update/         查 GitHub 最新 Release、下载 zip、校验同一团队的 Developer ID 签名和公证、替换 .app、退出后重新打开
 internal/reminders/      打卡、用药、预约的系统通知（Wails 服务）
@@ -33,7 +33,7 @@ internal/store/          数据层，唯一的数据来源
   convert.go             字段类型转换、日期规范化、检验值和参考范围解析
   queries.go             总览、趋势、打卡统计、搜索、时间线
 internal/server/         REST API（/api/...）、安全层 guard.go、UI 静态文件
-internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）
+internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）；也是 AI助手的工具：标了 ReadOnlyHint 的工具在 App 里不经确认直接执行，写入的工具千万别标
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
 frontend/                React + TS + Vite；embed.go 把构建结果（dist）嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()

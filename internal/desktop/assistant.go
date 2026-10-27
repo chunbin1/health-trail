@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lee/health-trail/internal/assistant"
@@ -193,6 +194,15 @@ type draftRun struct {
 	draft assistant.Draft
 	err   string
 	done  chan struct{}
+	// the tools called so far, shown while the reply is on its way
+	mu    sync.Mutex
+	steps []assistant.Step
+}
+
+func (j *draftRun) stepsSoFar() []assistant.Step {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return append([]assistant.Step{}, j.steps...)
 }
 
 func (a *app) beginDraft(id string, turns []assistant.Turn) *draftRun {
@@ -221,8 +231,13 @@ func (a *app) beginDraft(id string, turns []assistant.Turn) *draftRun {
 	go func() {
 		cfg, err := assistant.Load(a.st.Dir)
 		if err == nil {
-			ctx, stop := context.WithTimeout(context.Background(), 90*time.Second)
-			job.draft, err = assistant.Propose(ctx, a.st, cfg, turns, time.Now())
+			// several rounds of reading, each one a request to the model
+			ctx, stop := context.WithTimeout(context.Background(), 5*time.Minute)
+			job.draft, err = assistant.Propose(ctx, a.st, cfg, turns, time.Now(), func(s assistant.Step) {
+				job.mu.Lock()
+				job.steps = append(job.steps, s)
+				job.mu.Unlock()
+			})
 			stop()
 		}
 		if err != nil {
@@ -245,9 +260,9 @@ func (a *app) draftStatus() map[string]any {
 		if job.err != "" {
 			return map[string]any{"state": "error", "id": job.id, "text": job.text, "error": job.err}
 		}
-		return map[string]any{"state": "done", "id": job.id, "text": job.text, "items": job.draft.Items, "unclear": job.draft.Unclear, "reply": job.draft.Reply, "raw": job.draft.Raw, "usage": job.draft.Usage}
+		return map[string]any{"state": "done", "id": job.id, "text": job.text, "items": job.draft.Items, "unclear": job.draft.Unclear, "reply": job.draft.Reply, "steps": job.draft.Steps, "usage": job.draft.Usage}
 	default:
-		return map[string]any{"state": "pending", "id": job.id, "text": job.text}
+		return map[string]any{"state": "pending", "id": job.id, "text": job.text, "steps": job.stepsSoFar()}
 	}
 }
 

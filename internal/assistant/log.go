@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const assistantLog = "assistant.log"
@@ -14,36 +15,28 @@ const assistantLogMax = 2 << 20
 
 var logMu sync.Mutex
 
-// logExchange appends one call to the external model. The key and picture
-// bytes stay out; the picture is only named by type and size.
-func logExchange(dir string, cfg Config, system string, turns []Turn, reply string, usage Usage, callErr error) {
+// logExchange appends one reply to the log: when, which model, which tools
+// it called, how many tokens, and the error. What the person said, the
+// archive and the answer stay out; they are health data.
+func logExchange(dir string, cfg Config, d Draft, callErr error) {
 	if dir == "" {
 		return
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "—— %s  %s  %s ——\n", time.Now().Format("2006-01-02 15:04:05"), cfg.Model, cfg.BaseURL)
-	b.WriteString("--- system ---\n")
-	b.WriteString(redact(system, cfg.APIKey))
-	b.WriteString("\n")
-	for _, t := range turns {
-		fmt.Fprintf(&b, "--- %s ---\n", t.Role)
-		if t.Text != "" {
-			b.WriteString(redact(t.Text, cfg.APIKey))
-			b.WriteString("\n")
+	if len(d.Steps) > 0 {
+		names := make([]string, len(d.Steps))
+		for i, s := range d.Steps {
+			names[i] = s.Tool
+			if s.Error {
+				names[i] += "（出错）"
+			}
 		}
-		for _, im := range t.Images {
-			fmt.Fprintf(&b, "[图片 %s，约 %d KB]\n", im.MIME, len(im.Data)*3/4/1024)
-		}
+		b.WriteString("工具：" + strings.Join(names, "、") + "\n")
 	}
-	b.WriteString("--- reply ---\n")
-	if strings.TrimSpace(reply) == "" {
-		b.WriteString("（没有正文）\n")
-	} else {
-		b.WriteString(redact(reply, cfg.APIKey))
-		b.WriteString("\n")
-	}
+	fmt.Fprintf(&b, "回复 %d 字 · 整理 %d 条\n", utf8.RuneCountInString(d.Reply), len(d.Items))
 	fmt.Fprintf(&b, "tokens 输入 %d · 输出 %d · 合计 %d · 缓存命中 %d\n",
-		usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens, usage.CachedTokens)
+		d.Usage.PromptTokens, d.Usage.CompletionTokens, d.Usage.TotalTokens, d.Usage.CachedTokens)
 	if callErr != nil {
 		fmt.Fprintf(&b, "--- error ---\n%s\n", redact(callErr.Error(), cfg.APIKey))
 	}

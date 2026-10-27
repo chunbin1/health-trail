@@ -190,7 +190,8 @@ export interface UpdateStatus {
 
 export class ApiError extends Error {}
 
-// In-app capture: a sentence in, proposed records out, saved only after confirm.
+// In-app assistant: it reads the archive with the MCP tools; what it would
+// write comes back as cards, saved only after confirm (or by automatic saving).
 export interface AssistantConfig {
   configured: boolean
   base_url: string
@@ -230,10 +231,20 @@ export interface ChatMsgWire {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
   saved?: Record<number, { type?: string; id?: number }>
   locked?: boolean
+  steps?: ToolStep[]
+}
+
+// One tool the assistant called while answering.
+export interface ToolStep {
+  tool: string
+  type?: string
+  id?: number
+  text?: string
+  error?: boolean
 }
 
 export interface DraftItem {
-  kind: 'record' | 'checkin' | 'lab_report' | string
+  kind: 'record' | 'checkin' | 'lab_report' | 'update' | string
   type?: string
   fields?: Record<string, any>
   condition_name?: string
@@ -247,6 +258,9 @@ export interface DraftItem {
   results?: LabDraft[]
   summary?: string
   problem?: string
+  // kind 'update': record id of type; fields are the new values, before the old
+  id?: number
+  before?: Record<string, any>
 }
 
 export interface TokenUse {
@@ -260,7 +274,7 @@ export interface Draft {
   items: DraftItem[]
   unclear?: string
   reply?: string
-  raw?: string
+  steps?: ToolStep[]
   usage?: TokenUse
 }
 
@@ -273,7 +287,7 @@ export interface DraftStatus {
   items?: DraftItem[]
   unclear?: string
   reply?: string
-  raw?: string
+  steps?: ToolStep[]
   usage?: TokenUse
   error?: string
 }

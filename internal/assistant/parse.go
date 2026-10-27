@@ -2,55 +2,11 @@ package assistant
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/lee/health-trail/internal/store"
 )
-
-func parseDraft(content string) (Draft, error) {
-	content = strings.TrimSpace(content)
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(strings.TrimSpace(content), "```")
-	content = strings.TrimSpace(content)
-	if i := strings.Index(content, "{"); i >= 0 {
-		if j := strings.LastIndex(content, "}"); j > i {
-			content = content[i : j+1]
-		}
-	}
-	var raw map[string]any
-	if err := json.Unmarshal([]byte(content), &raw); err != nil {
-		return Draft{}, fmt.Errorf("整理结果不是 JSON")
-	}
-	itemsRaw, ok := raw["items"]
-	if !ok {
-		itemsRaw = raw["records"]
-	}
-	d := Draft{}
-	if s, _ := raw["reply"].(string); s != "" {
-		d.Reply = strings.TrimSpace(s)
-	}
-	if s, _ := raw["unclear"].(string); s != "" {
-		d.Unclear = strings.TrimSpace(s)
-	}
-	list, ok := itemsRaw.([]any)
-	if itemsRaw != nil && !ok {
-		return Draft{}, fmt.Errorf("整理结果不是 JSON")
-	}
-	for _, one := range list {
-		m, ok := one.(map[string]any)
-		if !ok {
-			return Draft{}, fmt.Errorf("整理结果里有一条无法识别")
-		}
-		d.Items = append(d.Items, itemFromMap(m))
-	}
-	if d.Items == nil {
-		d.Items = []Item{}
-	}
-	return d, nil
-}
 
 func itemFromMap(m map[string]any) Item {
 	it := Item{Kind: strings.TrimSpace(textOf(m["kind"]))}
@@ -121,6 +77,12 @@ func normalize(it Item) Item { return normalizeRaw(it, nil) }
 func normalizeRaw(it Item, raw map[string]any) Item {
 	if raw == nil {
 		raw = map[string]any{}
+	}
+	if it.Kind == "update" {
+		if typ, ok := aliasOf(it.Type); ok && typ != "checkin" && typ != "lab_report" {
+			it.Type = typ
+		}
+		return it
 	}
 	switch it.Kind {
 	case "", "record":

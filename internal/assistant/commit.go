@@ -27,8 +27,9 @@ type Result struct {
 	FailedIndex *int    `json:"failed_index,omitempty"`
 }
 
-// Commit writes items. Ordinary records share one transaction. Check-ins and
-// lab reports run after it; if one of those fails, earlier rows stay saved.
+// Commit writes items. Ordinary records share one transaction. Changes,
+// check-ins and lab reports run after it; if one of those fails, earlier
+// rows stay saved.
 func Commit(st *store.Store, items []Item) Result {
 	out := Result{Saved: []Saved{}}
 	if len(items) == 0 {
@@ -44,7 +45,7 @@ func Commit(st *store.Store, items []Item) Result {
 	}
 	for i, it := range items {
 		switch it.Kind {
-		case "record", "checkin", "lab_report":
+		case "record", "checkin", "lab_report", "update":
 		default:
 			return fail(out, i, fmt.Sprintf("第 %d 条：不能记这种类型", i+1))
 		}
@@ -83,6 +84,19 @@ func Commit(st *store.Store, items []Item) Result {
 			})
 			j++
 		}
+	}
+	for i, it := range items {
+		if it.Kind != "update" {
+			continue
+		}
+		row, err := st.Update(it.Type, it.ID, store.Record(it.Fields))
+		if err != nil {
+			return fail(out, i, fmt.Sprintf("第 %d 条：%s", i+1, err.Error()))
+		}
+		out.Saved = append(out.Saved, Saved{
+			Index: i, Kind: "update", Type: it.Type,
+			ID: idOf(row), Title: titleOf(it.Type, row),
+		})
 	}
 	for i, it := range items {
 		if it.Kind != "checkin" {

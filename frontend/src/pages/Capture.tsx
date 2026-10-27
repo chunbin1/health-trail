@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
 import { Check, ImagePlus, Mic, SendHorizontal, X } from 'lucide-react'
-import { api, ApiError, fmtDate, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft } from '../api'
+import { api, ApiError, fmtDate, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft, type ToolStep } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
 import { AssistantSetup } from '../components/AssistantSetup'
 import { t, tx } from '../i18n'
@@ -22,7 +22,7 @@ interface ChatMsg {
   items?: DraftItem[] | null
   unclear?: string
   reply?: string
-  raw?: string
+  steps?: ToolStep[]
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; cached_tokens?: number }
   error?: string
   saved?: Record<number, { type?: string; id?: number }>
@@ -79,10 +79,15 @@ function turnsOf(msgs: ChatMsg[]): ChatTurn[] {
         text: m.text,
         images: keepPics.has(m.id) ? m.images?.filter((p) => p.data).map((p) => ({ mime: p.mime, data: p.data })) : undefined,
       })
-    } else if (m.reply || m.items || m.unclear) {
-      const mark = m.saved && Object.keys(m.saved).length ? '（用户已保存）' : '（用户还没保存）'
-      const body = [m.reply, JSON.stringify({ items: m.items || [], unclear: m.unclear || '' })].filter(Boolean).join('\n')
-      out.push({ role: 'assistant', text: body + mark })
+    } else if (m.reply || m.items?.length || m.unclear) {
+      // what the model sees of an earlier reply: its answer, and each card
+      // with whether it was saved (and the id it got)
+      const cards = (m.items || []).map((it, i) => {
+        const s = m.saved?.[i]
+        return '- ' + itemBrief(it) + '：' + (s?.id ? `已保存（${s.type} #${s.id}）` : s ? '已保存' : '还没保存')
+      })
+      const body = [m.reply, m.unclear, cards.length ? '这一轮整理的卡片：\n' + cards.join('\n') : ''].filter(Boolean).join('\n')
+      out.push({ role: 'assistant', text: body })
     }
   }
   return out
@@ -147,7 +152,7 @@ function SaveMode({ auto, onChange }: { auto: boolean; onChange: (on: boolean) =
     }
   }, [open])
   const modes = [
-    { on: true, key: '1', title: t('自动保存'), desc: t('回复一到就写入档案，健康问题和用药要另外点保存'), recommend: true },
+    { on: true, key: '1', title: t('自动保存'), desc: t('回复一到就写入档案；健康问题、用药和对已有记录的修改要另外点保存'), recommend: true },
     { on: false, key: '2', title: t('手动保存'), desc: t('看过、改过之后再保存'), recommend: false },
   ]
   return (
@@ -192,6 +197,8 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   const [text, setText] = useState(kept.draft)
   const [pics, setPics] = useState<Pic[]>([])
   const [pendingId, setPendingId] = useState(kept.pendingId)
+  // the tools called so far while a reply is on its way
+  const [live, setLive] = useState<ToolStep[]>([])
   const [listening, setListening] = useState(false)
   const [micBusy, setMicBusy] = useState(false)
   const [savingId, setSavingId] = useState('')
@@ -276,6 +283,10 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
         return
       }
       if (stop || s.id !== pendingRef.current) return
+      if (s.state === 'pending') {
+        setLive(s.steps || [])
+        return
+      }
       if (s.state === 'done') {
         takeReply(s.id, s)
         return
@@ -320,13 +331,14 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     setText(v)
   }
 
-  function takeReply(id: string, d: { items?: DraftItem[]; unclear?: string; reply?: string; raw?: string; usage?: ChatMsg['usage'] }) {
+  function takeReply(id: string, d: { items?: DraftItem[]; unclear?: string; reply?: string; steps?: ToolStep[]; usage?: ChatMsg['usage'] }) {
     if (!id || applied.current === id) return
     applied.current = id
     setMessages((ms) => [...ms, {
       id: id + '-a', role: 'assistant', text: '', items: d.items || [], unclear: d.unclear || '',
-      reply: d.reply || '', usage: d.usage,
+      reply: d.reply || '', steps: d.steps || [], usage: d.usage,
     }])
+    setLive([])
     setPendingId('')
     pendingRef.current = ''
     setErr('')
@@ -401,6 +413,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     setMessages(history)
     writeText('')
     setPics([])
+    setLive([])
     setPendingId(id)
     pendingRef.current = id
     remember({ id: chatId, messages: history, draft: '', pendingId: id })
@@ -466,8 +479,10 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
         return
       }
       const pics = picsBefore(msg)
-      const reports = (res.saved || []).filter((s) => s.type === 'reports' && s.id)
-      const targets = reports.length ? reports : (res.saved || []).filter((s) => s.id).slice(0, 1)
+      // pictures go with what was made from them, not onto a record that was changed
+      const made = (res.saved || []).filter((s) => s.id && s.kind !== 'update')
+      const reports = made.filter((s) => s.type === 'reports')
+      const targets = reports.length ? reports : made.slice(0, 1)
       try {
         for (const s of targets) {
           for (let n = 0; n < pics.length; n++) {
@@ -576,7 +591,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       <div className="page-head">
         <div className="titles">
           <h1>{t('AI助手')}</h1>
-          <div className="sub">{t('像聊天一样说，也可以问档案里的报告和症状，或发化验单、处方的照片。要记下的内容，自动保存开着时会写入档案。健康问题和用药建议不会自动写入，要点保存。')}</div>
+          <div className="sub">{t('像聊天一样说，也可以问档案里的任何记录，或发化验单、处方的照片。要记下的内容，自动保存开着时会写入档案；健康问题、用药建议和对已有记录的修改不会自动写入，要点保存。')}</div>
         </div>
         {view.configured && !showSetup && (
           <button type="button" className="btn ghost sm" onClick={() => setShowSetup(true)}>{t('修改接口')}</button>
@@ -596,7 +611,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       <div className="chat-top">
         <div className="notice">
           <ImagePlus size={18} />
-          <span>{t('声音只在这台 Mac 上识别，不会上传。文字和图片会发给你填写的接口，同时带上已有健康问题、用药和打卡项的名称。整理出来的内容不能代替医生的诊断。')}</span>
+          <span>{t('声音只在这台 Mac 上识别，不会上传。文字和图片会发给你填写的接口；回答时它会按需读取档案里的记录（和连接 Claude 用的是同一套工具），读到的内容也会发过去。整理出来的内容不能代替医生的诊断。')}</span>
         </div>
         {(!view.configured || showSetup) && (
           <section className="card">
@@ -629,6 +644,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
             </div>
           ) : (
             <div key={m.id} className="chat-turn">
+              <Steps steps={m.steps} />
               {m.reply && <div className="bubble-assistant">{m.reply}</div>}
               {m.unclear && <div className="notice"><span>{m.unclear}</span></div>}
               {m.items && m.items.length === 0 && !m.unclear && !m.reply && <div className="sub">{t('没有整理出可以保存的记录。')}</div>}
@@ -646,6 +662,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
                     )}
                   </div>
                   {it.problem && <div className="error" style={{ marginBottom: 8 }}>{it.problem}</div>}
+                  {it.kind === 'update' && <UpdateDiff item={it} />}
                   {m.saved?.[i]?.id && m.saved[i].type && (
                     <button type="button" className="btn ghost sm" onClick={() => openRecord(m.saved![i].type!, m.saved![i].id!)}>{t('查看')}</button>
                   )}
@@ -675,7 +692,12 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
               )}
             </div>
           ))}
-          {waiting && <div className="sub">{t('正在思考…')}</div>}
+          {waiting && (
+            <div className="chat-turn">
+              <Steps steps={live} />
+              <div className="sub">{t('正在思考…')}</div>
+            </div>
+          )}
           <div ref={endRef} />
         </div>
 
@@ -735,18 +757,85 @@ function wireOf(messages: ChatMsg[]): ChatMsgWire[] {
     id: m.id, role: m.role, text: m.text,
     images: m.images?.filter((p) => p.data).map((p) => ({ mime: p.mime, data: p.data })),
     imageCount: m.images?.length || m.imageCount || 0,
-    items: m.items, unclear: m.unclear, reply: m.reply, usage: m.usage, saved: m.saved, locked: m.locked,
+    items: m.items, unclear: m.unclear, reply: m.reply, steps: m.steps, usage: m.usage, saved: m.saved, locked: m.locked,
   }))
 }
 
-// A health issue (often the assistant's own diagnosis) and a medicine are
-// never written by automatic saving: the person saves them.
+// A health issue (often the assistant's own diagnosis), a medicine and a
+// change to a record already on file are never written by automatic saving:
+// the person saves them.
 function waitsForSave(it: DraftItem) {
-  return it.type === 'medications' || it.kind === 'medications' || it.type === 'conditions' || it.kind === 'conditions'
+  return it.kind === 'update' || it.type === 'medications' || it.kind === 'medications' || it.type === 'conditions' || it.kind === 'conditions'
 }
 
 function savedAll(m: ChatMsg) {
   return !!m.items?.length && !!m.saved && m.items.every((_, i) => m.saved![i])
+}
+
+// itemBrief is a card as the model sees it in later turns (not shown).
+function itemBrief(it: DraftItem) {
+  if (it.kind === 'lab_report') return `化验单「${it.report?.title || ''}」${it.results?.length || 0} 项`
+  if (it.kind === 'checkin') return `打卡「${it.habit || ''}」`
+  if (it.kind === 'update') return `修改 ${it.type} #${it.id} ${JSON.stringify(it.fields || {})}`
+  return `${it.type} ${JSON.stringify(it.fields || {})}`
+}
+
+function stepLabel(s: ToolStep, entity: (name: string) => Entity | undefined) {
+  const e = s.type ? entity(s.type) : undefined
+  const type = e ? tx(e.label) : s.type || ''
+  const name = s.text || ''
+  switch (s.tool) {
+    case 'health_overview': return t('看了健康总览')
+    case 'search_records': return t('搜索「{name}」', { name })
+    case 'list_records': return t('看了{type}列表', { type })
+    case 'get_record': return t('读了{type} #{id}', { type, id: s.id ?? '' })
+    case 'list_lab_items': return t('看了检验项目')
+    case 'get_lab_trend': return t('查了「{name}」的历次结果', { name })
+    case 'get_metric_trend': return t('查了「{name}」的变化', { name })
+    case 'get_checkin_stats': return t('看了打卡统计')
+    case 'add_record': return t('整理一条{type}', { type })
+    case 'add_lab_report': return t('整理化验单')
+    case 'checkin': return t('整理打卡「{name}」', { name })
+    case 'update_record': return t('整理修改：{type} #{id}', { type, id: s.id ?? '' })
+    default: return s.tool
+  }
+}
+
+// Steps lists what the assistant looked at and put together for this reply.
+function Steps({ steps }: { steps?: ToolStep[] }) {
+  const { entity } = useApp()
+  if (!steps?.length) return null
+  return (
+    <ul className="chat-steps">
+      {steps.map((s, i) => (
+        <li key={i} className={s.error ? 'failed' : undefined}>
+          {stepLabel(s, entity)}{s.error && t('（没成功）')}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// UpdateDiff shows a change to a record on file: each field, before → after.
+function UpdateDiff({ item }: { item: DraftItem }) {
+  const { entity } = useApp()
+  const e = item.type ? entity(item.type) : undefined
+  const show = (v: any) => (v == null || v === '' ? t('（空）') : typeof v === 'string' ? tx(v) : String(v))
+  return (
+    <div className="diff">
+      {Object.entries(item.fields || {}).map(([k, v]) => {
+        const f = e?.fields.find((x) => x.name === k)
+        return (
+          <div key={k} className="diff-row">
+            <span className="muted">{f ? tx(f.label) : k}</span>
+            <span>{show(item.before?.[k])}</span>
+            <span className="muted">→</span>
+            <strong>{show(v)}</strong>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function iconKind(it: DraftItem) {
@@ -756,6 +845,7 @@ function iconKind(it: DraftItem) {
 }
 
 function itemDate(it: DraftItem, entity: (name: string) => Entity | undefined) {
+  if (it.kind === 'update') return ''
   const e = it.type ? entity(it.type) : undefined
   const raw = e?.dateKey && it.fields ? it.fields[e.dateKey] : ''
   return raw ? fmtDate(String(raw).slice(0, 10)) : ''
@@ -765,11 +855,15 @@ function itemTitle(it: DraftItem, entity: (name: string) => { label: string; tit
   if (it.kind === 'checkin') return it.habit || t('打卡')
   if (it.kind === 'lab_report') return String(it.report?.title || t('化验单'))
   const e = it.type ? entity(it.type) : undefined
+  if (it.kind === 'update') return t('修改：{name}', { name: it.summary || (e ? tx(e.label) + ' #' + it.id : '#' + it.id) })
   const title = e && it.fields ? it.fields[e.titleKey] : ''
   return String(title || it.summary || (e ? tx(e.label) : it.type || ''))
 }
 
 function cleanItem(it: DraftItem): DraftItem {
+  const { problem: _, ...kept } = it
+  // a change may clear a field on purpose
+  if (it.kind === 'update') return kept
   const fields: Record<string, any> = {}
   for (const [k, v] of Object.entries(it.fields || {})) {
     if (v === '' || v == null) continue
@@ -782,6 +876,7 @@ function cleanItem(it: DraftItem): DraftItem {
 function ItemEditor({ item, onChange }: { item: DraftItem; onChange: (it: DraftItem) => void }) {
   if (item.kind === 'checkin') return <CheckinEditor item={item} onChange={onChange} />
   if (item.kind === 'lab_report') return <LabEditor item={item} onChange={onChange} />
+  if (item.kind === 'update') return <UpdateEditor item={item} onChange={onChange} />
   return <RecordEditor item={item} onChange={onChange} />
 }
 
@@ -815,6 +910,22 @@ function RecordEditor({ item, onChange }: { item: DraftItem; onChange: (it: Draf
       <div className="full">
         <button type="button" className="btn ghost sm" onClick={() => setAll(!all)}>{all ? t('收起') : t('全部字段')}</button>
       </div>
+    </div>
+  )
+}
+
+// UpdateEditor edits only the fields the change touches.
+function UpdateEditor({ item, onChange }: { item: DraftItem; onChange: (it: DraftItem) => void }) {
+  const { entity } = useApp()
+  const e = item.type ? entity(item.type) : undefined
+  if (!e) return null
+  const fields = item.fields || {}
+  return (
+    <div className="form" style={{ marginTop: 12 }}>
+      {Object.keys(fields).map((k) => {
+        const f = e.fields.find((x) => x.name === k)
+        return f ? <FieldInput key={k} field={f} value={fields[k]} onChange={(v) => onChange({ ...item, fields: { ...fields, [k]: v } })} wide={f.type === 'longtext'} /> : null
+      })}
     </div>
   )
 }
