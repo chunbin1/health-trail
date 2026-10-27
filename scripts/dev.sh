@@ -1,8 +1,8 @@
 #!/bin/bash
 # Dev mode, run by `make dev`:
 #   - the UI on Vite (http://localhost:5173), with hot module reload
-#   - the API on 127.0.0.1:8722 with a throwaway data dir, rebuilt and
-#     restarted whenever a .go file changes
+#   - the API on 127.0.0.1:8722 on the shared test data (the same folder as
+#     make test-window), rebuilt and restarted whenever a .go file changes
 # 8722, not the default 8721, so it doesn't collide with an installed app.
 # No watcher dependency: it polls file times once a second.
 #
@@ -37,7 +37,7 @@ if [ "${1:-}" = --real ]; then
   fi
   echo "[dev] 使用真实数据：$DATA"
 else
-  DATA=${HEALTH_TRAIL_DEV_DATA:-/tmp/health-trail-dev}
+  DATA=${HEALTH_TRAIL_DEV_DATA:-$HOME/Library/Application Support/HealthTrail-Test}
 fi
 api=
 vite=
