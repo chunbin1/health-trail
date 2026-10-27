@@ -856,6 +856,8 @@ function itemTitle(it: DraftItem, entity: (name: string) => { label: string; tit
   if (it.kind === 'lab_report') return String(it.report?.title || t('化验单'))
   const e = it.type ? entity(it.type) : undefined
   if (it.kind === 'update') return t('修改：{name}', { name: it.summary || (e ? tx(e.label) + ' #' + it.id : '#' + it.id) })
+  // a dose's own title is only the time; the medicine is in the summary
+  if (it.type === 'doses' && it.summary) return it.summary
   const title = e && it.fields ? it.fields[e.titleKey] : ''
   return String(title || it.summary || (e ? tx(e.label) : it.type || ''))
 }

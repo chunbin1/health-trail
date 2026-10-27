@@ -12,6 +12,9 @@ import (
 // "已为您安排" is a claim; "我来帮您预约" is not.
 var doneRe = regexp.MustCompile(`已经?(为您|帮您|给您|帮你|为你|给你)?(创建|安排|预约|设置|设定|保存|记下|记录|添加|修改|更新|改成|改为)|(创建|安排|预约|设置|设|保存|记|添加|修改|改|建)好了`)
 
+// the same in English, for a model that answers in English
+var doneEnRe = regexp.MustCompile(`(?i)\b(i've|i have|has been|have been|is now|are now|already|successfully)\s+(been\s+)?(booked|scheduled|saved|created|added|set up|set|recorded|logged|updated|changed)\b|\ball set\b`)
+
 // claimsDone tells whether a reply says something was already done. "已经
 // 记录过" is about an earlier reply, not this one.
 func claimsDone(reply string) bool {
@@ -20,7 +23,7 @@ func claimsDone(reply string) bool {
 			return true
 		}
 	}
-	return false
+	return doneEnRe.MatchString(reply)
 }
 
 const claimNudge = "（App 检查）你的回复说已经做好了，但这次没有调用 add_record、add_lab_report、checkin 或 update_record，什么都没有整理成卡片，也没有保存。" +

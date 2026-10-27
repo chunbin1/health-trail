@@ -3,6 +3,7 @@ package assistant
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -303,14 +304,18 @@ func TestClaimWithoutCardIsSentBack(t *testing.T) {
 
 func TestClaimsDone(t *testing.T) {
 	for s, want := range map[string]bool{
-		"这个预约已经创建好了":      true,
-		"我已经为您安排了以下预约":    true,
-		"已为您设置每天早上9点提醒":   true,
-		"提醒设好了":           true,
-		"这条已经记录过了，不用再记":   false,
-		"我来帮您预约检查":        false,
-		"整理好了，保存后生效":      false,
-		"建议1-2个月后复查，要预约吗": false,
+		"这个预约已经创建好了":                            true,
+		"我已经为您安排了以下预约":                          true,
+		"已为您设置每天早上9点提醒":                         true,
+		"提醒设好了":                                 true,
+		"这条已经记录过了，不用再记":                         false,
+		"我来帮您预约检查":                              false,
+		"整理好了，保存后生效":                            false,
+		"建议1-2个月后复查，要预约吗":                       false,
+		"I've booked your check-up for Nov 10.": true,
+		"Your reminder has been set.":           true,
+		"I can book it for you. What time?":     false,
+		"Should I set a reminder for 9:00?":     false,
 	} {
 		if got := claimsDone(s); got != want {
 			t.Errorf("%q: %v", s, got)
@@ -607,7 +612,7 @@ func TestInstructionsKeepTheLimitsAndCacheOrder(t *testing.T) {
 	if !strings.HasPrefix(s, "MCP 的说明") {
 		t.Fatal("the MCP instructions should come first")
 	}
-	for _, want := range []string{"结果仅供参考", "需要去医院", "观察中", "计划中", "update_record", "不要说「已设置」", "非布司他"} {
+	for _, want := range []string{"结果仅供参考", "需要去医院", "观察中", "计划中", "update_record", "不要说「已设置」", "非布司他", "助手建议的时间", "检查建议"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("instructions have no %s", want)
 		}
@@ -669,4 +674,28 @@ func openStore(t *testing.T) *store.Store {
 	}
 	t.Cleanup(func() { s.Close() })
 	return s
+}
+
+func TestDoseCardNamesTheMedicine(t *testing.T) {
+	st := openStore(t)
+	med, err := st.Create("medications", store.Record{"name": "碳酸氢钠片", "status": "在用"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeModel{t: t, replies: []string{
+		callsSaying("记下了。", "add_record", fmt.Sprintf(`{"type":"doses","fields":{"medication_id":%d,"taken_at":"2026-10-27 09:00","amount":1}}`, idOf(med))),
+	}}
+	d, err := Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "吃了药"}}, day, nil)
+	if err != nil || len(d.Items) != 1 || d.Items[0].Summary != "碳酸氢钠片" {
+		t.Fatalf("err %v draft %+v", err, d)
+	}
+}
+
+func TestEnglishQuestionsAreRecognised(t *testing.T) {
+	if !medicineAsk("What medicine should I take for this?") || !diagnosisAsk("What's wrong with me?") || !recordAsk("Please record my weight") {
+		t.Fatal("English question not recognised")
+	}
+	if medicineAsk("How was my sleep?") {
+		t.Fatal("not about medicine")
+	}
 }

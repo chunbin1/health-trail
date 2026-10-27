@@ -346,7 +346,22 @@ func (w *drafting) check(it *Item) string {
 		// 0: put together in this reply, not on file yet
 		have[name] = 0
 	}
+	if it.Kind == "record" && it.Type == "doses" {
+		// the card's title: a dose's own title is only the time
+		it.Summary = w.medName(*it)
+	}
 	return ""
+}
+
+func (w *drafting) medName(it Item) string {
+	if it.MedicationName != "" {
+		return it.MedicationName
+	}
+	r, err := w.st.Get("medications", idOf(store.Record{"id": it.Fields["medication_id"]}))
+	if err != nil {
+		return ""
+	}
+	return text(r["name"])
 }
 
 // newMetric accepts a reading of a metric kind drafted earlier in this reply.
@@ -403,7 +418,13 @@ func fillMedicationStatus(items []Item) []Item {
 }
 
 func medicineAsk(s string) bool {
-	for _, w := range []string{"药", "怎么治", "怎么吃"} {
+	return hasAny(s, "药", "怎么治", "怎么吃", "medicine", "medication", "drug", "pill", "treat", "prescri")
+}
+
+// hasAny tells whether s has one of the words; English in any case.
+func hasAny(s string, words ...string) bool {
+	s = strings.ToLower(s)
+	for _, w := range words {
 		if strings.Contains(s, w) {
 			return true
 		}
@@ -412,21 +433,11 @@ func medicineAsk(s string) bool {
 }
 
 func diagnosisAsk(s string) bool {
-	for _, w := range []string{"什么问题", "什么病", "是不是", "诊断", "可能是"} {
-		if strings.Contains(s, w) {
-			return true
-		}
-	}
-	return false
+	return hasAny(s, "什么问题", "什么病", "是不是", "诊断", "可能是", "what's wrong", "what is wrong", "diagnos", "could it be", "do i have")
 }
 
 func recordAsk(s string) bool {
-	for _, w := range []string{"记下", "记一下", "记录", "帮我记", "保存"} {
-		if strings.Contains(s, w) {
-			return true
-		}
-	}
-	return false
+	return hasAny(s, "记下", "记一下", "记录", "帮我记", "保存", "record", "log ", "note down", "write down", "save")
 }
 
 func sameName(s string) string {
