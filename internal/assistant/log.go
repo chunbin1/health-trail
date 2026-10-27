@@ -98,7 +98,7 @@ func logExchange(dir string, cfg Config, x *exchange, d Draft, callErr error) {
 				args = "{}"
 			}
 			fmt.Fprintf(&b, "调用 %s %s\n", c.name, args)
-			mark := "→"
+			mark := "→ "
 			if c.failed {
 				mark = "→ 出错："
 			}
@@ -106,7 +106,7 @@ func logExchange(dir string, cfg Config, x *exchange, d Draft, callErr error) {
 			if n := utf8.RuneCountInString(c.out); n > logResultMax {
 				out = clip(out, logResultMax) + fmt.Sprintf("（共 %d 字）", n)
 			}
-			fmt.Fprintf(&b, "  %s %s\n", mark, out)
+			fmt.Fprintf(&b, "  %s%s\n", mark, out)
 		}
 	}
 	if d.Reply != "" {
