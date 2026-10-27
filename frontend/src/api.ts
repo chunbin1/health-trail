@@ -190,6 +190,114 @@ export interface UpdateStatus {
 
 export class ApiError extends Error {}
 
+// In-app capture: a sentence in, proposed records out, saved only after confirm.
+export interface AssistantConfig {
+  configured: boolean
+  base_url: string
+  model: string
+  has_key: boolean
+  speech: boolean
+  auto_save: boolean
+}
+
+export interface LabDraft {
+  item_name?: string
+  value?: string | number
+  unit?: string
+  ref_range?: string
+  flag?: string
+  panel?: string
+  test_date?: string
+  notes?: string
+}
+
+export interface ChatHead {
+  id: string
+  updated: string
+  title: string
+  tokens?: number
+}
+
+export interface ChatMsgWire {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  images?: { mime: string; data: string }[]
+  imageCount?: number
+  items?: DraftItem[] | null
+  unclear?: string
+  reply?: string
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+  saved?: Record<number, { type?: string; id?: number }>
+  locked?: boolean
+}
+
+export interface DraftItem {
+  kind: 'record' | 'checkin' | 'lab_report' | string
+  type?: string
+  fields?: Record<string, any>
+  condition_name?: string
+  medication_name?: string
+  habit?: string
+  date?: string
+  value?: number | string | null
+  notes?: string
+  report?: Record<string, any>
+  panel?: string
+  results?: LabDraft[]
+  summary?: string
+  problem?: string
+}
+
+export interface TokenUse {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  cached_tokens?: number
+}
+
+export interface Draft {
+  items: DraftItem[]
+  unclear?: string
+  reply?: string
+  raw?: string
+  usage?: TokenUse
+}
+
+// A draft keeps running after the page is left. state "pending" means the
+// reply is not back yet.
+export interface DraftStatus {
+  state: 'none' | 'pending' | 'done' | 'error'
+  id?: string
+  text?: string
+  items?: DraftItem[]
+  unclear?: string
+  reply?: string
+  raw?: string
+  usage?: TokenUse
+  error?: string
+}
+
+export interface ChatTurn {
+  role: 'user' | 'assistant'
+  text: string
+  images?: { mime: string; data: string }[]
+}
+
+export interface CommitResult {
+  ok: boolean
+  error?: string
+  saved: { index: number; kind: string; type?: string; id?: number; title?: string }[]
+  failed_index?: number
+}
+
+export interface SpeechState {
+  available: boolean
+  listening: boolean
+  text: string
+  error?: string
+}
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, headers: {} }
   if (body instanceof FormData) {
@@ -259,16 +367,38 @@ export const api = {
   checkin: (habit_id: number, date: string, value?: number | null, notes?: string) =>
     req<Rec>('POST', '/api/checkins', { habit_id, date, value: value ?? null, notes: notes ?? '' }),
   uncheck: (habit_id: number, date: string) => req<unknown>('DELETE', '/api/checkins' + qs({ habit_id, date })),
-  upload: (owner_type: string, owner_id: number, file: File) => {
-    const fd = new FormData()
-    fd.set('owner_type', owner_type)
-    fd.set('owner_id', String(owner_id))
-    fd.set('file', file)
-    return req<Attachment>('POST', '/api/attachments', fd)
+  // JSON, not a file upload: the Mac window's address scheme drops a
+  // multipart file body and the server then sees an empty request.
+  uploadBase64: (owner_type: string, owner_id: number, filename: string, mime: string, data: string) =>
+    req<Attachment>('POST', '/api/attachments', { owner_type, owner_id, filename, mime, data }),
+  upload: async (owner_type: string, owner_id: number, file: File) => {
+    const data = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => {
+        const s = String(r.result || '')
+        const i = s.indexOf(',')
+        resolve(i >= 0 ? s.slice(i + 1) : s)
+      }
+      r.onerror = () => reject(new ApiError(t('这张图片读不出来')))
+      r.readAsDataURL(file)
+    })
+    return api.uploadBase64(owner_type, owner_id, file.name || '附件', file.type, data)
   },
   removeAttachment: (id: number) => req<unknown>('DELETE', `/api/attachments/${id}`),
   // the Mac window only: opens the file in its Mac app (or the Finder)
   openAttachment: (id: number) => req<{ revealed: boolean }>('POST', `/api/attachments/${id}/open`),
+  assistant: () => req<AssistantConfig>('GET', '/api/assistant'),
+  setAssistant: (body: { base_url?: string; api_key?: string; model?: string; clear_key?: boolean; auto_save?: boolean }) =>
+    req<AssistantConfig>('PUT', '/api/assistant', body).then((c) => { window.dispatchEvent(new Event('assistant-config')); return c }),
+  assistantDraft: (body: { id: string; messages: ChatTurn[] }) => req<Draft>('POST', '/api/assistant/draft', body),
+  assistantDraftStatus: () => req<DraftStatus>('GET', '/api/assistant/draft'),
+  assistantCommit: (items: DraftItem[]) => req<CommitResult>('POST', '/api/assistant/commit', { items }),
+  assistantChats: () => req<ChatHead[]>('GET', '/api/assistant/chats'),
+  assistantChat: (id: string) => req<ChatHead & { messages: ChatMsgWire[] }>('GET', '/api/assistant/chats/' + encodeURIComponent(id)),
+  saveAssistantChat: (body: { id: string; messages: ChatMsgWire[] }) => req<ChatHead>('PUT', '/api/assistant/chats', body),
+  speechStart: () => req<SpeechState>('POST', '/api/assistant/speech/start'),
+  speechStop: () => req<SpeechState>('POST', '/api/assistant/speech/stop'),
+  speech: () => req<SpeechState>('GET', '/api/assistant/speech'),
 }
 
 // ---- formatting helpers

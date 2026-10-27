@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -126,6 +127,17 @@ func TestAPI(t *testing.T) {
 	w = do(h, "GET", "/api/attachments/1", local, host, "", nil)
 	if w.Header().Get("Content-Type") != "application/octet-stream" || !strings.HasPrefix(w.Header().Get("Content-Disposition"), "attachment") {
 		t.Errorf("html attachment served as %v", w.Header())
+	}
+	// the window sends the bytes as JSON, because a multipart file body
+	// does not survive the Mac web view
+	jpg := base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff, 0xd9})
+	w = do(h, "POST", "/api/attachments", local, host, `{"owner_type":"conditions","owner_id":1,"filename":"化验.jpg","mime":"image/jpeg","data":"`+jpg+`"}`, nil)
+	if w.Code != 200 {
+		t.Fatalf("json upload: %d %s", w.Code, w.Body)
+	}
+	w = do(h, "GET", "/api/attachments/2", local, host, "", nil)
+	if w.Code != 200 || w.Header().Get("Content-Type") != "image/jpeg" {
+		t.Fatalf("jpeg attachment: %d %v", w.Code, w.Header())
 	}
 	if w := do(h, "DELETE", "/api/r/conditions/1", local, host, "", nil); w.Code != 200 {
 		t.Errorf("delete: %d", w.Code)

@@ -48,7 +48,7 @@ For now it supports macOS 13 and later only, on both Apple silicon and Intel.
 
 <sub>The dmg is signed with a Developer ID and notarized by Apple, so it opens with a double-click. You can also [build from source](#build-from-source). When a new version comes out, the app tells you in Settings → Software update, and one click updates it.</sub>
 
-**2 · Connect AI**: open the app's Connect AI page and copy the configuration for the AI you use (Claude Desktop, Claude Code, Codex, or any other AI that supports MCP).
+**2 · Connect AI**: open the app's Connect AI page. Use an API for the assistant in the window (address, key and model), or use MCP and copy the configuration for the AI you use (Claude Desktop, Claude Code, Codex, or any other AI that supports MCP).
 
 **3 · Start using it**: say to the AI
 
@@ -172,6 +172,14 @@ Add a stdio MCP server: set the command to the program path above and the argume
 
 The AI only speaks from your data, and suggests seeing a doctor when something looks abnormal. **Its analysis is no substitute for a doctor's diagnosis.**
 
+### AI assistant
+
+When you don't want to open another AI, use AI assistant in the sidebar (Today has an entry too). Once the service is filled in, a floating button also sits at the lower right and opens the same chat from any page. You can ask about the reports and symptoms already on file, or type, speak, or send a photo of a lab report or prescription so that what you want recorded becomes records — symptoms, medications, check-ins, lab reports and so on. Asked what might be wrong, it gives a diagnosis from the symptoms, lab results and reports on file, and can suggest medicines to consider. Every such answer says the result is for reference only and that you need to go to a hospital for a doctor to confirm it. When you ask what might be wrong, that diagnosis is also saved as a health issue with status Monitoring, and the notes name the records it used and that a doctor must confirm it. Asking for a medicine or a recommendation does not save another health issue, and a name already on file is not written again. A suggested medicine is also listed as a medication with status Planned, and the notes say a doctor must confirm it and that it has not been started. A name already on file is not written again. That medication is not saved automatically; you save it yourself. A suggested test or repeat test stays in the answer and is not saved as an appointment. Automatic saving is on for everything else: it is written into your records as soon as the reply arrives, and you can switch to saving by hand from the left of the message box. An entry that has a problem is not written automatically; you fix it and save it yourself.
+
+Speech uses the Mac's own dictation, so the audio is not uploaded. Text and pictures are sent to the service you configured, along with the names of existing health issues, medications and check-ins. The service must speak OpenAI-style Chat Completions (pictures need a model that can see them). You set the address, key and model name at the top of Connect AI, or in AI assistant or in Settings. The key stays on this computer and is not included in backups. Each conversation is kept in `chats.json` in the data folder; History in the assistant opens an earlier one. Each exchange with that service is appended to `assistant.log` in the data folder (the prompt, the reply and the token counts; not the key, and pictures only as type and size). Opening `serve` in a browser can type and send pictures; dictation is only in the Mac window.
+
+**What it writes down is no substitute for a doctor's diagnosis.**
+
 ## How it works
 
 ```mermaid
@@ -188,7 +196,7 @@ A single Go program provides the window (Wails v3, the system WebView + React), 
 
 ## Privacy and security
 
-- **Your data stays on your computer**: by default in `~/Library/Application Support/HealthVault`; you can move it with the `-data` flag or the `HEALTH_TRAIL_DATA` environment variable. The app itself uploads nothing and collects no usage statistics. Its only network access is checking GitHub for a new version every few hours and when the window comes to the front, if the last check was over half an hour ago (it only asks for the version number, and you can turn this off in Settings → Software update).
+- **Your data stays on your computer**: by default in `~/Library/Application Support/HealthVault`; you can move it with the `-data` flag or the `HEALTH_TRAIL_DATA` environment variable. The app collects no usage statistics. It connects to the network in two cases: checking GitHub for a new version every few hours and when the window comes to the front, if the last check was over half an hour ago (it only asks for the version number, and you can turn this off in Settings → Software update); and the service you fill in for AI assistant. Organizing a note sends that text and the names of a few existing records to that service. Speech is recognized on the Mac and is not uploaded. The key is stored in `assistant.json` in the data folder and is not included in backups.
 - **The AI sees the records it reads**: when an AI reads records, their content is sent to its provider for processing (Claude to Anthropic, Codex to OpenAI). Which AI you use and what you let it read is up to you.
 - **The local server is open to this Mac only**: by default it listens only on `127.0.0.1`; other websites in your browser can't read or write your data, and the server rejects DNS rebinding and cross-site requests.
 - **Attachments never run as web pages**: only images, PDFs and plain text open directly in the page; every other type is returned as a download.

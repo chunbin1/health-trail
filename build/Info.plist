@@ -26,5 +26,7 @@
   <key>NSRemindersFullAccessUsageDescription</key><string>把吃药时间写进「提醒事项」里的「健康足迹」列表；在 iPhone 上勾掉就记一次吃药。</string>
   <key>NSRemindersUsageDescription</key><string>把吃药时间写进「提醒事项」里的「健康足迹」列表；在 iPhone 上勾掉就记一次吃药。</string>
   <key>NSLocalNetworkUsageDescription</key><string>开启「手机访问」后，同一网络中的手机可以连接健康足迹。</string>
+  <key>NSMicrophoneUsageDescription</key><string>把你说的话转成文字，用来记健康档案。声音只在这台 Mac 上识别，不会上传。</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>在这台 Mac 上把你说的话转成文字，用来记健康档案。不会使用云端语音识别。</string>
 </dict>
 </plist>

@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-单人的本地健康档案：健康问题、症状、就诊、用药、检查报告和检验指标、身体数据、打卡。数据存在本机的 SQLite 里，Claude 通过 MCP 读写这些数据。第一期 App 里**不嵌** Claude API。
+单人的本地健康档案：健康问题、症状、就诊、用药、检查报告和检验指标、身体数据、打卡。数据存在本机的 SQLite 里。外部 AI 仍通过 MCP 读写这些数据。窗口里的「AI助手」可以选用一个 OpenAI 兼容接口，把说的话或打的字整理成记录；密钥在本机，语音用 Mac 本机识别。
 
 ## 结构
 
@@ -18,6 +18,9 @@ internal/desktop/        桌面 App 这一层
   folders.go, attachments.go  只给窗口用的接口：允许读取的文件夹、在 Mac 上打开 / 删除附件
   shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
+  assistant.go           窗口里的「AI助手」：配置、整理、确认后写入；serve 只给本机，手机拿不到
+  speech_darwin.go       Mac 本机听写（SFSpeechRecognizer，要求设备端识别）
+internal/assistant/      调用 OpenAI 兼容接口、解析草稿、写入记录；密钥在数据目录的 assistant.json
 internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
 internal/update/         查 GitHub 最新 Release、下载 zip、校验同一团队的 Developer ID 签名和公证、替换 .app、退出后重新打开
 internal/reminders/      打卡、用药、预约的系统通知（Wails 服务）

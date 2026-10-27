@@ -161,6 +161,17 @@ func entity(name string) (*Entity, error) {
 // clean turns raw input into column values: unknown keys are rejected,
 // values are converted to the field's type, and blank strings become NULL.
 func (s *Store) clean(e *Entity, in Record) (Record, error) {
+	return s.cleanKnown(e, in, nil)
+}
+
+// cleanKnown is clean. Ids in known count as existing, so a row inserted
+// earlier in the same transaction (invisible to s.DB until it commits) can
+// be referenced by the next row.
+func (s *Store) cleanKnown(e *Entity, in Record, known map[string]map[int64]struct{}) (Record, error) {
+	return s.cleanWithNames(e, in, known, nil)
+}
+
+func (s *Store) cleanWithNames(e *Entity, in Record, known map[string]map[int64]struct{}, extra []string) (Record, error) {
 	out := Record{}
 	for k, v := range in {
 		if k == "id" || k == "created_at" || k == "updated_at" {
@@ -174,13 +185,16 @@ func (s *Store) clean(e *Entity, in Record) (Record, error) {
 			}
 			return nil, invalid("%s 没有字段 %q，可用字段：%s", e.Label, k, strings.Join(names, ", "))
 		}
-		cv, err := s.convert(*f, v)
+		cv, err := s.convertExtra(*f, v, extra)
 		if err != nil {
 			return nil, invalid("%s「%s」：%v", e.Label, f.Label, err)
 		}
 		if cv != nil && f.Type == Ref {
-			if err := s.mustExist(f.Ref, cv.(int64)); err != nil {
-				return nil, invalid("%s「%s」：%s #%d 不存在", e.Label, f.Label, EntityByName(f.Ref).Label, cv)
+			id := cv.(int64)
+			if !refKnown(known, f.Ref, id) {
+				if err := s.mustExist(f.Ref, id); err != nil {
+					return nil, invalid("%s「%s」：%s #%d 不存在", e.Label, f.Label, EntityByName(f.Ref).Label, id)
+				}
 			}
 		}
 		out[k] = cv
@@ -188,10 +202,27 @@ func (s *Store) clean(e *Entity, in Record) (Record, error) {
 	return out, nil
 }
 
+func refKnown(known map[string]map[int64]struct{}, table string, id int64) bool {
+	if known == nil {
+		return false
+	}
+	_, ok := known[table][id]
+	return ok
+}
+
 // convert is convert, plus the user's own values for an enum open to them.
 func (s *Store) convert(f Field, v any) (any, error) {
+	return s.convertExtra(f, v, nil)
+}
+
+// convertExtra is convert, and also accepts extra names of a custom enum
+// created earlier in the same batch (a metric kind and its first reading).
+func (s *Store) convertExtra(f Field, v any, extra []string) (any, error) {
 	cv, err := convert(f, v)
 	if str, ok := v.(string); ok && err != nil && f.Custom != "" {
+		if slices.Contains(extra, str) {
+			return str, nil
+		}
 		return s.customOption(f, str)
 	}
 	return cv, err
@@ -322,7 +353,15 @@ func check(e *Entity, r, prev Record) error {
 }
 
 func (s *Store) build(e *Entity, in Record) (Record, error) {
-	r, err := s.clean(e, in)
+	return s.buildKnown(e, in, nil)
+}
+
+func (s *Store) buildKnown(e *Entity, in Record, known map[string]map[int64]struct{}) (Record, error) {
+	return s.buildWithNames(e, in, known, nil)
+}
+
+func (s *Store) buildWithNames(e *Entity, in Record, known map[string]map[int64]struct{}, extra []string) (Record, error) {
+	r, err := s.cleanWithNames(e, in, known, extra)
 	if err != nil {
 		return nil, err
 	}
