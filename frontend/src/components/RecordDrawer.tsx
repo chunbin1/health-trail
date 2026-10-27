@@ -73,6 +73,7 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
 
   // a past check-in is history: it can be looked at, not changed
   const locked = entityName === 'checkins' && r?.date !== today()
+  const filled = r ? e.fields.filter((f) => f.name !== e.titleKey && f.name !== e.dateKey && r[f.name] != null && r[f.name] !== '') : []
   const head = r && !locked && (
     <>
       <button className="btn sm" onClick={() => setEditing(true)}><Pencil size={14} />{t('编辑')}</button>
@@ -97,11 +98,12 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
             </div>
           </div>
 
-          <dl className="kv">
-            {e.fields.filter((f) => f.name !== e.titleKey && f.name !== e.dateKey && r[f.name] != null && r[f.name] !== '').map((f) => (
-              <FieldRow key={f.name} f={f} r={r} />
-            ))}
-          </dl>
+          {/* left off when only the title (and date) is filled in */}
+          {filled.length > 0 && (
+            <dl className="kv">
+              {filled.map((f) => <FieldRow key={f.name} f={f} r={r} />)}
+            </dl>
+          )}
 
           {entityName === 'appointments' && (!r.status || r.status === '待去') && <AppointmentDone appt={r} />}
 

@@ -409,7 +409,7 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
 .drawer-body { padding: 4px 24px 40px; display: flex; flex-direction: column; gap: 20px; }
-.drawer-title { display: flex; gap: 14px; align-items: flex-start; }
+.drawer-title { display: flex; gap: 14px; align-items: center; }
 .drawer-title h1 { font-size: 22px; }
 .modal {
   width: min(640px, 100%); background: var(--surface); border-radius: 18px; box-shadow: var(--shadow-lg);
