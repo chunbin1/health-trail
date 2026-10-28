@@ -42,7 +42,8 @@ const inApp = `
 - 只是记录或修改、不用查东西时，在调用工具的同一条消息里写好给用户的那一两句话：整理成功后不会再请你回复。
 - 工具返回错误时，按错误说的改好再调一次；改不了就在回复里告诉用户。
 - 这里没有 delete_record、undo_checkin、add_attachment。要删记录、撤销打卡，请用户到 App 里那条记录上操作。用户发的照片，保存时 App 会自动挂到记录上。
-- 化验单用 add_lab_report 新建一份报告（这里不能往已有报告里追加）。打卡项要已经存在。
+- 化验单用 add_lab_report 新建一份报告（这里不能往已有报告里追加）。
+- 喝水、运动、早睡这类每天做的事是打卡项（habits），不是身体数据，不要为它新建自定义指标。checkin 只能打已有的打卡项。用户说打开、开启、加上、恢复某个打卡项，或者要打卡的项目还没有：名册「已归档的打卡项」里有的，用 update_record 把那条 habits 的 archived 改成 false；都没有的，用 add_record 新建 habits（name 必填；icon 填一个贴切的 emoji，如 喝水 💧、运动 🏃；要记数量再填 unit、target；remind_at 只能填一个时刻，用户没说就不填）。用户这次也要打卡的，同一条消息里接着调用 checkin；不需要 target 时，也可以直接 checkin 并设 create_if_missing=true（带上 icon、unit），新建和打卡一次整理好。
 
 诊断和用药建议：
 - 用户问自己可能是什么问题时，可以根据档案里的症状、化验、报告和就诊给出判断，写清依据的是哪几条记录。每次给出诊断、治疗、用药或检查建议，都写明：结果仅供参考；需要去医院，由医生确认。情况看起来急（指标严重异常、持续高热这类）时，放在回复最前面提醒尽快去医院。
@@ -86,18 +87,10 @@ func contextBlock(st *store.Store) string {
 		extra := strings.TrimSpace(strings.Join([]string{text(r["dosage"]), text(r["status"])}, " "))
 		return fmt.Sprintf("- id %d %s %s", idOf(r), text(r["name"]), extra)
 	})
-	writeRows(&b, "打卡项", listNamed(st, "habits", 40, func(r store.Record) bool {
-		switch v := r["archived"].(type) {
-		case int64:
-			return v == 0
-		case float64:
-			return v == 0
-		default:
-			return true
-		}
-	}), func(r store.Record) string {
-		return fmt.Sprintf("- id %d %s", idOf(r), text(r["name"]))
-	})
+	habit := func(r store.Record) string { return fmt.Sprintf("- id %d %s", idOf(r), text(r["name"])) }
+	writeRows(&b, "打卡项", listNamed(st, "habits", 40, func(r store.Record) bool { return !truthy(r["archived"]) }), habit)
+	// so "turn 喝水 back on" has an id to change
+	writeRows(&b, "已归档的打卡项", listNamed(st, "habits", 40, func(r store.Record) bool { return truthy(r["archived"]) }), habit)
 	writeRows(&b, "自定义指标", listNamed(st, "metric_kinds", 40, func(r store.Record) bool { return true }), func(r store.Record) string {
 		if u := text(r["unit"]); u != "" {
 			return fmt.Sprintf("- %s（%s）", text(r["name"]), u)

@@ -109,6 +109,16 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 	mux.HandleFunc("GET /api/assistant/draft", wrap(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.draftStatus())
 	}))
+	// the log of each reply: what was asked, the tools called, the errors.
+	// Health data, so this computer only, like the chats.
+	mux.HandleFunc("GET /api/assistant/log", wrap(func(w http.ResponseWriter, r *http.Request) {
+		view, err := assistant.ReadLog(a.st.Dir)
+		if err != nil {
+			writeError(w, a.msg("AI助手的日志读不出来", "Couldn't read the AI assistant's log"))
+			return
+		}
+		writeJSON(w, view)
+	}))
 	mux.HandleFunc("GET /api/assistant/chats", wrap(func(w http.ResponseWriter, r *http.Request) {
 		list, err := assistant.ListChats(a.st.Dir)
 		if err != nil {

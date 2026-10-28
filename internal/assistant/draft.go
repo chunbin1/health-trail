@@ -3,6 +3,7 @@ package assistant
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -34,6 +35,8 @@ type Item struct {
 	Panel          string         `json:"panel,omitempty"`
 	Results        []LabResult    `json:"results,omitempty"`
 	Summary        string         `json:"summary,omitempty"`
+	// Unit is the habit's unit, shown on a check-in card ("60 分钟")
+	Unit string `json:"unit,omitempty"`
 	Problem        string         `json:"problem,omitempty"`
 	// kind "update" changes record ID of Type: Fields are the new values,
 	// Before what they were when the card was made
@@ -122,6 +125,15 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	read := false
 	// whether the model was told it claimed something with no card
 	nudged := false
+	// the failed calls of earlier rounds: the same one failing again ends
+	// the reply instead of spending the rest of the rounds on it
+	failedBefore := map[string]bool{}
+	// tools that failed and have not worked since, like a check-in on a
+	// habit that wasn't there before its card was put together
+	unresolved := map[string]bool{}
+	// whether the model was asked to check in on a habit it just added
+	askedCheckin := false
+	stopped := ""
 	for round := 0; ; round++ {
 		last := round == maxRounds-1
 		choice := "auto"
@@ -137,6 +149,13 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		}
 		if len(m.Calls) == 0 || last {
 			d.Reply = strings.TrimSpace(m.Content)
+			if len(m.Calls) > 0 {
+				// asked to answer, it called a tool anyway: what it wrote
+				// leads into a call that never runs
+				x.note("最后一次请求仍然在调用工具：停下")
+				stopped = msg.Pick(cfg.Lang, stopRounds, stopRoundsEn)
+				d.Reply = ""
+			}
 			if !last && !nudged && len(w.items) == 0 && claimsDone(d.Reply) {
 				nudged = true
 				x.note("回复说已经做好了，却没有卡片：提醒它再来一次")
@@ -149,7 +168,8 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		// a round that only put cards together, all of them fine, is the
 		// end of the reply: asking the model again would resend everything
 		// for one sentence. Unless something was looked up and the answer
-		// isn't written yet.
+		// isn't written yet, or a call that failed earlier hasn't worked
+		// since: the model may be fixing what stopped it.
 		onlyCards := true
 		for _, c := range m.Calls {
 			if !draftTools[c.Name] {
@@ -160,9 +180,12 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			}
 		}
 		failedAny := false
+		repeated := ""
+		failedNow := map[string]bool{}
 		for _, c := range m.Calls {
 			out, failed := "", false
-			args, err := argsOf(c.Args)
+			name, args, err := callOf(c.Name, c.Args)
+			c.Name = name
 			// the write tools first: they never reach the store from here,
 			// whatever their annotations say
 			switch {
@@ -180,6 +203,22 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			step := stepOf(c.Name, args)
 			step.Error = failed
 			failedAny = failedAny || failed
+			if failed {
+				key := c.Name + "\x00" + out
+				if failedBefore[key] && repeated == "" {
+					repeated = out
+					if errors.Is(err, errBadArgs) {
+						repeated = msg.Pick(cfg.Lang, "模型发来的工具参数格式不对，App 读不懂", "the model sent tool arguments the app can't read")
+					} else if cfg.Lang == "en" {
+						// what the tool said is written for the model, in Chinese
+						repeated = "the tool returned the same error"
+					}
+				}
+				failedNow[key] = true
+				unresolved[c.Name] = true
+			} else {
+				delete(unresolved, c.Name)
+			}
 			x.call(c.Name, c.Args, out, failed)
 			d.Steps = append(d.Steps, step)
 			if onStep != nil {
@@ -187,13 +226,32 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			}
 			msgs = append(msgs, map[string]any{"role": "tool", "tool_call_id": c.ID, "content": out})
 		}
-		if onlyCards && !failedAny && (!read || strings.TrimSpace(m.Content) != "") {
+		if repeated != "" {
+			x.note("同一个调用接连出错：停下，不再重试")
+			stopped = msg.Sprintf(cfg.Lang, msg.Pick(cfg.Lang, stopRepeat, stopRepeatEn), repeated)
+			break
+		}
+		for k := range failedNow {
+			failedBefore[k] = true
+		}
+		// a habit added or restored with no check-in on it: "新建喝水，我今天
+		// 喝了3L" often stops at the habit. Its tool result asks for the
+		// check-in; the model gets one more round to make it.
+		waitCheckin := !askedCheckin && w.habitWithoutCheckin()
+		askedCheckin = askedCheckin || waitCheckin
+		if onlyCards && !failedAny && len(unresolved) == 0 && !waitCheckin && (!read || strings.TrimSpace(m.Content) != "") {
 			d.Reply = strings.TrimSpace(m.Content)
 			break
 		}
 	}
-	d.Items = w.items
+	if w.items != nil {
+		d.Items = w.items
+	}
 	d.Reply = plainReply(d.Reply)
+	if stopped != "" {
+		// the model's own words here lead into a call that never ran
+		d.Reply = strings.TrimSpace(stopped)
+	}
 	if len(d.Items) == 0 && claimsDone(d.Reply) {
 		d.Reply += msg.Pick(cfg.Lang, claimNote, claimNoteEn)
 	}
@@ -203,6 +261,15 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	logExchange(st.Dir, cfg, x, d, nil)
 	return d, nil
 }
+
+// What the person is told when the reply is cut short. The cards put
+// together before that are kept.
+const (
+	stopRepeat   = "这一步接连两次出错，我先停下了，没有再试：%s。可以换个说法再试一次；每一步的经过在「设置 → AI助手 → 查看日志」里。"
+	stopRepeatEn = "The same step failed twice in a row, so I stopped instead of trying again (%s). Try saying it another way; each step is in Settings → AI assistant → View log."
+	stopRounds   = "查了好几轮还没做完，我先停下了。可以把要做的事说得更具体一点再试；每一步的经过在「设置 → AI助手 → 查看日志」里。"
+	stopRoundsEn = "This took too many rounds, so I stopped. Try asking for something more specific; each step is in Settings → AI assistant → View log."
+)
 
 // drafting collects what the write tools were called with. Nothing is
 // written here; a call that would not save is told why, so the model can fix
@@ -263,12 +330,91 @@ func (w *drafting) draft(tool string, args map[string]any) (string, bool) {
 		m["kind"] = "checkin"
 	}
 	it := itemFromMap(m)
+	// checkin's create_if_missing, as over MCP: the new habit is a card
+	// of its own, before the check-in on it
+	habit := Item{}
+	if tool == "checkin" && truthy(args["create_if_missing"]) && it.Habit != "" && !w.draftedHabit(it.Habit) {
+		if _, err := w.st.FindHabit(it.Habit); errors.Is(err, store.ErrNotFound) {
+			habit = Item{Kind: "record", Type: "habits", Fields: map[string]any{"name": it.Habit}}
+			for _, k := range []string{"unit", "icon"} {
+				if v := text(args[k]); v != "" {
+					habit.Fields[k] = v
+				}
+			}
+			if p := w.check(&habit); p != "" {
+				return p, true
+			}
+			w.items = append(w.items, habit)
+		}
+	}
 	if p := w.check(&it); p != "" {
+		if habit.Kind != "" {
+			w.items = w.items[:len(w.items)-1]
+		}
 		return p, true
 	}
 	w.items = append(w.items, it)
+	if habit.Kind != "" {
+		return fmt.Sprintf("已整理成第 %d 条（新建打卡项「%s」）和第 %d 条（打卡），交给用户确认后写入。",
+			len(w.items)-1, it.Habit, len(w.items)), false
+	}
+	if it.Kind == "record" && it.Type == "habits" {
+		return fmt.Sprintf("已整理成第 %d 条，交给用户确认后写入。用户这次如果也说了今天做了（比如喝了多少），"+
+			"现在接着调用 checkin 给「%s」打卡；没说就不用打卡，直接回复。", len(w.items), text(it.Fields["name"])), false
+	}
 	return fmt.Sprintf("已整理成第 %d 条，交给用户确认后写入，现在还没有 id。"+
 		"这次回复里别的记录要关联它，在 fields 里填 condition_name 或 medication_name（名称）。", len(w.items)), false
+}
+
+// habitUnit is the unit of a habit drafted in this reply or on file.
+func (w *drafting) habitUnit(name string) string {
+	for _, d := range w.items {
+		if d.Kind == "record" && d.Type == "habits" && sameName(text(d.Fields["name"])) == sameName(name) {
+			return text(d.Fields["unit"])
+		}
+	}
+	if h, err := w.st.FindHabit(name); err == nil {
+		return text(h["unit"])
+	}
+	return ""
+}
+
+func (w *drafting) draftedHabit(name string) bool {
+	for _, d := range w.items {
+		if d.Kind == "record" && d.Type == "habits" && sameName(text(d.Fields["name"])) == sameName(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// habitWithoutCheckin tells whether this reply added or restored a habit and
+// has no check-in on it.
+func (w *drafting) habitWithoutCheckin() bool {
+	for _, d := range w.items {
+		name := ""
+		switch {
+		case d.Kind == "record" && d.Type == "habits":
+			name = text(d.Fields["name"])
+		case d.Kind == "update" && d.Type == "habits":
+			if v, ok := d.Fields["archived"]; ok && !truthy(v) {
+				name = d.Summary
+			}
+		}
+		if name == "" {
+			continue
+		}
+		done := false
+		for _, c := range w.items {
+			if c.Kind == "checkin" && sameName(c.Habit) == sameName(name) {
+				done = true
+			}
+		}
+		if !done {
+			return true
+		}
+	}
+	return false
 }
 
 // update turns update_record into a card that shows the change. It is
@@ -327,9 +473,21 @@ func (w *drafting) check(it *Item) string {
 			return fmt.Sprintf("档案里已经有这个%s（%s #%d），不要再写一条；要关联它就填 %s %d", label, it.Type, id, ref, id)
 		}
 	}
+	if it.Kind == "record" && it.Type == "habits" {
+		if w.draftedHabit(text(it.Fields["name"])) {
+			return fmt.Sprintf("这次已经整理过打卡项「%s」了，不要再写一条", text(it.Fields["name"]))
+		}
+		// the check-in page shows the icon; without one it is a dot
+		if it.Fields == nil {
+			it.Fields = map[string]any{}
+		}
+		if strings.TrimSpace(text(it.Fields["icon"])) == "" {
+			it.Fields["icon"] = defaultHabitIcon
+		}
+	}
 	*it = fillConditionDates([]Item{*it}, w.now)[0]
 	*it = fillMedicationStatus([]Item{*it})[0]
-	if p := problem(w.st, *it, w.now); p != "" && !w.newMetric(*it, p) {
+	if p := problem(w.st, *it, w.now); p != "" && !w.newMetric(*it, p) && !w.newHabit(*it) {
 		return p
 	}
 	if n := sameName(it.ConditionName); n != "" {
@@ -349,6 +507,9 @@ func (w *drafting) check(it *Item) string {
 	if it.Kind == "record" && it.Type == "doses" {
 		// the card's title: a dose's own title is only the time
 		it.Summary = w.medName(*it)
+	}
+	if it.Kind == "checkin" {
+		it.Unit = w.habitUnit(it.Habit)
 	}
 	return ""
 }
@@ -374,6 +535,54 @@ func (w *drafting) newMetric(it Item, problem string) bool {
 		if d.Kind == "record" && d.Type == "metric_kinds" && text(d.Fields["name"]) == text(it.Fields["metric_type"]) {
 			return true
 		}
+	}
+	return false
+}
+
+// defaultHabitIcon is the icon of a habit the model added without one.
+const defaultHabitIcon = "✅"
+
+// newHabit accepts a check-in on a habit this reply adds, or takes out of
+// the archive. Saving writes records and changes before check-ins.
+func (w *drafting) newHabit(it Item) bool {
+	if it.Kind != "checkin" {
+		return false
+	}
+	name := sameName(it.Habit)
+	if name == "" {
+		return false
+	}
+	var id int64
+	if h, err := w.st.FindHabit(it.Habit); err == nil {
+		id = idOf(h)
+	}
+	for _, d := range w.items {
+		switch {
+		case d.Kind == "record" && d.Type == "habits" && sameName(text(d.Fields["name"])) == name:
+			return true
+		case d.Kind == "update" && d.Type == "habits" && id != 0 && d.ID == id:
+			if v, ok := d.Fields["archived"]; ok && !truthy(v) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// truthy reads a Bool field the way the model may write it.
+func truthy(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case float64:
+		return x != 0
+	case int64:
+		return x != 0
+	case int:
+		return x != 0
+	case string:
+		s := strings.ToLower(strings.TrimSpace(x))
+		return s == "true" || s == "1" || s == "是"
 	}
 	return false
 }
@@ -460,8 +669,12 @@ func problem(st *store.Store, it Item, now time.Time) string {
 		if strings.TrimSpace(it.Habit) == "" {
 			return "要写打卡项的名称"
 		}
-		if _, err := st.FindHabit(it.Habit); err != nil {
-			return fmt.Sprintf("没有叫「%s」的打卡项", strings.TrimSpace(it.Habit))
+		h, err := st.FindHabit(it.Habit)
+		if err != nil {
+			return fmt.Sprintf("没有叫「%s」的打卡项。要新建就在 checkin 里设 create_if_missing=true（可以带 icon、unit），或者先用 add_record 写一条 habits（还能填 target），在同一次回复里再调用 checkin", strings.TrimSpace(it.Habit))
+		}
+		if truthy(h["archived"]) {
+			return fmt.Sprintf("打卡项「%s」（habits #%d）已归档。用户要接着用它，先用 update_record 把它的 archived 改成 false，在同一次回复里再调用 checkin", text(h["name"]), idOf(h))
 		}
 		if it.Date != "" && it.Date != "today" && it.Date != "今天" && it.Date != now.Format("2006-01-02") {
 			return "打卡只能记在今天"

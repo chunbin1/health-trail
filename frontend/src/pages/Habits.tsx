@@ -3,7 +3,7 @@ import { addDays, api, fmtDate, today, type HabitStats, type Rec } from '../api'
 import { tell } from '../components/Dialog'
 import { t } from '../i18n'
 import { openRecord, useApp, useLoad } from '../state'
-import { Empty } from '../ui'
+import { Empty, habitIcon } from '../ui'
 
 // Every check-in item, in use and archived, with all its check-ins: the one
 // place to archive an item (it's never deleted) and to bring one back. The
@@ -21,7 +21,7 @@ export function AllHabits() {
   const archived = all.filter((h) => !!h.archived)
 
   async function setArchived(h: Rec, on: boolean) {
-    const name = `${h.icon || ''} ${h.name}`.trim()
+    const name = `${habitIcon(h)} ${h.name}`
     try {
       await api.update('habits', h.id, { archived: on })
       changed()
@@ -38,7 +38,7 @@ export function AllHabits() {
     return (
       <div key={h.id} className="habit-row">
         <a href="#" onClick={(e) => { e.preventDefault(); openRecord('habits', h.id) }} className="habit-name">
-          <span style={{ fontSize: 18 }}>{h.icon || '•'}</span>
+          <span style={{ fontSize: 18 }}>{habitIcon(h)}</span>
           <span style={{ minWidth: 0 }}>
             <div className="ellipsis" style={{ fontWeight: 600 }}>{h.name}</div>
             <div className="muted small ellipsis">

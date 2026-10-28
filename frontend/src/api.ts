@@ -234,6 +234,23 @@ export interface ChatMsgWire {
   steps?: ToolStep[]
 }
 
+// One reply in the assistant's log (assistant.log), newest first.
+export interface AssistantLogEntry {
+  at: string
+  model: string
+  ask: string
+  requests: number
+  tokens: number
+  failed: boolean
+  text: string
+}
+
+export interface AssistantLogView {
+  entries: AssistantLogEntry[]
+  cut: boolean
+  size: number
+}
+
 // One tool the assistant called while answering.
 export interface ToolStep {
   tool: string
@@ -257,6 +274,8 @@ export interface DraftItem {
   panel?: string
   results?: LabDraft[]
   summary?: string
+  // a check-in card: the habit's unit
+  unit?: string
   problem?: string
   // kind 'update': record id of type; fields are the new values, before the old
   id?: number
@@ -407,6 +426,7 @@ export const api = {
   assistantDraft: (body: { id: string; messages: ChatTurn[] }) => req<Draft>('POST', '/api/assistant/draft', body),
   assistantDraftStatus: () => req<DraftStatus>('GET', '/api/assistant/draft'),
   assistantCommit: (items: DraftItem[]) => req<CommitResult>('POST', '/api/assistant/commit', { items }),
+  assistantLog: () => req<AssistantLogView>('GET', '/api/assistant/log'),
   assistantChats: () => req<ChatHead[]>('GET', '/api/assistant/chats'),
   assistantChat: (id: string) => req<ChatHead & { messages: ChatMsgWire[] }>('GET', '/api/assistant/chats/' + encodeURIComponent(id)),
   saveAssistantChat: (body: { id: string; messages: ChatMsgWire[] }) => req<ChatHead>('PUT', '/api/assistant/chats', body),

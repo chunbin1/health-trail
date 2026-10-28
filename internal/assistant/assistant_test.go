@@ -358,7 +358,9 @@ func TestStopsAfterMaxRounds(t *testing.T) {
 	if len(f.bodies) != maxRounds || !strings.Contains(f.bodies[maxRounds-1], `"tool_choice":"none"`) {
 		t.Fatalf("requests %d", len(f.bodies))
 	}
-	if d.Unclear == "" || len(d.Steps) != maxRounds-1 {
+	// it still called a tool when told to answer: what it wrote led into
+	// that call, so the reply says it stopped instead
+	if d.Reply != stopRounds || len(d.Steps) != maxRounds-1 || len(d.Items) != 0 || d.Items == nil {
 		t.Fatalf("%+v", d)
 	}
 }

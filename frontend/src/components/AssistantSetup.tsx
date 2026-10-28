@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api, type AssistantConfig } from '../api'
 import { t } from '../i18n'
 import { useApp } from '../state'
+import { AssistantLog } from './AssistantLog'
 
 // The address, key and model for AI助手. An empty key keeps the one already
 // saved; the key itself is never sent back to the page.
@@ -12,6 +13,7 @@ export function AssistantSetup({ cfg, onSaved }: { cfg: AssistantConfig; onSaved
   const [model, setModel] = useState(cfg.model)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [showLog, setShowLog] = useState(false)
 
   async function save(clear = false) {
     if (busy) return
@@ -60,7 +62,9 @@ export function AssistantSetup({ cfg, onSaved }: { cfg: AssistantConfig; onSaved
         {cfg.has_key && (
           <button type="button" className="btn sm" disabled={busy} onClick={() => save(true)}>{t('忘掉密钥')}</button>
         )}
+        <button type="button" className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setShowLog(true)}>{t('查看日志')}</button>
       </div>
+      {showLog && <AssistantLog onClose={() => setShowLog(false)} />}
     </div>
   )
 }

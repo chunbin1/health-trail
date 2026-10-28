@@ -276,6 +276,8 @@ html.mac-window .main { padding-top: 40px; }
 .btn.ghost { background: none; box-shadow: none; color: var(--ink-2); }
 .btn.ghost:hover { background: var(--surface-3); color: var(--ink); }
 .btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; border-radius: 8px; }
+.btn.sq { padding: 0; width: 32px; justify-content: center; }
+.btn.sm.sq { width: 28px; }
 .btn:disabled { opacity: 0.45; cursor: default; }
 
 .icon-btn {
@@ -343,6 +345,7 @@ select.input {
   font-size: 12px; font-weight: 500; background: var(--surface-3); color: var(--ink-2); white-space: nowrap;
 }
 .tag.k { color: var(--k); background: color-mix(in srgb, var(--k) 13%, transparent); }
+.tag.bad { color: var(--danger); background: var(--danger-soft); }
 .tag.flag-high { color: var(--high); background: var(--high-soft); }
 .tag.flag-low { color: var(--low); background: var(--low-soft); }
 .tag.flag-abn { color: var(--abn); background: var(--abn-soft); }
@@ -879,3 +882,31 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
 .mode-key { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 8px; text-align: right; }
 .chat-thumb { position: relative; }
 .chat-thumb .icon-btn { position: absolute; top: 4px; right: 4px; background: var(--surface); }
+
+/* AI助手日志: one row per reply, opened to the log text */
+.log-list { display: flex; flex-direction: column; gap: 8px; }
+.log-item { border-radius: var(--r); box-shadow: var(--ring); background: var(--surface); min-width: 0; }
+.log-item.failed { box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 35%, transparent); }
+.log-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 0; background: none;
+  color: var(--ink); font: inherit; text-align: left; cursor: pointer; flex-wrap: wrap; border-radius: var(--r);
+}
+.log-head:hover { background: var(--surface-2); }
+.log-head > svg { flex-shrink: 0; color: var(--ink-3); }
+.log-ask { flex: 1 1 200px; min-width: 0; font-weight: 600; }
+.log-meta { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.log-text {
+  margin: 0; padding: 4px 14px 14px 36px; font: 12px/1.6 var(--mono); color: var(--ink-2);
+  white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0;
+}
+.log-text .call { color: var(--ink); font-weight: 600; }
+.log-text .err { color: var(--danger); }
+.log-text .sec { color: var(--ink-3); }
+.log-text .out { color: var(--ink-3); }
+@media (max-width: 760px) {
+  .log-text { padding-left: 14px; }
+}
+
+/* AI助手's input row: the save mode on the left, icon buttons on the right */
+.chat-tools { display: flex; gap: 6px; margin-left: auto; }
+.chat-tools .btn.sq { width: 32px; height: 32px; }

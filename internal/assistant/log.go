@@ -3,8 +3,11 @@ package assistant
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -157,4 +160,136 @@ func rotateLog(path string) {
 		return
 	}
 	_ = os.Rename(path, path+".1")
+}
+
+// logReadMax is how much of the end of the log the window reads.
+const logReadMax = 512 << 10
+
+// LogEntry is one reply in the log. Text is the entry as written, header
+// line left out.
+type LogEntry struct {
+	At       string `json:"at"`
+	Model    string `json:"model"`
+	Ask      string `json:"ask"`
+	Requests int    `json:"requests"`
+	Tokens   int    `json:"tokens"`
+	Failed   bool   `json:"failed"`
+	Text     string `json:"text"`
+}
+
+// LogView is the end of the log, newest reply first. Cut says older
+// replies were left out.
+type LogView struct {
+	Entries []LogEntry `json:"entries"`
+	Cut     bool       `json:"cut"`
+	Size    int64      `json:"size"`
+}
+
+// ReadLog reads the last part of the log, and of the one before it when
+// the log was just started again, and splits it into replies.
+func ReadLog(dir string) (LogView, error) {
+	logMu.Lock()
+	defer logMu.Unlock()
+	path := filepath.Join(dir, assistantLog)
+	cur, size, curCut, err := tail(path, logReadMax)
+	if err != nil && !os.IsNotExist(err) {
+		return LogView{}, err
+	}
+	view := LogView{Entries: []LogEntry{}, Size: size, Cut: curCut}
+	raw := cur
+	if !curCut {
+		old, oldSize, oldCut, err := tail(path+".1", logReadMax-int64(len(cur)))
+		if err == nil && oldSize > 0 {
+			raw = old + cur
+			view.Cut = oldCut
+		}
+	}
+	if view.Cut {
+		// the first reply is only partly there
+		if i := strings.Index(raw, "\n—— "); i >= 0 {
+			raw = raw[i+1:]
+		} else {
+			raw = ""
+		}
+	}
+	for _, block := range splitLog(raw) {
+		view.Entries = append(view.Entries, entryOf(block))
+	}
+	for i, j := 0, len(view.Entries)-1; i < j; i, j = i+1, j-1 {
+		view.Entries[i], view.Entries[j] = view.Entries[j], view.Entries[i]
+	}
+	return view, nil
+}
+
+// tail reads up to n bytes from the end of a file; cut says there was more.
+func tail(path string, n int64) (string, int64, bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", 0, false, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return "", 0, false, err
+	}
+	size := info.Size()
+	if n <= 0 {
+		return "", size, size > 0, nil
+	}
+	start := size - n
+	if start < 0 {
+		start = 0
+	}
+	b := make([]byte, size-start)
+	if _, err := f.ReadAt(b, start); err != nil && err != io.EOF {
+		return "", size, false, err
+	}
+	s := string(b)
+	// the read may start inside a character
+	for len(s) > 0 && !utf8.RuneStart(s[0]) {
+		s = s[1:]
+	}
+	return s, size, start > 0, nil
+}
+
+func splitLog(raw string) []string {
+	var out []string
+	cur := ""
+	for _, line := range strings.SplitAfter(raw, "\n") {
+		if strings.HasPrefix(line, "—— ") && cur != "" {
+			out = append(out, cur)
+			cur = ""
+		}
+		cur += line
+	}
+	if strings.TrimSpace(cur) != "" {
+		out = append(out, cur)
+	}
+	return out
+}
+
+var (
+	logHeadRe   = regexp.MustCompile(`^—— (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)  (.*?)  \S* ——$`)
+	logTotalRe  = regexp.MustCompile(`(?m)^tokens 合计：(\d+) 次请求 .* 合计 (\d+) `)
+	logFailedRe = regexp.MustCompile(`(?m)^  → 出错：|^--- 出错 ---$`)
+)
+
+func entryOf(block string) LogEntry {
+	head, body, _ := strings.Cut(block, "\n")
+	e := LogEntry{Text: strings.TrimRight(body, "\n")}
+	if m := logHeadRe.FindStringSubmatch(strings.TrimSpace(head)); m != nil {
+		e.At, e.Model = m[1], m[2]
+	} else {
+		e.Text = strings.TrimRight(block, "\n")
+	}
+	if _, rest, ok := strings.Cut(body, "--- 用户 ---\n"); ok && !strings.HasPrefix(rest, "--- ") {
+		ask, _, _ := strings.Cut(rest, "\n--- ")
+		e.Ask = clip(strings.Join(strings.Fields(ask), " "), 80)
+	}
+	if m := logTotalRe.FindStringSubmatch(body); m != nil {
+		e.Requests, _ = strconv.Atoi(m[1])
+		e.Tokens, _ = strconv.Atoi(m[2])
+	}
+	e.Failed = logFailedRe.MatchString(body)
+	return e
 }
