@@ -26,6 +26,11 @@ export const KIND: Record<string, { icon: LucideIcon; color: string }> = {
   stethoscope: { icon: Stethoscope, color: 'var(--accent)' },
 }
 
+// A habit with no icon of its own shows this one. Habits the AI assistant
+// adds without an icon get the same (defaultHabitIcon in internal/assistant).
+export const DEFAULT_HABIT_ICON = '✅'
+export const habitIcon = (h: Record<string, any>): string => (typeof h.icon === 'string' && h.icon.trim()) || DEFAULT_HABIT_ICON
+
 export const kindStyle = (kind: string) => ({ '--k': KIND[kind]?.color } as CSSProperties)
 
 export function KindIcon({ kind, size = 'md' }: { kind: string; size?: 'sm' | 'md' | 'lg' }) {

@@ -6,7 +6,7 @@ import { tell } from '../components/Dialog'
 import { Modal } from '../components/Modal'
 import { t, tr, tx } from '../i18n'
 import { openRecord, useApp, useLoad } from '../state'
-import { Empty, IconButton, KindIcon } from '../ui'
+import { Empty, habitIcon, IconButton, KindIcon } from '../ui'
 
 // The day's habits as buttons: one tap checks in (or asks for the amount,
 // for a habit with a unit, or the reading, for one that logs a body metric
@@ -29,7 +29,7 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
         return
       } else {
         await api.checkin(d.habit.id, date)
-        toast(t('{name} 已打卡', { name: `${d.habit.icon || ''} ${d.habit.name}` }))
+        toast(t('{name} 已打卡', { name: `${habitIcon(d.habit)} ${d.habit.name}` }))
       }
       changed()
     } catch (e: any) {
@@ -40,7 +40,7 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
   async function submitAmount() {
     if (!asking) return
     await api.checkin(asking.habit.id, date, amount === '' ? null : Number(amount))
-    toast(t('{name} 已打卡', { name: `${asking.habit.icon || ''} ${asking.habit.name}` }))
+    toast(t('{name} 已打卡', { name: `${habitIcon(asking.habit)} ${asking.habit.name}` }))
     setAsking(null)
     changed()
   }
@@ -52,7 +52,7 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
       <div className="habits">
         {days.map((d) => (
           <button key={d.habit.id} className={'habit' + (d.checkin ? ' done' : '')} onClick={() => tap(d)} aria-pressed={!!d.checkin} disabled={!editable}>
-            <span className="emoji">{d.habit.icon || '•'}</span>
+            <span className="emoji">{habitIcon(d.habit)}</span>
             <span style={{ minWidth: 0 }}>
               <div className="name ellipsis">{d.habit.name}</div>
               <div className="state">
@@ -72,7 +72,7 @@ export function HabitGrid({ days, date }: { days: HabitDay[]; date: string }) {
       </div>
       {!editable && <div className="muted small" style={{ marginTop: 10 }}>{t('只能给今天打卡，过去的记录只能查看')}</div>}
       {asking && (
-        <Modal title={`${asking.habit.icon || ''} ${asking.habit.name}`} onClose={() => setAsking(null)}>
+        <Modal title={`${habitIcon(asking.habit)} ${asking.habit.name}`} onClose={() => setAsking(null)}>
           <form onSubmit={(e) => { e.preventDefault(); submitAmount() }}>
             <div className="modal-body">
               <label className="field">
@@ -131,7 +131,7 @@ export function Checkins() {
             {stats?.map((s) => (
               <div key={s.habit.id} className="habit-row">
                 <a href="#" onClick={(e) => { e.preventDefault(); openRecord('habits', s.habit.id) }} className="row" style={{ color: 'inherit', flexWrap: 'nowrap', minWidth: 0 }}>
-                  <span style={{ fontSize: 18 }}>{s.habit.icon || '•'}</span>
+                  <span style={{ fontSize: 18 }}>{habitIcon(s.habit)}</span>
                   <span className="ellipsis" style={{ fontWeight: 600 }}>{s.habit.name}</span>
                 </a>
                 <div className="heat" aria-label={t('{name}最近30天完成{n}天', { name: s.habit.name, n: s.days_done })}>

@@ -105,7 +105,7 @@ func TestCheckinWithoutHabit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(f.bodies[1], "add_record 写一条 habits") || len(d.Items) != 2 || len(f.bodies) != 2 {
+	if !strings.Contains(f.bodies[1], "create_if_missing=true") || len(d.Items) != 2 || len(f.bodies) != 2 {
 		t.Fatalf("requests %d items %+v\n%s", len(f.bodies), d.Items, f.bodies[1])
 	}
 }
@@ -216,5 +216,76 @@ func TestFailedCheckinGetsAnotherRound(t *testing.T) {
 	}
 	if len(f.bodies) != 3 || len(d.Items) != 2 || d.Items[1].Kind != "checkin" {
 		t.Fatalf("requests %d items %+v", len(f.bodies), d.Items)
+	}
+}
+
+// From the test window: "新建一个打卡 每天要喝2升水 我今天喝了3L" stopped at
+// the habit card, and the habit had no icon. A new habit with no check-in
+// on it gets the model asked once more; one without an icon gets one.
+func TestNewHabitAsksForCheckin(t *testing.T) {
+	st := openStore(t)
+	f := &fakeModel{t: t, replies: []string{
+		callsSaying("我来新建喝水并打卡。", "add_record", `{"type":"habits","fields":{"name":"喝水","unit":"升","target":2}}`),
+		calls("add_record", `{"type":"habits","fields":{"name":"喝水","unit":"升","target":2}}`, "checkin", `{"habit":"喝水","value":3}`),
+		answer("新建了喝水，也打了卡，保存后生效。"),
+		answer("不该有这一次"),
+	}}
+	d, err := Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "新建一个打卡 每天要喝2升水 我今天喝了3L"}}, day, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the second add_record failed, so the model answers once more
+	if len(f.bodies) != 3 || !strings.Contains(f.bodies[1], "接着调用 checkin 给「喝水」打卡") || !strings.Contains(f.bodies[2], "这次已经整理过打卡项「喝水」了") {
+		t.Fatalf("requests %d\n%s", len(f.bodies), f.bodies[len(f.bodies)-1])
+	}
+	if len(d.Items) != 2 || d.Items[0].Fields["icon"] != defaultHabitIcon || d.Items[1].Kind != "checkin" {
+		t.Fatalf("items %+v", d.Items)
+	}
+
+	// asked once: a reply that only adds the habit then ends with words
+	f = &fakeModel{t: t, replies: []string{
+		calls("add_record", `{"type":"habits","fields":{"name":"跑步","icon":"🏃"}}`),
+		answer("新建好了跑步，保存后生效。"),
+		answer("不该有这一次"),
+	}}
+	d, err = Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "新建一个跑步打卡"}}, day, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.bodies) != 2 || len(d.Items) != 1 || d.Items[0].Fields["icon"] != "🏃" || !strings.Contains(d.Reply, "跑步") {
+		t.Fatalf("requests %d items %+v reply %q", len(f.bodies), d.Items, d.Reply)
+	}
+}
+
+// glm-4.6v calls checkin with create_if_missing, as the MCP tool allows:
+// that is a new habit card and the check-in, in one go.
+func TestCheckinCreatesHabit(t *testing.T) {
+	st := openStore(t)
+	f := &fakeModel{t: t, replies: []string{
+		callsSaying("新建喝水并打卡。", "checkin", `{"habit":"喝水","value":3,"unit":"升","icon":"💧","create_if_missing":true}`),
+		answer("不该有这一次"),
+	}}
+	d, err := Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "打卡今天喝3L水"}}, day, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.bodies) != 1 || len(d.Items) != 2 || d.Items[0].Type != "habits" || d.Items[0].Fields["icon"] != "💧" || d.Items[0].Fields["unit"] != "升" || d.Items[1].Kind != "checkin" {
+		t.Fatalf("requests %d items %+v", len(f.bodies), d.Items)
+	}
+	if res := Commit(st, d.Items, "zh"); !res.OK {
+		t.Fatalf("%+v", res)
+	}
+	// a habit on file is not added again; without the flag nothing is added
+	for _, args := range []string{`{"habit":"喝水","value":2,"create_if_missing":true}`, `{"habit":"跑步","value":2}`} {
+		f = &fakeModel{t: t, replies: []string{calls("checkin", args), answer("好的")}}
+		d, err = Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "打卡"}}, day, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, it := range d.Items {
+			if it.Type == "habits" {
+				t.Fatalf("%s: habit added %+v", args, d.Items)
+			}
+		}
 	}
 }

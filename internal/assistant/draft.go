@@ -129,6 +129,8 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	// tools that failed and have not worked since, like a check-in on a
 	// habit that wasn't there before its card was put together
 	unresolved := map[string]bool{}
+	// whether the model was asked to check in on a habit it just added
+	askedCheckin := false
 	stopped := ""
 	for round := 0; ; round++ {
 		last := round == maxRounds-1
@@ -230,7 +232,12 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		for k := range failedNow {
 			failedBefore[k] = true
 		}
-		if onlyCards && !failedAny && len(unresolved) == 0 && (!read || strings.TrimSpace(m.Content) != "") {
+		// a habit added or restored with no check-in on it: "新建喝水，我今天
+		// 喝了3L" often stops at the habit. Its tool result asks for the
+		// check-in; the model gets one more round to make it.
+		waitCheckin := !askedCheckin && w.habitWithoutCheckin()
+		askedCheckin = askedCheckin || waitCheckin
+		if onlyCards && !failedAny && len(unresolved) == 0 && !waitCheckin && (!read || strings.TrimSpace(m.Content) != "") {
 			d.Reply = strings.TrimSpace(m.Content)
 			break
 		}
@@ -321,12 +328,78 @@ func (w *drafting) draft(tool string, args map[string]any) (string, bool) {
 		m["kind"] = "checkin"
 	}
 	it := itemFromMap(m)
+	// checkin's create_if_missing, as over MCP: the new habit is a card
+	// of its own, before the check-in on it
+	habit := Item{}
+	if tool == "checkin" && truthy(args["create_if_missing"]) && it.Habit != "" && !w.draftedHabit(it.Habit) {
+		if _, err := w.st.FindHabit(it.Habit); errors.Is(err, store.ErrNotFound) {
+			habit = Item{Kind: "record", Type: "habits", Fields: map[string]any{"name": it.Habit}}
+			for _, k := range []string{"unit", "icon"} {
+				if v := text(args[k]); v != "" {
+					habit.Fields[k] = v
+				}
+			}
+			if p := w.check(&habit); p != "" {
+				return p, true
+			}
+			w.items = append(w.items, habit)
+		}
+	}
 	if p := w.check(&it); p != "" {
+		if habit.Kind != "" {
+			w.items = w.items[:len(w.items)-1]
+		}
 		return p, true
 	}
 	w.items = append(w.items, it)
+	if habit.Kind != "" {
+		return fmt.Sprintf("已整理成第 %d 条（新建打卡项「%s」）和第 %d 条（打卡），交给用户确认后写入。",
+			len(w.items)-1, it.Habit, len(w.items)), false
+	}
+	if it.Kind == "record" && it.Type == "habits" {
+		return fmt.Sprintf("已整理成第 %d 条，交给用户确认后写入。用户这次如果也说了今天做了（比如喝了多少），"+
+			"现在接着调用 checkin 给「%s」打卡；没说就不用打卡，直接回复。", len(w.items), text(it.Fields["name"])), false
+	}
 	return fmt.Sprintf("已整理成第 %d 条，交给用户确认后写入，现在还没有 id。"+
 		"这次回复里别的记录要关联它，在 fields 里填 condition_name 或 medication_name（名称）。", len(w.items)), false
+}
+
+func (w *drafting) draftedHabit(name string) bool {
+	for _, d := range w.items {
+		if d.Kind == "record" && d.Type == "habits" && sameName(text(d.Fields["name"])) == sameName(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// habitWithoutCheckin tells whether this reply added or restored a habit and
+// has no check-in on it.
+func (w *drafting) habitWithoutCheckin() bool {
+	for _, d := range w.items {
+		name := ""
+		switch {
+		case d.Kind == "record" && d.Type == "habits":
+			name = text(d.Fields["name"])
+		case d.Kind == "update" && d.Type == "habits":
+			if v, ok := d.Fields["archived"]; ok && !truthy(v) {
+				name = d.Summary
+			}
+		}
+		if name == "" {
+			continue
+		}
+		done := false
+		for _, c := range w.items {
+			if c.Kind == "checkin" && sameName(c.Habit) == sameName(name) {
+				done = true
+			}
+		}
+		if !done {
+			return true
+		}
+	}
+	return false
 }
 
 // update turns update_record into a card that shows the change. It is
@@ -385,6 +458,18 @@ func (w *drafting) check(it *Item) string {
 			return fmt.Sprintf("档案里已经有这个%s（%s #%d），不要再写一条；要关联它就填 %s %d", label, it.Type, id, ref, id)
 		}
 	}
+	if it.Kind == "record" && it.Type == "habits" {
+		if w.draftedHabit(text(it.Fields["name"])) {
+			return fmt.Sprintf("这次已经整理过打卡项「%s」了，不要再写一条", text(it.Fields["name"]))
+		}
+		// the check-in page shows the icon; without one it is a dot
+		if it.Fields == nil {
+			it.Fields = map[string]any{}
+		}
+		if strings.TrimSpace(text(it.Fields["icon"])) == "" {
+			it.Fields["icon"] = defaultHabitIcon
+		}
+	}
 	*it = fillConditionDates([]Item{*it}, w.now)[0]
 	*it = fillMedicationStatus([]Item{*it})[0]
 	if p := problem(w.st, *it, w.now); p != "" && !w.newMetric(*it, p) && !w.newHabit(*it) {
@@ -435,6 +520,9 @@ func (w *drafting) newMetric(it Item, problem string) bool {
 	}
 	return false
 }
+
+// defaultHabitIcon is the icon of a habit the model added without one.
+const defaultHabitIcon = "✅"
 
 // newHabit accepts a check-in on a habit this reply adds, or takes out of
 // the archive. Saving writes records and changes before check-ins.
@@ -565,7 +653,7 @@ func problem(st *store.Store, it Item, now time.Time) string {
 		}
 		h, err := st.FindHabit(it.Habit)
 		if err != nil {
-			return fmt.Sprintf("没有叫「%s」的打卡项。要新建打卡项，先用 add_record 写一条 habits（name 必填，要记数量再填 unit、target），在同一次回复里再调用 checkin", strings.TrimSpace(it.Habit))
+			return fmt.Sprintf("没有叫「%s」的打卡项。要新建就在 checkin 里设 create_if_missing=true（可以带 icon、unit），或者先用 add_record 写一条 habits（还能填 target），在同一次回复里再调用 checkin", strings.TrimSpace(it.Habit))
 		}
 		if truthy(h["archived"]) {
 			return fmt.Sprintf("打卡项「%s」（habits #%d）已归档。用户要接着用它，先用 update_record 把它的 archived 改成 false，在同一次回复里再调用 checkin", text(h["name"]), idOf(h))
