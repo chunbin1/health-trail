@@ -3,6 +3,7 @@ package assistant
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -122,6 +123,13 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	read := false
 	// whether the model was told it claimed something with no card
 	nudged := false
+	// the failed calls of earlier rounds: the same one failing again ends
+	// the reply instead of spending the rest of the rounds on it
+	failedBefore := map[string]bool{}
+	// tools that failed and have not worked since, like a check-in on a
+	// habit that wasn't there before its card was put together
+	unresolved := map[string]bool{}
+	stopped := ""
 	for round := 0; ; round++ {
 		last := round == maxRounds-1
 		choice := "auto"
@@ -137,6 +145,13 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		}
 		if len(m.Calls) == 0 || last {
 			d.Reply = strings.TrimSpace(m.Content)
+			if len(m.Calls) > 0 {
+				// asked to answer, it called a tool anyway: what it wrote
+				// leads into a call that never runs
+				x.note("最后一次请求仍然在调用工具：停下")
+				stopped = msg.Pick(cfg.Lang, stopRounds, stopRoundsEn)
+				d.Reply = ""
+			}
 			if !last && !nudged && len(w.items) == 0 && claimsDone(d.Reply) {
 				nudged = true
 				x.note("回复说已经做好了，却没有卡片：提醒它再来一次")
@@ -149,7 +164,8 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		// a round that only put cards together, all of them fine, is the
 		// end of the reply: asking the model again would resend everything
 		// for one sentence. Unless something was looked up and the answer
-		// isn't written yet.
+		// isn't written yet, or a call that failed earlier hasn't worked
+		// since: the model may be fixing what stopped it.
 		onlyCards := true
 		for _, c := range m.Calls {
 			if !draftTools[c.Name] {
@@ -160,9 +176,12 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			}
 		}
 		failedAny := false
+		repeated := ""
+		failedNow := map[string]bool{}
 		for _, c := range m.Calls {
 			out, failed := "", false
-			args, err := argsOf(c.Args)
+			name, args, err := callOf(c.Name, c.Args)
+			c.Name = name
 			// the write tools first: they never reach the store from here,
 			// whatever their annotations say
 			switch {
@@ -180,6 +199,22 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			step := stepOf(c.Name, args)
 			step.Error = failed
 			failedAny = failedAny || failed
+			if failed {
+				key := c.Name + "\x00" + out
+				if failedBefore[key] && repeated == "" {
+					repeated = out
+					if errors.Is(err, errBadArgs) {
+						repeated = msg.Pick(cfg.Lang, "模型发来的工具参数格式不对，App 读不懂", "the model sent tool arguments the app can't read")
+					} else if cfg.Lang == "en" {
+						// what the tool said is written for the model, in Chinese
+						repeated = "the tool returned the same error"
+					}
+				}
+				failedNow[key] = true
+				unresolved[c.Name] = true
+			} else {
+				delete(unresolved, c.Name)
+			}
 			x.call(c.Name, c.Args, out, failed)
 			d.Steps = append(d.Steps, step)
 			if onStep != nil {
@@ -187,13 +222,27 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			}
 			msgs = append(msgs, map[string]any{"role": "tool", "tool_call_id": c.ID, "content": out})
 		}
-		if onlyCards && !failedAny && (!read || strings.TrimSpace(m.Content) != "") {
+		if repeated != "" {
+			x.note("同一个调用接连出错：停下，不再重试")
+			stopped = msg.Sprintf(cfg.Lang, msg.Pick(cfg.Lang, stopRepeat, stopRepeatEn), repeated)
+			break
+		}
+		for k := range failedNow {
+			failedBefore[k] = true
+		}
+		if onlyCards && !failedAny && len(unresolved) == 0 && (!read || strings.TrimSpace(m.Content) != "") {
 			d.Reply = strings.TrimSpace(m.Content)
 			break
 		}
 	}
-	d.Items = w.items
+	if w.items != nil {
+		d.Items = w.items
+	}
 	d.Reply = plainReply(d.Reply)
+	if stopped != "" {
+		// the model's own words here lead into a call that never ran
+		d.Reply = strings.TrimSpace(stopped)
+	}
 	if len(d.Items) == 0 && claimsDone(d.Reply) {
 		d.Reply += msg.Pick(cfg.Lang, claimNote, claimNoteEn)
 	}
@@ -203,6 +252,15 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	logExchange(st.Dir, cfg, x, d, nil)
 	return d, nil
 }
+
+// What the person is told when the reply is cut short. The cards put
+// together before that are kept.
+const (
+	stopRepeat   = "这一步接连两次出错，我先停下了，没有再试：%s。可以换个说法再试一次；每一步的经过在「设置 → AI助手 → 查看日志」里。"
+	stopRepeatEn = "The same step failed twice in a row, so I stopped instead of trying again (%s). Try saying it another way; each step is in Settings → AI assistant → View log."
+	stopRounds   = "查了好几轮还没做完，我先停下了。可以把要做的事说得更具体一点再试；每一步的经过在「设置 → AI助手 → 查看日志」里。"
+	stopRoundsEn = "This took too many rounds, so I stopped. Try asking for something more specific; each step is in Settings → AI assistant → View log."
+)
 
 // drafting collects what the write tools were called with. Nothing is
 // written here; a call that would not save is told why, so the model can fix
@@ -329,7 +387,7 @@ func (w *drafting) check(it *Item) string {
 	}
 	*it = fillConditionDates([]Item{*it}, w.now)[0]
 	*it = fillMedicationStatus([]Item{*it})[0]
-	if p := problem(w.st, *it, w.now); p != "" && !w.newMetric(*it, p) {
+	if p := problem(w.st, *it, w.now); p != "" && !w.newMetric(*it, p) && !w.newHabit(*it) {
 		return p
 	}
 	if n := sameName(it.ConditionName); n != "" {
@@ -374,6 +432,51 @@ func (w *drafting) newMetric(it Item, problem string) bool {
 		if d.Kind == "record" && d.Type == "metric_kinds" && text(d.Fields["name"]) == text(it.Fields["metric_type"]) {
 			return true
 		}
+	}
+	return false
+}
+
+// newHabit accepts a check-in on a habit this reply adds, or takes out of
+// the archive. Saving writes records and changes before check-ins.
+func (w *drafting) newHabit(it Item) bool {
+	if it.Kind != "checkin" {
+		return false
+	}
+	name := sameName(it.Habit)
+	if name == "" {
+		return false
+	}
+	var id int64
+	if h, err := w.st.FindHabit(it.Habit); err == nil {
+		id = idOf(h)
+	}
+	for _, d := range w.items {
+		switch {
+		case d.Kind == "record" && d.Type == "habits" && sameName(text(d.Fields["name"])) == name:
+			return true
+		case d.Kind == "update" && d.Type == "habits" && id != 0 && d.ID == id:
+			if v, ok := d.Fields["archived"]; ok && !truthy(v) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// truthy reads a Bool field the way the model may write it.
+func truthy(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case float64:
+		return x != 0
+	case int64:
+		return x != 0
+	case int:
+		return x != 0
+	case string:
+		s := strings.ToLower(strings.TrimSpace(x))
+		return s == "true" || s == "1" || s == "是"
 	}
 	return false
 }
@@ -460,8 +563,12 @@ func problem(st *store.Store, it Item, now time.Time) string {
 		if strings.TrimSpace(it.Habit) == "" {
 			return "要写打卡项的名称"
 		}
-		if _, err := st.FindHabit(it.Habit); err != nil {
-			return fmt.Sprintf("没有叫「%s」的打卡项", strings.TrimSpace(it.Habit))
+		h, err := st.FindHabit(it.Habit)
+		if err != nil {
+			return fmt.Sprintf("没有叫「%s」的打卡项。要新建打卡项，先用 add_record 写一条 habits（name 必填，要记数量再填 unit、target），在同一次回复里再调用 checkin", strings.TrimSpace(it.Habit))
+		}
+		if truthy(h["archived"]) {
+			return fmt.Sprintf("打卡项「%s」（habits #%d）已归档。用户要接着用它，先用 update_record 把它的 archived 改成 false，在同一次回复里再调用 checkin", text(h["name"]), idOf(h))
 		}
 		if it.Date != "" && it.Date != "today" && it.Date != "今天" && it.Date != now.Format("2006-01-02") {
 			return "打卡只能记在今天"

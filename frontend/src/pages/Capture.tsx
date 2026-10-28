@@ -855,7 +855,7 @@ function stepLabel(s: ToolStep, entity: (name: string) => Entity | undefined) {
     case 'get_lab_trend': return t('查了「{name}」的历次结果', { name })
     case 'get_metric_trend': return t('查了「{name}」的变化', { name })
     case 'get_checkin_stats': return t('看了打卡统计')
-    case 'add_record': return t('整理一条{type}', { type })
+    case 'add_record': return type ? t('整理一条{type}', { type }) : t('整理一条记录')
     case 'add_lab_report': return t('整理化验单')
     case 'checkin': return t('整理打卡「{name}」', { name })
     case 'update_record': return t('整理修改：{type} #{id}', { type, id: s.id ?? '' })

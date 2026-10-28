@@ -2,7 +2,7 @@ package assistant
 
 import (
 	"context"
-	"encoding/json"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -129,19 +129,6 @@ func cut(s string) string {
 	return s + "\n…（结果太长，后面的省略了。缩小范围再查，比如加上日期或 limit。）"
 }
 
-// argsOf reads a tool call's arguments. Some services send "" for none.
-func argsOf(raw string) (map[string]any, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return map[string]any{}, nil
-	}
-	var m map[string]any
-	if err := json.Unmarshal([]byte(raw), &m); err != nil || m == nil {
-		return nil, msg.New("参数不是 JSON 对象，请重新调用", "The arguments aren't a JSON object; call it again")
-	}
-	return m, nil
-}
-
 // Step is one tool call, shown under the reply so the person can see what
 // was looked at. Type, ID and Text are what the call was about.
 type Step struct {
@@ -173,6 +160,15 @@ func stepOf(name string, args map[string]any) Step {
 			s.Text = text(r["title"])
 		}
 	}
-	s.Text = clip(s.Text, 30)
+	// what a model's markup left in a value is not shown
+	if !typeRe.MatchString(s.Type) {
+		s.Type = ""
+	}
+	s.Text = clip(strings.Join(strings.Fields(tagRe.ReplaceAllString(s.Text, " ")), " "), 30)
 	return s
 }
+
+var (
+	typeRe = regexp.MustCompile(`^[a-z_]*$`)
+	tagRe  = regexp.MustCompile(`<[^>]*>`)
+)

@@ -436,6 +436,7 @@ const EN = {
   '查了「{name}」的变化': 'Read how “{name}” changed',
   '看了打卡统计': 'Read the check-in stats',
   '整理一条{type}': 'Put together: {type}',
+  '整理一条记录': 'Put together a record',
   '整理化验单': 'Put together a lab report',
   '整理打卡「{name}」': 'Put together a check-in for “{name}”',
   '整理修改：{type} #{id}': 'Put together a change: {type} #{id}',
@@ -518,6 +519,22 @@ const EN = {
   '{n} 次': ['{n} result', '{n} results'],
   '参考范围 {range}': 'Reference range {range}',
   '最近一次': 'Latest',
+
+  // the assistant's log
+  '查看日志': 'View log',
+  'AI助手日志': 'AI assistant log',
+  '每次回答的经过：问了什么、调用了哪些工具、哪里出错。最近的在最前面。日志只存在这台电脑的数据目录里（assistant.log），不含密钥。':
+    'How each answer went: what was asked, which tools were called, and what went wrong. Newest first. The log stays in the data folder on this computer (assistant.log) and never has the key. It is written in Chinese.',
+  '日志比较长，这里只显示最后一部分。': 'The log is long; only the latest part is shown.',
+  '只看出错的': 'Errors only',
+  '最近没有出错的回答': 'No recent answers with errors',
+  '还没有日志。用 AI助手问一次之后，这里会记下经过。': 'No log yet. Once you ask the AI assistant something, how it went shows here.',
+  '共 {n} 次回答': ['{n} answer', '{n} answers'],
+  '正在读取…': 'Reading…',
+  '刷新': 'Refresh',
+  '出错': 'Error',
+  '{n} 次请求': ['{n} request', '{n} requests'],
+  '{n} tokens': '{n} tokens',
 } satisfies Record<string, string | Plural>
 
 export type Key = keyof typeof EN

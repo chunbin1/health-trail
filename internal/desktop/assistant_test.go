@@ -17,7 +17,7 @@ func TestAssistantNotOnThePhone(t *testing.T) {
 	defer a.st.Close()
 
 	// the Mac app's API, even from this computer, has no capture routes
-	for _, path := range []string{"/api/assistant", "/api/assistant/draft", "/api/assistant/commit", "/api/assistant/speech/start"} {
+	for _, path := range []string{"/api/assistant", "/api/assistant/draft", "/api/assistant/commit", "/api/assistant/speech/start", "/api/assistant/log"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		r.RemoteAddr = "127.0.0.1:9"
 		r.Host = "127.0.0.1:8721"
@@ -99,6 +99,27 @@ func TestAssistantNotOnThePhone(t *testing.T) {
 	local.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("serve phone: %d %s", w.Code, w.Body)
+	}
+
+	// the log: the window and serve on this computer, never a phone
+	os.WriteFile(dir+"/assistant.log", []byte("—— 2026-10-28 19:32:11  glm-4.6v  https://api.example.com/v1 ——\n--- 用户 ---\n喝水\n"), 0o600)
+	w = httptest.NewRecorder()
+	a.windowHandler(nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/assistant/log", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"ask":"喝水"`) {
+		t.Fatalf("window log: %d %s", w.Code, w.Body)
+	}
+	for _, from := range []struct {
+		addr, host string
+		code       int
+	}{{"127.0.0.1:9", "127.0.0.1:8722", http.StatusOK}, {"192.168.1.20:9", "192.168.1.5:8722", http.StatusNotFound}} {
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/assistant/log", nil)
+		req.RemoteAddr, req.Host = from.addr, from.host
+		req.Header.Set("Authorization", "Bearer "+a.token)
+		local.ServeHTTP(w, req)
+		if w.Code != from.code {
+			t.Fatalf("serve log from %s: %d %s", from.addr, w.Code, w.Body)
+		}
 	}
 }
 
