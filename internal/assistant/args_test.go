@@ -134,7 +134,7 @@ func TestArchivedHabitIsRestored(t *testing.T) {
 	if !strings.Contains(f.bodies[1], "已归档") || !strings.Contains(f.bodies[1], "archived 改成 false") {
 		t.Fatalf("second request:\n%s", f.bodies[1])
 	}
-	if len(d.Items) != 2 || d.Items[0].Kind != "update" || d.Items[1].Kind != "checkin" {
+	if len(d.Items) != 2 || d.Items[0].Kind != "update" || d.Items[1].Kind != "checkin" || d.Items[1].Unit != "升" {
 		t.Fatalf("items %+v", d.Items)
 	}
 	// through JSON, as the window sends it back
@@ -269,7 +269,7 @@ func TestCheckinCreatesHabit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(f.bodies) != 1 || len(d.Items) != 2 || d.Items[0].Type != "habits" || d.Items[0].Fields["icon"] != "💧" || d.Items[0].Fields["unit"] != "升" || d.Items[1].Kind != "checkin" {
+	if len(f.bodies) != 1 || len(d.Items) != 2 || d.Items[0].Type != "habits" || d.Items[0].Fields["icon"] != "💧" || d.Items[0].Fields["unit"] != "升" || d.Items[1].Kind != "checkin" || d.Items[1].Unit != "升" {
 		t.Fatalf("requests %d items %+v", len(f.bodies), d.Items)
 	}
 	if res := Commit(st, d.Items, "zh"); !res.OK {

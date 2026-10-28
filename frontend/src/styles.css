@@ -276,6 +276,8 @@ html.mac-window .main { padding-top: 40px; }
 .btn.ghost { background: none; box-shadow: none; color: var(--ink-2); }
 .btn.ghost:hover { background: var(--surface-3); color: var(--ink); }
 .btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; border-radius: 8px; }
+.btn.sq { padding: 0; width: 32px; justify-content: center; }
+.btn.sm.sq { width: 28px; }
 .btn:disabled { opacity: 0.45; cursor: default; }
 
 .icon-btn {
@@ -904,3 +906,7 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
 @media (max-width: 760px) {
   .log-text { padding-left: 14px; }
 }
+
+/* AI助手's input row: the save mode on the left, icon buttons on the right */
+.chat-tools { display: flex; gap: 6px; margin-left: auto; }
+.chat-tools .btn.sq { width: 32px; height: 32px; }

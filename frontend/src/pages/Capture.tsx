@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
 import { Check, ImagePlus, Mic, SendHorizontal, Trash2, X } from 'lucide-react'
-import { api, ApiError, fmtDate, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft, type ToolStep } from '../api'
+import { api, ApiError, fmtDate, today, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft, type ToolStep } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
 import { AssistantSetup } from '../components/AssistantSetup'
 import { ask } from '../components/Dialog'
 import { t, tx } from '../i18n'
 import { openRecord, useApp, useLoad } from '../state'
-import { IconButton, KindIcon } from '../ui'
+import { habitIcon, IconButton, KindIcon } from '../ui'
 
 const FLAGS = ['正常', '偏高', '偏低', '异常']
 const CAPTURE_KEY = 'health-trail.capture'
@@ -715,6 +715,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
                       </IconButton>
                     )}
                   </div>
+                  {itemDetail(it, m.items!) && <div className="small muted" style={{ marginTop: -6, marginBottom: 8 }}>{itemDetail(it, m.items!)}</div>}
                   {it.problem && <div className="error" style={{ marginBottom: 8 }}>{it.problem}</div>}
                   {it.kind === 'update' && <UpdateDiff item={it} />}
                   {m.saved?.[i]?.id && m.saved[i].type && (
@@ -775,17 +776,23 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
                 api.setAssistant({ auto_save: on }).then((c) => setCfg(c), (e) => setErr(e.message))
               }} />
               <input ref={fileRef} type="file" accept={KINDS.join(',')} multiple hidden onChange={(e) => { addFiles([...e.target.files || []]); e.target.value = '' }} />
-              <button type="button" className="btn sm" disabled={waiting} onClick={() => fileRef.current?.click()}>
-                <ImagePlus size={14} />{t('添加图片')}
-              </button>
-              {view.speech && (
-                <button type="button" className={'btn sm' + (listening ? ' primary' : '')} disabled={(micBusy && !listening) || waiting} onClick={mic}>
-                  <Mic size={14} />{micLabel}
+              {/* icons only, so the row never wraps; send stays at the right edge */}
+              <div className="chat-tools">
+                <button type="button" className="btn sm sq" disabled={waiting} onClick={() => fileRef.current?.click()}
+                  aria-label={t('添加图片')} title={t('添加图片')}>
+                  <ImagePlus size={15} />
                 </button>
-              )}
-              <button type="button" className="btn primary sm" disabled={waiting || micBusy} onClick={send}>
-                <SendHorizontal size={14} />{waiting ? t('正在思考…') : t('发送')}
-              </button>
+                {view.speech && (
+                  <button type="button" className={'btn sm sq' + (listening ? ' primary' : '')} disabled={(micBusy && !listening) || waiting} onClick={mic}
+                    aria-label={micLabel} title={micLabel} aria-pressed={listening}>
+                    <Mic size={15} />
+                  </button>
+                )}
+                <button type="button" className="btn primary sm sq" disabled={waiting || micBusy} onClick={send}
+                  aria-label={waiting ? t('正在思考…') : t('发送')} title={waiting ? t('正在思考…') : t('发送')}>
+                  <SendHorizontal size={15} />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -908,13 +915,31 @@ function iconKind(it: DraftItem) {
 
 function itemDate(it: DraftItem, entity: (name: string) => Entity | undefined) {
   if (it.kind === 'update') return ''
+  if (it.kind === 'checkin') return !it.date || it.date === 'today' || it.date === '今天' || it.date === today() ? t('今天') : fmtDate(it.date)
   const e = it.type ? entity(it.type) : undefined
   const raw = e?.dateKey && it.fields ? it.fields[e.dateKey] : ''
   return raw ? fmtDate(String(raw).slice(0, 10)) : ''
 }
 
+// A new habit and the check-in on it look alike (same icon, same name):
+// the title says which is which, and the line under it what is in it.
+function itemDetail(it: DraftItem, items: DraftItem[]) {
+  const amount = (v: unknown, unit?: string) => (v == null || v === '' ? '' : `${v}${unit ? ' ' + tx(unit) : ''}`)
+  if (it.kind === 'checkin') {
+    // the unit of a habit added in the same reply (cards from before units were sent)
+    const habit = items.find((h) => h.kind === 'record' && h.type === 'habits' && h.fields?.name === it.habit)
+    return amount(it.value, it.unit || habit?.fields?.unit)
+  }
+  if (it.kind === 'record' && it.type === 'habits') {
+    const target = amount(it.fields?.target, it.fields?.unit)
+    return [habitIcon(it.fields || {}), target && t('每天 {amount}', { amount: target })].filter(Boolean).join(' · ')
+  }
+  return ''
+}
+
 function itemTitle(it: DraftItem, entity: (name: string) => { label: string; titleKey: string } | undefined) {
-  if (it.kind === 'checkin') return it.habit || t('打卡')
+  if (it.kind === 'checkin') return it.habit ? t('打卡：{name}', { name: it.habit }) : t('打卡')
+  if (it.kind === 'record' && it.type === 'habits') return t('新打卡项：{name}', { name: String(it.fields?.name || '') })
   if (it.kind === 'lab_report') return String(it.report?.title || t('化验单'))
   const e = it.type ? entity(it.type) : undefined
   if (it.kind === 'update') return t('修改：{name}', { name: it.summary || (e ? tx(e.label) + ' #' + it.id : '#' + it.id) })

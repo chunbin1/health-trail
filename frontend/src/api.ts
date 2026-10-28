@@ -274,6 +274,8 @@ export interface DraftItem {
   panel?: string
   results?: LabDraft[]
   summary?: string
+  // a check-in card: the habit's unit
+  unit?: string
   problem?: string
   // kind 'update': record id of type; fields are the new values, before the old
   id?: number

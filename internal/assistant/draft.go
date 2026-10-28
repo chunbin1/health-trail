@@ -35,6 +35,8 @@ type Item struct {
 	Panel          string         `json:"panel,omitempty"`
 	Results        []LabResult    `json:"results,omitempty"`
 	Summary        string         `json:"summary,omitempty"`
+	// Unit is the habit's unit, shown on a check-in card ("60 分钟")
+	Unit string `json:"unit,omitempty"`
 	Problem        string         `json:"problem,omitempty"`
 	// kind "update" changes record ID of Type: Fields are the new values,
 	// Before what they were when the card was made
@@ -364,6 +366,19 @@ func (w *drafting) draft(tool string, args map[string]any) (string, bool) {
 		"这次回复里别的记录要关联它，在 fields 里填 condition_name 或 medication_name（名称）。", len(w.items)), false
 }
 
+// habitUnit is the unit of a habit drafted in this reply or on file.
+func (w *drafting) habitUnit(name string) string {
+	for _, d := range w.items {
+		if d.Kind == "record" && d.Type == "habits" && sameName(text(d.Fields["name"])) == sameName(name) {
+			return text(d.Fields["unit"])
+		}
+	}
+	if h, err := w.st.FindHabit(name); err == nil {
+		return text(h["unit"])
+	}
+	return ""
+}
+
 func (w *drafting) draftedHabit(name string) bool {
 	for _, d := range w.items {
 		if d.Kind == "record" && d.Type == "habits" && sameName(text(d.Fields["name"])) == sameName(name) {
@@ -492,6 +507,9 @@ func (w *drafting) check(it *Item) string {
 	if it.Kind == "record" && it.Type == "doses" {
 		// the card's title: a dose's own title is only the time
 		it.Summary = w.medName(*it)
+	}
+	if it.Kind == "checkin" {
+		it.Unit = w.habitUnit(it.Habit)
 	}
 	return ""
 }
