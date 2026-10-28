@@ -113,6 +113,67 @@ func TestRestoreOlderBackup(t *testing.T) {
 	}
 }
 
+// A restore keeps the records' uids and leaves sync's own state as it is
+// now, marked to start over; a backup from before the uid gets new ones.
+func TestRestoreAndSync(t *testing.T) {
+	s := open(t)
+	c, _ := s.Create("conditions", store.Record{"name": "胃炎"})
+	id, _ := c["id"].(int64)
+	uid, err := s.UID("conditions", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	name, err := Create(s, dir, "", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// after the backup: sync turned on, something waiting to be sent
+	if _, err := s.DB.Exec("INSERT INTO sync_state (key, value) VALUES ('enabled', '1')"); err != nil {
+		t.Fatal(err)
+	}
+	s.Create("conditions", store.Record{"name": "鼻炎"})
+	if err := Restore(s, filepath.Join(dir, name)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.UID("conditions", id); got != uid {
+		t.Errorf("uid %q, want %q", got, uid)
+	}
+	state := map[string]string{}
+	rows, _ := s.DB.Query("SELECT key, value FROM sync_state")
+	for rows.Next() {
+		var k, v string
+		rows.Scan(&k, &v)
+		state[k] = v
+	}
+	rows.Close()
+	if state["enabled"] != "1" || state["reset"] != "1" || count(t, s, "sync_outbox") != 0 {
+		t.Errorf("sync state %v, outbox %d", state, count(t, s, "sync_outbox"))
+	}
+
+	// a backup from before the uid
+	path := filepath.Join(dir, name)
+	tmp := t.TempDir()
+	unzip(t, path, tmp)
+	db, _ := sql.Open("sqlite", filepath.Join(tmp, "health.db"))
+	for _, q := range []string{
+		"DROP TRIGGER sync1_conditions_uid", "DROP TRIGGER sync1_conditions_ins", "DROP TRIGGER sync1_conditions_upd", "DROP TRIGGER sync1_conditions_del",
+		"DROP INDEX idx_conditions_uid", "ALTER TABLE conditions DROP COLUMN uid",
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	rezip(t, tmp, path)
+	if err := Restore(s, path); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.UID("conditions", id); err != nil || !store.ValidUID(got) || got == uid {
+		t.Errorf("old backup: uid %q %v", got, err)
+	}
+}
+
 func TestRestoreRefusesBadFiles(t *testing.T) {
 	s := open(t)
 	s.Create("conditions", store.Record{"name": "留着"})
