@@ -161,7 +161,10 @@ func (s *Store) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments(owner_type, owner_id);
 	CREATE INDEX IF NOT EXISTS idx_lab_item ON lab_results(item_name);
 	CREATE INDEX IF NOT EXISTS idx_metrics_type ON metrics(metric_type, measured_at);`)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.migrateSync()
 }
 
 func (s *Store) columns(table string) (map[string]bool, error) {
@@ -207,7 +210,7 @@ func (s *Store) cleanKnown(e *Entity, in Record, known map[string]map[int64]stru
 func (s *Store) cleanWithNames(e *Entity, in Record, known map[string]map[int64]struct{}, extra []string) (Record, error) {
 	out := Record{}
 	for k, v := range in {
-		if k == "id" || k == "created_at" || k == "updated_at" {
+		if k == "id" || k == "uid" || k == "created_at" || k == "updated_at" {
 			continue
 		}
 		f := e.Field(k)
@@ -829,6 +832,9 @@ func (s *Store) query(sqlText string, args ...any) ([]Record, error) {
 		}
 		r := Record{}
 		for i, c := range cols {
+			if c == "uid" {
+				continue // sync's own; the id is what everyone else uses (sync.go)
+			}
 			if b, ok := vals[i].([]byte); ok {
 				r[c] = string(b)
 			} else {

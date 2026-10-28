@@ -324,9 +324,16 @@ func copyRecords(st *store.Store, snap string) (err error) {
 	if _, err = tx.Exec("PRAGMA defer_foreign_keys = ON"); err != nil {
 		return err
 	}
-	tables, err := names(tx, "SELECT name FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+	all, err := names(tx, "SELECT name FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
 	if err != nil {
 		return err
+	}
+	// sync's own state is about this device and the cloud now: it stays
+	var tables []string
+	for _, t := range all {
+		if !store.IsSyncTable(t) {
+			tables = append(tables, t)
+		}
 	}
 	theirs, err := names(tx, "SELECT name FROM r.sqlite_master WHERE type = 'table'")
 	if err != nil {
@@ -367,6 +374,10 @@ func copyRecords(st *store.Store, snap string) (err error) {
 		if err != nil {
 			return err
 		}
+	}
+	// every record was replaced: a sync starts over from this data
+	if err = store.MarkRestored(tx); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

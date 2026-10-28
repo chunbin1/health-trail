@@ -85,7 +85,7 @@ func (f *fakeCal) Remove(id string) error {
 
 func (f *fakeCal) remByURL(suffix string) (string, calReminder) {
 	for id, r := range f.rems {
-		if strings.HasSuffix(r.URL, suffix) {
+		if strings.HasSuffix(keyOf(r.URL), suffix) {
 			return id, r
 		}
 	}
@@ -103,6 +103,79 @@ func calTest(t *testing.T) (*store.Store, *fakeCal, *Sync) {
 	f := newFakeCal()
 	return st, f, New(st, f, data, "健康足迹")
 }
+
+func uidOf(t *testing.T, st *store.Store, entity string, id any) string {
+	t.Helper()
+	n, _ := id.(int64)
+	uid, err := st.UID(entity, n)
+	if err != nil || !store.ValidUID(uid) {
+		t.Fatalf("%s #%v: %q %v", entity, id, uid, err)
+	}
+	return uid
+}
+
+// What was written before there were uids is the same item: not rewritten,
+// a deleted one not put back, a ticked-off medicine not taken twice.
+func TestItemsFromBeforeUIDs(t *testing.T) {
+	st, f, c := calTest(t)
+	loc := time.Local
+	now := time.Date(2026, 10, 22, 12, 0, 0, 0, loc)
+	a, _ := st.Create("appointments", store.Record{"scheduled_at": "2026-10-23 15:00", "title": "胃镜检查"})
+	gone, _ := st.Create("appointments", store.Record{"scheduled_at": "2026-10-24 15:00", "title": "删掉的"})
+	m, _ := st.Create("medications", store.Record{"name": "奥美拉唑", "status": "在用", "remind_times": "20:00"})
+	if err := c.Set(false, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Set(true, true); err != nil {
+		t.Fatal(err)
+	}
+	// as an older version wrote them: URLs without the uid
+	s := c.load()
+	at := time.Date(2026, 10, 23, 15, 0, 0, 0, loc)
+	old := appointmentEvent(a, "", at)
+	f.events["e-old"] = calEvent{ID: "e-old", Title: old.Title, Start: old.Start, End: old.End, Notes: old.Notes, URL: old.URL, Alarms: old.Alarms}
+	s.Made[keyOf(old.URL)] = digest(old)
+	goneEv := appointmentEvent(gone, "", time.Date(2026, 10, 24, 15, 0, 0, 0, loc))
+	s.Made[keyOf(goneEv.URL)] = "gone:" + digest(goneEv)
+	due := time.Date(2026, 10, 22, 20, 0, 0, 0, loc)
+	rem := calReminder{
+		Title: "💊 奥美拉唑", Due: due.Unix(), URL: fmt.Sprintf("%smedications/%v/%s", URLPrefix, m["id"], due.Format("200601021504")),
+		Completed: true, Alarms: []int64{due.Unix()},
+	}
+	f.rems["r-old"] = rem
+	f.doneAt["r-old"] = due
+	s.Made[keyOf(rem.URL)] = digest(rem) // ticked off because the dose was logged here, and that dose since deleted
+	if err := c.save(s); err != nil {
+		t.Fatal(err)
+	}
+	f.saves = 0
+	if err := c.sync(now); err != nil {
+		t.Fatal(err)
+	}
+	if e := f.events["e-old"]; e.URL != old.URL {
+		t.Errorf("unchanged event rewritten: %+v", e)
+	}
+	for _, e := range f.events {
+		if e.Title == "删掉的" {
+			t.Errorf("deleted event put back: %+v", e)
+		}
+	}
+	if doses, _, _ := st.List("doses", store.ListQuery{}); len(doses) != 0 {
+		t.Errorf("a dose from the old tick: %v", doses)
+	}
+	// a change writes the uid into the same event
+	if _, err := st.Update("appointments", idOf(a), store.Record{"place": "协和医院"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.sync(now); err != nil {
+		t.Fatal(err)
+	}
+	if e := f.events["e-old"]; !strings.HasSuffix(e.URL, "?uid="+uidOf(t, st, "appointments", a["id"])) || e.Location != "协和医院" {
+		t.Errorf("changed event: %+v", e)
+	}
+}
+
+func idOf(r store.Record) int64 { n, _ := r["id"].(int64); return n }
 
 func TestCalendarSyncAppointments(t *testing.T) {
 	st, f, c := calTest(t)
@@ -135,7 +208,7 @@ func TestCalendarSyncAppointments(t *testing.T) {
 	}
 	start := time.Date(2026, 10, 23, 15, 0, 0, 0, loc)
 	if e.Title != "胃镜检查" || e.Start != start.Unix() || e.End != start.Add(time.Hour).Unix() || e.Location != "协和医院" ||
-		e.Notes != "空腹 8 小时" || e.URL != fmt.Sprintf("healthtrail://appointments/%v", a["id"]) {
+		e.Notes != "空腹 8 小时" || e.URL != fmt.Sprintf("healthtrail://appointments/%v?uid=%s", a["id"], uidOf(t, st, "appointments", a["id"])) {
 		t.Errorf("event = %+v", e)
 	}
 	// alarms: 20:00 the evening before, an hour before

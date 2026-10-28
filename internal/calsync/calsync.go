@@ -22,9 +22,32 @@ import (
 // each in a calendar/list of the app's own (in iCloud when there is one), so
 // they reach the iPhone and the watch and remind there. Ticking a medicine
 // off in Reminders logs the dose here; logging it here ticks it off there.
-// Each item carries a URL (healthtrail://…) naming the record it comes from.
+// Each item carries a URL (healthtrail://…) naming the record it comes from:
+// healthtrail://appointments/12?uid=…, healthtrail://medications/3/202610250800?uid=….
+// The part before "?" is this Mac's id and is how an item is known here
+// (its key); the uid names the record on any device. An item written before
+// there were uids has no "?uid=" and keeps that URL until it next changes:
+// the uid is left out of the digest, so adding it doesn't rewrite anything.
 
 const URLPrefix = "healthtrail://"
+
+// recordURL is the URL for path (appointments/12, …), with the record's uid
+// when it has one.
+func recordURL(path, uid string) string {
+	if uid == "" {
+		return URLPrefix + path
+	}
+	return URLPrefix + path + "?uid=" + uid
+}
+
+// keyOf is the URL without the prefix and the uid: how an item is known.
+func keyOf(url string) string {
+	k := strings.TrimPrefix(url, URLPrefix)
+	if i := strings.IndexByte(k, '?'); i >= 0 {
+		k = k[:i]
+	}
+	return k
+}
 
 type access int
 
@@ -223,7 +246,7 @@ func (c *Sync) clear(s *calState, reminders bool, now time.Time) error {
 			if err := c.api.Remove(it.ID); err != nil {
 				return err
 			}
-			delete(s.Made, strings.TrimPrefix(it.URL, URLPrefix))
+			delete(s.Made, keyOf(it.URL))
 		}
 	}
 	return nil
@@ -271,11 +294,23 @@ func digest(v any) string {
 	return hex.EncodeToString(sum[:8])
 }
 
+// eventDigest and reminderDigest leave the uid out: what an item was written
+// as before uids is the same item now.
+func eventDigest(e calEvent) string {
+	e.URL = URLPrefix + keyOf(e.URL)
+	return digest(e)
+}
+
+func reminderDigest(r calReminder) string {
+	r.URL = URLPrefix + keyOf(r.URL)
+	return digest(r)
+}
+
 func byURL(items []calItem) map[string]calItem {
 	m := map[string]calItem{}
 	for _, it := range items {
 		if strings.HasPrefix(it.URL, URLPrefix) {
-			m[strings.TrimPrefix(it.URL, URLPrefix)] = it
+			m[keyOf(it.URL)] = it
 		}
 	}
 	return m
@@ -298,11 +333,11 @@ func str(r store.Record, k string) string {
 
 // appointmentEvent is the event for an appointment: an hour long, with the
 // app's reminders as alarms (the evening before and remind_before ahead).
-func appointmentEvent(a store.Record, at time.Time) calEvent {
+func appointmentEvent(a store.Record, uid string, at time.Time) calEvent {
 	e := calEvent{
 		Title: str(a, "title"), Start: at.Unix(), End: at.Add(time.Hour).Unix(),
 		Location: str(a, "place"), Notes: joinLines(str(a, "preparation"), str(a, "notes")),
-		URL: fmt.Sprintf("%sappointments/%v", URLPrefix, a["id"]),
+		URL: recordURL(fmt.Sprintf("appointments/%v", a["id"]), uid),
 	}
 	rb := str(a, "remind_before")
 	if rb == "不提醒" {
@@ -339,10 +374,10 @@ func (c *Sync) syncEvents(s *calState, now time.Time) error {
 		if err != nil {
 			continue
 		}
-		e := appointmentEvent(a, at)
-		key := strings.TrimPrefix(e.URL, URLPrefix)
+		e := appointmentEvent(a, c.uid("appointments", a["id"]), at)
+		key := keyOf(e.URL)
 		want[key] = true
-		h := digest(e)
+		h := eventDigest(e)
 		ex, ok := have[key]
 		prev := s.Made[key]
 		switch {
@@ -395,16 +430,16 @@ func (c *Sync) syncReminders(s *calState, now time.Time) error {
 		m := t.Medication
 		r := calReminder{
 			Title: "💊 " + strings.TrimSpace(str(m, "name")+" "+str(m, "dosage")), Due: t.At.Unix(),
-			Notes: str(m, "frequency"), URL: fmt.Sprintf("%smedications/%v/%s", URLPrefix, m["id"], t.At.Format("200601021504")),
+			Notes: str(m, "frequency"), URL: recordURL(fmt.Sprintf("medications/%v/%s", m["id"], t.At.Format("200601021504")), c.uid("medications", m["id"])),
 			Completed: t.Dose != nil, Alarms: []int64{t.At.Unix()},
 		}
-		key := strings.TrimPrefix(r.URL, URLPrefix)
+		key := keyOf(r.URL)
 		want[key] = true
 		open, done := r, r
 		open.Completed, done.Completed = false, true
 		ex, ok := have[key]
 		prev := s.Made[key]
-		if ok && ex.Completed && t.Dose == nil && prev != digest(done) {
+		if ok && ex.Completed && t.Dose == nil && prev != reminderDigest(done) {
 			// ticked off on the phone or the Mac: that's a dose taken
 			at := ex.CompletedAt
 			if at.IsZero() {
@@ -414,10 +449,10 @@ func (c *Sync) syncReminders(s *calState, now time.Time) error {
 			if _, err := c.st.Create("doses", store.Record{"medication_id": m["id"], "taken_at": at.Format("2006-01-02 15:04"), "notes": "在提醒事项里勾选"}); err != nil {
 				return err
 			}
-			s.Made[key] = digest(done)
+			s.Made[key] = reminderDigest(done)
 			continue
 		}
-		h := digest(r)
+		h := reminderDigest(r)
 		switch {
 		case ok && prev == h:
 			continue
@@ -449,6 +484,16 @@ func (c *Sync) syncReminders(s *calState, now time.Time) error {
 	}
 	forget(s, "medications/", have, want)
 	return nil
+}
+
+// uid is the record's uid, or "" (written without one) if it can't be read.
+func (c *Sync) uid(entity string, id any) string {
+	n, _ := id.(int64)
+	uid, err := c.st.UID(entity, n)
+	if err != nil {
+		return ""
+	}
+	return uid
 }
 
 // forget drops the keys of one kind that are neither wanted nor there any

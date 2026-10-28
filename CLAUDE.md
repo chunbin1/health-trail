@@ -32,6 +32,7 @@ internal/store/          数据层，唯一的数据来源
   store.go               建表/迁移、增删改查、校验
   convert.go             字段类型转换、日期规范化、检验值和参考范围解析
   queries.go             总览、趋势、打卡统计、搜索、时间线
+  sync.go                以后多设备同步的底子：每条记录的 uid、sync_outbox 和触发器（同步打开后才记改动）
 internal/server/         REST API（/api/...）、安全层 guard.go、UI 静态文件
 internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）；也是 AI助手的工具：标了 ReadOnlyHint 的工具在 App 里不经确认直接执行，写入的工具千万别标
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
@@ -50,6 +51,7 @@ scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_re
 - **附件**：只有图片、PDF、纯文本可以直接在页面里打开，其他类型一律作为下载返回，并带 `Content-Security-Policy: sandbox`。不能让上传的 HTML 或 SVG 以本站身份运行。
 - **stdout 归 MCP 协议**：`health-trail mcp` 模式下，任何日志只能写 stderr。
 - **错误要让 Claude 看得懂**：业务错误返回 `store.ValidationError`，消息里写明哪个字段、允许哪些值，MCP 层通过 `failed()` 作为工具结果返回（IsError），而不是协议错误。
+- **记录的 uid 不能变**：每张记录表和附件表都有一列 `uid`，由数据库触发器生成，多台设备靠它认出同一条记录。改记录只能用 `UPDATE`，不要用 `INSERT OR REPLACE` 整行替换（会换掉 uid）；store 读出的记录里不带 uid（MCP、接口、界面用 id），要 uid 用 `st.UID` / `st.IDByUID`。备份恢复不动 `sync_` 开头的表，恢复完标记 `reset`。
 - **一份报告要么全部写入，要么一条不写**：批量写入用 `CreateMany`（事务）；`add_lab_report`（mcpserver 的 `importLabs`）失败时要删掉它新建的报告。
 - **界面统一**：颜色和图标用 `ui.tsx` 的 `KIND`（每类记录一个图标 + `--c-<kind>` 颜色）和 `styles.css` 里的 token，不要在组件里写死颜色。图表系列颜色要先用 dataviz 的 `validate_palette.js` 校验浅色和深色两套。
 - **界面文字中英两套**：前端写死的文字一律 `t('中文原文')`，并在 `i18n.tsx` 的 `EN` 里加英文（漏了类型检查不过）；schema 来的字段名、提示、枚举选项、单位用 `tx()` 显示。枚举存进数据库的值永远是中文，只翻译显示。语言保存在数据目录的 settings.json（`lang`）。MCP 的说明和 prompts 保持中文。
