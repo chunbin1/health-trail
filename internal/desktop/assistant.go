@@ -79,6 +79,20 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 		}
 		writeJSON(w, a.assistantView(cfg, speech && a.ear != nil && a.ear.Available()))
 	}))
+	mux.HandleFunc("POST /api/assistant/check", wrap(func(w http.ResponseWriter, r *http.Request) {
+		cfg, err := assistant.Load(a.st.Dir)
+		if err != nil {
+			writeError(w, a.msg("AI助手的配置读不出来", "Couldn't read the AI assistant settings"))
+			return
+		}
+		ctx, stop := context.WithTimeout(r.Context(), 60*time.Second)
+		defer stop()
+		if err := assistant.Check(ctx, cfg); err != nil {
+			writeError(w, a.errText(err))
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	}))
 	mux.HandleFunc("POST /api/assistant/draft", wrap(func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			ID       string           `json:"id"`
@@ -292,6 +306,7 @@ func (a *app) assistantView(cfg assistant.Config, speech bool) map[string]any {
 		"has_key":    cfg.APIKey != "",
 		"speech":     speech,
 		"auto_save":  a.settings.autoSave(),
+		"providers":  assistant.Providers,
 	}
 }
 

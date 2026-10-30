@@ -27,6 +27,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
 	"github.com/lee/health-trail/frontend"
+	"github.com/lee/health-trail/internal/assistant"
 	"github.com/lee/health-trail/internal/attachopen"
 	"github.com/lee/health-trail/internal/calsync"
 	"github.com/lee/health-trail/internal/folders"
@@ -243,6 +244,17 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 		page := update.ReleasesPage
 		if rel := a.updates.latest(); rel != nil && strings.HasPrefix(rel.Page, "https://github.com/") {
 			page = rel.Page
+		}
+		wapp().Browser.OpenURL(page)
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// a listed AI service's sign-up or key page in the browser; only the
+	// addresses in assistant.Providers
+	mux.HandleFunc("POST /api/assistant/providers/{id}/open", func(w http.ResponseWriter, r *http.Request) {
+		page, ok := assistant.ProviderPage(r.PathValue("id"), r.URL.Query().Get("page"))
+		if !ok {
+			writeError(w, a.msg("没有这个页面", "No such page"))
+			return
 		}
 		wapp().Browser.OpenURL(page)
 		writeJSON(w, map[string]bool{"ok": true})

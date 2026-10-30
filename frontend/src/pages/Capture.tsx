@@ -669,8 +669,8 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
         </div>
         {(!view.configured || showSetup) && (
           <section className="card">
-            {!view.configured && <p className="sub" style={{ marginTop: 0 }}>{t('还没有填写接口。填好以后就可以在这里说话或打字记档案。')}</p>}
-            <AssistantSetup cfg={view} onSaved={(c) => { setCfg(c); setShowSetup(false); reload() }} />
+            {!view.configured && <p className="sub" style={{ marginTop: 0 }}>{t('还没有设置接口。照着下面的步骤拿到密钥，就可以在这里说话或打字记档案。')}</p>}
+            <AssistantSetup cfg={view} onSaved={(c, ok) => { setCfg(c); setShowSetup(!ok); reload() }} />
           </section>
         )}
         {err && <div className="error">{err}</div>}

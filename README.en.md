@@ -46,7 +46,7 @@ For now it supports macOS 13 and later only, on both Apple silicon and Intel.
 
 <sub>The dmg is signed with a Developer ID and notarized by Apple, so it opens with a double-click. You can also [build from source](#build-from-source). When a new version comes out, the app tells you in Settings → Software update, and one click updates it.</sub>
 
-**2 · Connect AI**: open the app's Connect AI page. Use an API for the assistant in the window (address, key and model), or use MCP and copy the configuration for the AI you use (Claude Desktop, Claude Code, Codex, or any other AI that supports MCP).
+**2 · Connect AI**: open the app's Connect AI page. Use an API for the assistant in the window (pick Zhipu and follow the steps to get a key, or fill in the address, key and model yourself), or use MCP and copy the configuration for the AI you use (Claude Desktop, Claude Code, Codex, or any other AI that supports MCP).
 
 **3 · Start using it**: say to the AI
 
@@ -157,6 +157,7 @@ AI assistant in the sidebar lets you talk to an AI right in the app (Today has a
 **Service, privacy and the log**
 
 - The service must speak OpenAI-style Chat Completions and support tool calls (function calling); pictures also need a model that can see them. You set the address, key and model name at the top of Connect AI, or in AI assistant or in Settings. The key stays on this computer and is not included in backups.
+- With Zhipu you only sign up, create a key and paste it in; the address and model are filled in for you: the free glm-4.6v-flash, which reads pictures, by default, or another Zhipu model from the list (all of them read pictures, each marked with its price range). The Sign up link carries the author’s invite code: it costs you nothing extra, and the author may get a reward from Zhipu; if you’d rather not, sign up at bigmodel.cn yourself. For any other service choose Other. Saving sends one short message to test the connection, and says so plainly when the key is wrong, the balance is empty, the model name is off or the model can't call tools.
 - What goes to the service: what you type or say and the pictures, the names of existing health issues, medications and check-ins, and whatever records it reads to answer. Speech uses the Mac's own dictation, so the audio is not uploaded.
 - Each conversation is kept in `chats.json` in the data folder; History in the assistant opens an earlier one.
 - Each answer adds an entry to `assistant.log` in the data folder, for tracking down problems and seeing where the tokens go: what you said, the tokens of each request, which tools it called and with what, the start of what each tool returned, the answer and the cards, and any error. Like `chats.json` it stays on this computer and is not included in backups; the system prompt is only counted, pictures are only named by type and size, and the key is never logged. View log, in Settings → AI assistant or under Change service in the assistant, shows the latest part at any time, newest first, or only the answers that went wrong.

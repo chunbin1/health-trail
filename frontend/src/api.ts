@@ -199,6 +199,19 @@ export interface AssistantConfig {
   has_key: boolean
   speech: boolean
   auto_save: boolean
+  providers: AIProvider[]
+}
+
+// A service AI助手 can be set up with in a few clicks (assistant.Providers).
+export interface AIProvider {
+  id: string
+  name: string
+  name_en: string
+  base_url: string
+  models: { id: string; note: string; note_en: string }[] // the first is the default
+  key_page: string
+  signup: string
+  invite: boolean // signup carries the author's invite code
 }
 
 export interface LabDraft {
@@ -423,6 +436,9 @@ export const api = {
   assistant: () => req<AssistantConfig>('GET', '/api/assistant'),
   setAssistant: (body: { base_url?: string; api_key?: string; model?: string; clear_key?: boolean; auto_save?: boolean }) =>
     req<AssistantConfig>('PUT', '/api/assistant', body).then((c) => { window.dispatchEvent(new Event('assistant-config')); return c }),
+  checkAssistant: () => req<{ ok: boolean }>('POST', '/api/assistant/check'),
+  openProviderPage: (id: string, page: 'signup' | 'key') =>
+    req<{ ok: boolean }>('POST', '/api/assistant/providers/' + encodeURIComponent(id) + '/open?page=' + page),
   assistantDraft: (body: { id: string; messages: ChatTurn[] }) => req<Draft>('POST', '/api/assistant/draft', body),
   assistantDraftStatus: () => req<DraftStatus>('GET', '/api/assistant/draft'),
   assistantCommit: (items: DraftItem[]) => req<CommitResult>('POST', '/api/assistant/commit', { items }),

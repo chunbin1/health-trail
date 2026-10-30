@@ -178,7 +178,7 @@ func messageOf(b []byte) (message, error) {
 }
 
 func upstreamError(status int, raw, key string) error {
-	detail := raw
+	detail, code := raw, ""
 	var wrap struct {
 		Error any `json:"error"`
 	}
@@ -190,6 +190,7 @@ func upstreamError(status int, raw, key string) error {
 			if m, _ := e["message"].(string); m != "" {
 				detail = m
 			}
+			code = errorCode(e)
 		}
 	}
 	detail = strings.TrimSpace(redact(detail, key))
@@ -197,10 +198,14 @@ func upstreamError(status int, raw, key string) error {
 	if len(detail) > 200 {
 		detail = detail[:200]
 	}
-	if detail == "" {
-		return msg.Errorf("接口返回了错误（%d）", "The API returned an error (%d)", status)
+	head := msg.Errorf("接口返回了错误（%d）", "The API returned an error (%d)", status)
+	if zh, en := hint(status, code, detail); zh != "" {
+		head = msg.Errorf(zh+"（%d）", en+" (%d)", status)
 	}
-	return msg.Errorf("接口返回了错误（%d）：%s", "The API returned an error (%d): %s", status, detail)
+	if detail == "" {
+		return head
+	}
+	return msg.Errorf("%s：%s", "%s: %s", head, detail)
 }
 
 func redact(s, key string) string {
