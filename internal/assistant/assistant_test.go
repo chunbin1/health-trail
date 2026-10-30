@@ -729,3 +729,90 @@ func TestEnglishUI(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestCheckExplainsErrors(t *testing.T) {
+	cases := []struct {
+		status int
+		body   string
+		want   string
+	}{
+		{200, `{"choices":[{"message":{"content":"OK"}}]}`, ""},
+		{401, `{"error":{"code":"1000","message":"身份验证失败。"}}`, "密钥不对"},
+		{429, `{"error":{"code":"1113","message":"您的账户已欠费，请充值后重试。"}}`, "余额不足"},
+		{429, `{"error":{"code":"1315","message":"wrong product"}}`, "按量付费"},
+		{400, `{"error":{"code":"1211","message":"模型不存在，请检查模型代码。"}}`, "模型名不对"},
+		{404, `{"error":{"message":"The model gpt-x does not exist"}}`, "模型名不对"},
+		{404, `not found`, "接口地址不对"},
+		{429, `{"error":{"code":"1302","message":"rate"}}`, "太频繁"},
+		{429, `{"error":{"code":"1305","message":"该模型当前访问量过大，请您稍后再试"}}`, "用的人太多"},
+		{429, `{"error":{"message":"You exceeded your current quota"}}`, "余额不足"},
+		// a model that can't read images is not a wrong model name
+		{400, `{"error":{"message":"model does not support image input"}}`, "接口返回了错误（400）"},
+		{400, `{"error":{"message":"tools is not supported"}}`, "不支持工具调用"},
+	}
+	for _, c := range cases {
+		var got string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			got = string(b)
+			w.WriteHeader(c.status)
+			io.WriteString(w, c.body)
+		}))
+		err := Check(context.Background(), Config{BaseURL: srv.URL, APIKey: "sk-secret", Model: "glm-4.6v-flash"})
+		srv.Close()
+		if !strings.Contains(got, `"model":"glm-4.6v-flash"`) || !strings.Contains(got, `"tools"`) {
+			t.Fatalf("request: %s", got)
+		}
+		if c.want == "" {
+			if err != nil {
+				t.Fatalf("%d: %v", c.status, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%d %s: want %q, got %v", c.status, c.body, c.want, err)
+		}
+	}
+	if err := Check(context.Background(), Config{BaseURL: "https://x.test", Model: "m"}); err == nil {
+		t.Fatal("no key should not be sent")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `{"error":{"code":"1000","message":"身份验证失败。"}}`)
+	}))
+	defer srv.Close()
+	err := Check(context.Background(), Config{BaseURL: srv.URL, APIKey: "k", Model: "m"})
+	if got := msg.In(err, "en"); !strings.HasPrefix(got, "The key is wrong") || !strings.Contains(err.Error(), "密钥不对") {
+		t.Fatalf("%q / %v", got, err)
+	}
+}
+
+func TestProviderPage(t *testing.T) {
+	for _, p := range Providers {
+		if _, err := NormalizeBaseURL(p.BaseURL); err != nil {
+			t.Fatalf("%s: %v", p.ID, err)
+		}
+		if len(p.Models) == 0 || p.Name == "" || p.NameEN == "" {
+			t.Fatalf("%s: incomplete %+v", p.ID, p)
+		}
+		seen := map[string]bool{}
+		for _, m := range p.Models {
+			if _, err := CleanModel(m.ID); err != nil || seen[m.ID] || m.Note == "" || m.NoteEN == "" {
+				t.Fatalf("%s: model %+v", p.ID, m)
+			}
+			seen[m.ID] = true
+		}
+		for _, page := range []string{"signup", "key"} {
+			u, ok := ProviderPage(p.ID, page)
+			if !ok || !strings.HasPrefix(u, "https://") {
+				t.Fatalf("%s %s: %q", p.ID, page, u)
+			}
+		}
+	}
+	if _, ok := ProviderPage("zhipu", "file:///etc/passwd"); ok {
+		t.Fatal("unknown page")
+	}
+	if _, ok := ProviderPage("nope", "key"); ok {
+		t.Fatal("unknown provider")
+	}
+}

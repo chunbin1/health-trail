@@ -910,3 +910,13 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
 /* AI助手's input row: the save mode on the left, icon buttons on the right */
 .chat-tools { display: flex; gap: 6px; margin-left: auto; }
 .chat-tools .btn.sq { width: 32px; height: 32px; }
+
+/* AI助手 setup: numbered steps to get a key from a listed provider */
+.setup-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; counter-reset: step; }
+.setup-steps > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start; counter-increment: step; }
+.setup-steps > li::before {
+  content: counter(step); width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+  font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
+}
+.setup-steps .step-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 2px; font-size: 14px; }
+.okay { display: flex; align-items: center; gap: 8px; color: var(--accent); background: var(--accent-soft); padding: 10px 14px; border-radius: 10px; font-size: 13px; }

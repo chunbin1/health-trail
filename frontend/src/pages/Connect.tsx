@@ -66,7 +66,7 @@ function AssistantAPI() {
     <>
       <div>
         <h2>{t('方式一 · API')}</h2>
-        <div className="sub" style={{ marginTop: 4 }}>{t('给窗口里的 AI 助手用。填一个兼容 OpenAI 的接口：地址、密钥和模型。密钥只存在这台电脑上。声音用 Mac 本机识别，不经过这个接口；图片会发给它。')}</div>
+        <div className="sub" style={{ marginTop: 4 }}>{t('给窗口里的 AI 助手用。选一个服务商照着步骤拿到密钥，也可以自己填一个兼容 OpenAI 的接口。密钥只存在这台电脑上。声音用 Mac 本机识别，不经过这个接口；图片会发给它。')}</div>
       </div>
       <section className="card">
         {error && <div className="error">{error}</div>}
