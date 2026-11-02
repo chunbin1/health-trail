@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"os/exec"
 	"strconv"
 
 	"github.com/lee/health-trail/internal/attachopen"
@@ -19,9 +18,7 @@ func (a *app) openAttachmentHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, a.msg("无效的附件 id", "Invalid attachment id"))
 		return
 	}
-	revealed, err := attachopen.Open(a.st, id, a.openDir, func(args ...string) error {
-		return exec.Command("open", args...).Run()
-	})
+	revealed, err := attachopen.Open(a.st, id, a.openDir, openWith)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, a.msg("附件不存在", "The attachment doesn't exist"))
 		return

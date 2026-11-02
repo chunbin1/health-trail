@@ -38,13 +38,13 @@ Lab reports sit in your photo library, medical records in a hospital app, you re
 
 It's for people who want to manage their own (or their family's) health records seriously but don't want to hand medical records to a cloud service. If you only need to track steps and sleep, the Health app built into your iPhone is enough.
 
-For now it supports macOS 13 and later only, on both Apple silicon and Intel.
+The Mac app is the release build: macOS 13 and later, on both Apple silicon and Intel. The same Release also has an unsigned Windows zip.
 
 ## Quick start
 
-**1 · Install**: download `HealthTrail-<version>.dmg` from **[Releases](https://github.com/chunbin1/health-trail/releases)**, open it, and drag 健康足迹 (Health Trail) into Applications.
+**1 · Install**: download `HealthTrail-<version>.dmg` from **[Releases](https://github.com/chunbin1/health-trail/releases)**, open it, and drag 健康足迹 (Health Trail) into Applications. On Windows, download `HealthTrail-<version>-windows.zip`, unzip it, and run `health-trail.exe` (WebView2 is required).
 
-<sub>The dmg is signed with a Developer ID and notarized by Apple, so it opens with a double-click. You can also [build from source](#build-from-source). When a new version comes out, the app tells you in Settings → Software update, and one click updates it.</sub>
+<sub>The dmg is signed with a Developer ID and notarized by Apple, so it opens with a double-click. The Windows zip is not signed, so SmartScreen may block it. You can also [build from source](#build-from-source). On a Mac, when a new version comes out, the app tells you in Settings → Software update, and one click updates it. On Windows, download the new zip yourself.</sub>
 
 **2 · Connect AI**: open the app's Connect AI page. Use an API for the assistant in the window (pick Zhipu and follow the steps to get a key, or fill in the address, key and model yourself), or use MCP and copy the configuration for the AI you use (Claude Desktop, Claude Code, Codex, or any other AI that supports MCP).
 
@@ -268,7 +268,7 @@ For development, use `make dev`: the UI runs at http://localhost:5173 and fronte
 
 To debug while using your own real data, use `make dev-real`: before each start it backs up the database and attachments to `~/Library/Application Support/HealthVault-dev-backups/<time>`, keeping the most recent 10.
 
-The code structure and coding conventions are in [CLAUDE.md](CLAUDE.md) (Chinese), and pitfalls we've hit are recorded in [LESSONS.md](LESSONS.md) (Chinese). Every push runs the tests, packaging and the MCP end-to-end test in [CI](.github/workflows/ci.yml); pushing a `v*` tag signs, notarizes and publishes a release automatically, see [RELEASING.md](RELEASING.md) (Chinese).
+The code structure and coding conventions are in [CLAUDE.md](CLAUDE.md) (Chinese), and pitfalls we've hit are recorded in [LESSONS.md](LESSONS.md) (Chinese). Every push runs the tests and the MCP end-to-end test on both Mac and Windows in [CI](.github/workflows/ci.yml), and builds a dmg plus an unsigned exe (those two are kept for 7 days). Pushing a `v*` tag signs, notarizes and publishes the Mac release, and attaches the Windows zip to the same Release, see [RELEASING.md](RELEASING.md) (Chinese).
 
 ## Roadmap
 

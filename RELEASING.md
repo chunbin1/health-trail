@@ -1,6 +1,6 @@
 # 发布新版本
 
-健康足迹不上 Mac App Store，发的是 Developer ID 签名、苹果公证过的 dmg。别人下载后双击就能打开，不会弹「无法验证开发者」。
+健康足迹不上 Mac App Store，发的是 Developer ID 签名、苹果公证过的 dmg。别人下载后双击就能打开，不会弹「无法验证开发者」。同一个 Release 上还有一个未签名的 `HealthTrail-<版本>-windows.zip`，里面是 `health-trail.exe`，解压后直接运行。它不会自己更新，下一版仍要自己下载。
 
 ## 先过 AI 审阅
 
@@ -62,7 +62,7 @@ git push origin v1.0.1
 
 一定要用 `-a`（带说明的标签）：不带说明的话，Release 页面上只会显示最后一次提交的提交说明。也可以直接跟 Claude 说「发个 1.0.1」，它会先写好说明给你确认，再打标签。
 
-GitHub Actions（`.github/workflows/release.yml`）先查 AI 审阅，再跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，再跑一遍 MCP 端到端测试，最后建一个 GitHub Release 把 dmg 挂上去。版本号直接取标签：`v1.0.0` → `1.0.0`。
+GitHub Actions（`.github/workflows/release.yml`）先查 AI 审阅，再跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，并打一个未签名的 Windows zip，再跑一遍 MCP 端到端测试，最后建一个 GitHub Release 把 dmg、Mac 的 zip 和 Windows 的 zip 都挂上去。版本号直接取标签：`v1.0.0` → `1.0.0`。这些 Release 上的文件不会过期；每次推送时 CI 里的 dmg 和 exe 才只留 7 天。
 
 ## App 里的自动更新
 

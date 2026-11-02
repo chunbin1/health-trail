@@ -73,6 +73,7 @@ export interface MedDay {
 
 // Appointments written to Calendar and medicines to Reminders (Mac app only).
 export interface CalSync {
+  supported: boolean
   events: boolean
   reminders: boolean
   title: string

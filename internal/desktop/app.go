@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -323,7 +324,11 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 		}
 		if err := a.shell.setAutostart(in.Enabled); err != nil {
 			log.Printf("设置开机启动失败：%v", err)
-			writeError(w, a.msg("没能更改开机启动，可以在「系统设置 → 通用 → 登录项」里改", "Couldn't change opening at login; you can change it in System Settings → General → Login Items"))
+			why := a.msg("没能更改开机启动，可以在「系统设置 → 通用 → 登录项」里改", "Couldn't change opening at login; you can change it in System Settings → General → Login Items")
+			if runtime.GOOS == "windows" {
+				why = a.msg("没能更改开机启动，可以在「设置 → 应用 → 启动」里改", "Couldn't change opening at login; you can change it in Settings → Apps → Startup")
+			}
+			writeError(w, why)
 			return
 		}
 		writeJSON(w, map[string]bool{"enabled": a.shell.autostart()})
@@ -482,13 +487,18 @@ func RunApp(dataDir, port string) {
 			},
 		},
 	})
+	// shell=mac draws under a hidden title bar. Windows keeps a normal one.
+	page := "/"
+	if runtime.GOOS == "darwin" {
+		page = "/?shell=mac"
+	}
 	win = wapp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "健康足迹",
 		Width:            1240,
 		Height:           820,
 		MinWidth:         380,
 		MinHeight:        500,
-		URL:              "/?shell=mac",
+		URL:              page,
 		Hidden:           true, // shown once started, unless opened at login
 		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
 		Mac: application.MacWindow{

@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // stagePrefix names the folder next to the app where an update is unpacked
@@ -88,7 +87,7 @@ func (in *Installer) Check() (string, error) {
 	if strings.Contains(in.App, "/AppTranslocation/") || strings.HasPrefix(in.App, "/Volumes/") {
 		return "", ErrNotMovable
 	}
-	if syscall.Access(filepath.Dir(in.App), 2 /* W_OK */) != nil {
+	if !dirWritable(filepath.Dir(in.App)) {
 		return "", ErrNotMovable
 	}
 	return team, nil
@@ -233,7 +232,7 @@ while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
 rm -rf "$stage"
 exec open -n "$app" --args "$@"`
 	cmd := exec.Command("/bin/sh", append([]string{"-c", script, "sh", strconv.Itoa(os.Getpid()), stage, app}, args...)...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = detachAttr()
 	return cmd.Start()
 }
 

@@ -6,7 +6,7 @@
 
 ```mermaid
 flowchart TD
-    A["写代码的会话<br/>推到分支、开 PR"] --> CI["CI / macos（push）<br/>测试、打 dmg、MCP 端到端"]
+    A["写代码的会话<br/>推到分支、开 PR"] --> CI["CI / macos 与 windows（push）<br/>测试、打 dmg 和未签名 exe、MCP 端到端"]
     A --> G1["AI 审阅（pull_request）<br/>跑门禁：还没审过 → 红"]
     A --> R["没写这段代码的会话或子代理<br/>跑 /code-review、自己测、在界面上看"]
     R --> P["用仓库所有者的账号发评审<br/>## AI 审阅（最新提交号）+ 结论"]
@@ -18,10 +18,10 @@ flowchart TD
     FIX -->|"新提交上只有 pull_request 那条，红的"| R
     OK --> M["合并进 main"]
     M --> T["打标签 v*"]
-    T --> REL["release.yml<br/>先查标签指向的提交（见下面第三张图）<br/>再测试、签名、公证、发布"]
+    T --> REL["release.yml<br/>先查标签指向的提交（见下面第三张图）<br/>再测试、签名、公证，发布 dmg 和 Windows zip"]
 ```
 
-- 检查都在 PR 页面上：`CI / macos` 每次推送都跑；「AI 审阅」按触发它的事件列成两条，发审阅那次会顺手重跑开 PR 那次，两条跑完后是一样的颜色。重跑还没跑完、或者没重跑成功时会暂时不一样，看 pull_request_review 那次的日志。推了新提交，新提交上先只有 pull_request 那一条（红的），发了审阅才出现另一条。
+- 检查都在 PR 页面上：`CI / macos` 和 `CI / windows` 每次推送都跑；「AI 审阅」按触发它的事件列成两条，发审阅那次会顺手重跑开 PR 那次，两条跑完后是一样的颜色。重跑还没跑完、或者没重跑成功时会暂时不一样，看 pull_request_review 那次的日志。推了新提交，新提交上先只有 pull_request 那一条（红的），发了审阅才出现另一条。
 - 合并按钮本身不等审阅（main 没有设分支保护）。真正拦住没审过的代码的是发布那一步：标签指向的提交没通过门禁，就不打包、不发布。
 - 审完又推了提交，就要再审一次，标题写新的提交号，可以注明「增量」。
 
@@ -55,6 +55,6 @@ flowchart TD
     D -->|"有：测试版"| PR2{"从 PR 合并进 main 的，<br/>或者是某个还开着的 PR 的最新提交？"}
     PR2 -->|"都不是"| X1
     PR2 -->|"是"| GATE
-    GATE -->|"通过"| BUILD["测试、签名、公证、发布"]
+    GATE -->|"通过"| BUILD["测试、签名、公证，发布 dmg 和 Windows zip"]
     GATE -->|"没通过"| X1
 ```

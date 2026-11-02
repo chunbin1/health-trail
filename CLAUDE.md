@@ -16,15 +16,15 @@ internal/desktop/        桌面 App 这一层
   backups.go             备份的触发和接口（打包、恢复在 internal/backup）
   updates.go             检查新版本（启动后、每 4 小时、窗口回到前台时）、窗口里的「更新并重启」、菜单栏的新版本提示
   folders.go, attachments.go  只给窗口用的接口：允许读取的文件夹、在 Mac 上打开 / 删除附件
-  shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码
+  shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码。dock_other.go、speech_other.go 是其它系统上的空实现
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
   assistant.go           窗口里的「AI助手」：配置、整理、确认后写入；serve 只给本机，手机拿不到
   speech_darwin.go       Mac 本机听写（SFSpeechRecognizer，要求设备端识别）
 internal/assistant/      AI助手：进程内连 mcpserver，只读工具照常执行，add_record / add_lab_report / checkin / update_record 变成卡片（commit.go 确认后写入）；密钥在数据目录的 assistant.json
-internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分
+internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分，eventkit_other.go 在 Windows 上表示不支持
 internal/update/         查 GitHub 最新 Release、下载 zip、校验同一团队的 Developer ID 签名和公证、替换 .app、退出后重新打开
 internal/reminders/      打卡、用药、预约的系统通知（Wails 服务）
-internal/folders/        沙盒版「允许读取的文件夹」：安全书签（bookmarks_darwin.go），窗口和 MCP 启动时都打开
+internal/folders/        沙盒版「允许读取的文件夹」：安全书签（bookmarks_darwin.go），窗口和 MCP 启动时都打开；非 Mac 上书签就是路径本身（bookmarks_other.go）
 internal/attachopen/     窗口里点附件：复制一份到临时目录，用 Mac 上对应的 App 打开（不认识的类型只在访达里显示）；副本在删除、超过 1 小时、启动和退出时清掉
 internal/store/          数据层，唯一的数据来源
   schema.go              所有记录类型和字段的定义 ← 加字段从这里开始

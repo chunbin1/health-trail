@@ -91,8 +91,10 @@ type calReminder struct {
 }
 
 // calendarAPI is what the sync needs of Calendar and Reminders: EventKit on
-// the Mac, a fake in the tests.
+// the Mac, a fake in the tests. Supported is false where there is no
+// system calendar to write to (Windows, for now).
 type calendarAPI interface {
+	Supported() bool
 	Access(reminders bool) access
 	Request(reminders bool) bool
 	Calendar(reminders bool, title, saved string) (id, source string, err error)
@@ -185,6 +187,9 @@ func (c *Sync) poke() {
 func (c *Sync) Set(reminders, on bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if !c.api.Supported() {
+		return errUnsupported()
+	}
 	s := c.load()
 	if on {
 		if c.api.Access(reminders) != accessFull && !c.api.Request(reminders) {
@@ -257,6 +262,9 @@ func (c *Sync) clear(s *calState, reminders bool, now time.Time) error {
 func (c *Sync) sync(now time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if !c.api.Supported() {
+		return nil
+	}
 	s := c.load()
 	if !s.Events && !s.Reminders {
 		return nil
@@ -515,8 +523,15 @@ func (c *Sync) Status(lang string) map[string]any {
 	}
 	names := []string{"not_asked", "full", "denied", "write_only"}
 	return map[string]any{
-		"events": s.Events, "reminders": s.Reminders, "source": s.Source, "title": c.title,
+		"supported": c.api.Supported(),
+		"events":    s.Events, "reminders": s.Reminders, "source": s.Source, "title": c.title,
 		"events_access": names[c.api.Access(false)], "reminders_access": names[c.api.Access(true)],
 		"last_at": s.LastAt, "last_error": s.LastError,
 	}
+}
+
+// errUnsupported is what turning sync on returns where there is no system
+// calendar wired up.
+func errUnsupported() error {
+	return msg.New("这一版还不能把预约和吃药写进系统的日历和提醒事项", "This version can't write appointments and medicines to the system calendar and reminders yet")
 }
