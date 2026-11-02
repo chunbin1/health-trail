@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -54,12 +55,16 @@ func TestConfigKeepsKey(t *testing.T) {
 	if !c.Configured() {
 		t.Fatal("not configured")
 	}
-	fi, err := os.Stat(c.path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fi.Mode().Perm() != 0o600 {
-		t.Fatalf("mode %o", fi.Mode().Perm())
+	// Windows does not store Unix permission bits, so Stat reports 0666.
+	// OpenFile/WriteFile still ask for 0o600 on every OS.
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(c.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm() != 0o600 {
+			t.Fatalf("mode %o", fi.Mode().Perm())
+		}
 	}
 	raw, _ := os.ReadFile(c.path)
 	if !strings.Contains(string(raw), key) {
@@ -586,9 +591,14 @@ func TestExchangeLog(t *testing.T) {
 			t.Fatalf("log has %q:\n%s", not, s)
 		}
 	}
-	fi, _ := os.Stat(filepath.Join(st.Dir, "assistant.log"))
-	if fi.Mode().Perm() != 0o600 {
-		t.Fatalf("mode %o", fi.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		fi, err := os.Stat(filepath.Join(st.Dir, "assistant.log"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm() != 0o600 {
+			t.Fatalf("mode %o", fi.Mode().Perm())
+		}
 	}
 }
 

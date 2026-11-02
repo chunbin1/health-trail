@@ -65,7 +65,9 @@ func TestAddAttachment(t *testing.T) {
 	// app data in ~/Library, a text file, a file without an extension, and
 	// a harmless-looking link to one of them
 	home := t.TempDir()
+	// os.UserHomeDir reads HOME on Unix and USERPROFILE on Windows.
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	os.MkdirAll(filepath.Join(home, ".ssh"), 0o700)
 	key := filepath.Join(home, ".ssh", "id_ed25519")
 	os.WriteFile(key, []byte("-----BEGIN OPENSSH PRIVATE KEY-----"), 0o600)
