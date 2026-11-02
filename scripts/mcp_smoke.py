@@ -11,8 +11,10 @@ import json, os, subprocess, sys, tempfile
 
 binary = sys.argv[1]
 data = tempfile.mkdtemp(prefix="health-trail-smoke-")
+# UTF-8, not the Windows console code page: the server writes Chinese.
 p = subprocess.Popen([binary, "mcp", "-data", data], stdin=subprocess.PIPE,
-                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                     text=True, encoding="utf-8")
 n = 0
 
 
