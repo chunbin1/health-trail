@@ -113,6 +113,7 @@ func TestOldDatabaseGetsUIDs(t *testing.T) {
 	if s, err = Open(dir); err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 	if uidOf(t, s, "conditions", 1) != a {
 		t.Fatal("uid changed on reopening")
 	}

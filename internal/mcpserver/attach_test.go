@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -65,7 +66,7 @@ func TestAddAttachment(t *testing.T) {
 	// app data in ~/Library, a text file, a file without an extension, and
 	// a harmless-looking link to one of them
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setUserHome(t, home)
 	os.MkdirAll(filepath.Join(home, ".ssh"), 0o700)
 	key := filepath.Join(home, ".ssh", "id_ed25519")
 	os.WriteFile(key, []byte("-----BEGIN OPENSSH PRIVATE KEY-----"), 0o600)
@@ -119,6 +120,16 @@ func TestAddAttachment(t *testing.T) {
 	if as, _ := st.Attachments("reports", rep["id"].(int64)); len(as) != 4 {
 		t.Errorf("a refused call saved something, or an allowed one didn't: %d attachments", len(as))
 	}
+}
+
+// os.UserHomeDir reads HOME on Mac and USERPROFILE on Windows.
+func setUserHome(t *testing.T, dir string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", dir)
+		return
+	}
+	t.Setenv("HOME", dir)
 }
 
 // add_attachment reads any file on the Mac, so a client on another device
@@ -180,8 +191,9 @@ func TestAttachKeepsRealLibraryOutInSandbox(t *testing.T) {
 	}
 	defer func(f func() string) { realHome = f }(realHome)
 	realHome = func() string { return real }
-	t.Setenv("HOME", filepath.Join(real, "Library", "Containers", "com.example.app", "Data"))
-	os.MkdirAll(os.Getenv("HOME"), 0o700)
+	home := filepath.Join(real, "Library", "Containers", "com.example.app", "Data")
+	setUserHome(t, home)
+	os.MkdirAll(home, 0o700)
 
 	cs, st := session(t)
 	rep, _ := st.Create("reports", store.Record{"report_date": "2026-10-01", "title": "体检"})
