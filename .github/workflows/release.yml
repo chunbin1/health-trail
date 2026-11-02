@@ -5,7 +5,8 @@ name: Release
 # latest commit of an open PR, reviewed the same way); then the same checks as
 # CI, then a Developer ID signed, notarized universal dmg published as a GitHub
 # Release, with the zip of the app that the app's own update downloads
-# (HealthTrail-<version>.zip).
+# (HealthTrail-<version>.zip). The same release also gets an unsigned
+# Windows zip, HealthTrail-<version>-windows.zip (health-trail.exe inside).
 #
 # Secrets (set once with `gh secret set`; how to make each is in RELEASING.md):
 #   DEVELOPER_ID_P12           the Developer ID Application certificate and its
@@ -44,8 +45,51 @@ jobs:
             python3 -I scripts/ai_review_gate.py commit "$GITHUB_SHA"
           fi
 
-  macos:
+  windows:
     needs: ai-review
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: UI
+        shell: bash
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Test
+        shell: bash
+        run: |
+          go vet ./...
+          go test ./...
+          python -I scripts/test_ai_review_gate.py
+          (cd frontend && npx tsc -b)
+      - name: Windows zip
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          go build -ldflags "-s -w -X main.version=${version}" -o health-trail.exe .
+          mkdir -p dist
+          python -I scripts/mcp_smoke.py "$PWD/health-trail.exe"
+          powershell.exe -NoProfile -Command "Compress-Archive -Path health-trail.exe -DestinationPath 'dist/HealthTrail-${version}-windows.zip' -Force"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: HealthTrail-windows-zip
+          path: dist/HealthTrail-*-windows.zip
+
+  macos:
+    needs: [ai-review, windows]
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -100,6 +144,10 @@ jobs:
       - name: MCP end to end
         run: python3 -I scripts/mcp_smoke.py "dist/root/健康足迹.app/Contents/MacOS/health-trail"
 
+      - uses: actions/download-artifact@v7
+        with:
+          name: HealthTrail-windows-zip
+          path: dist
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

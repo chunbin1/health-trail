@@ -38,13 +38,13 @@ https://github.com/user-attachments/assets/7d57d18b-8832-4bc0-9797-f5483d23beaa
 
 适合想认真管理自己（或家人）健康记录、又不想把病历交给云服务的人。如果你只需要记步数和睡眠，iPhone 自带的「健康」就够了。
 
-目前只支持 macOS 13 及以上，Apple 芯片和 Intel 都可以。
+Mac 是正式版，支持 macOS 13 及以上，Apple 芯片和 Intel 都可以。同一个 Release 里还有未签名的 Windows 压缩包。
 
 ## 快速开始
 
-**1 · 安装**：从 **[Releases](https://github.com/chunbin1/health-trail/releases)** 下载 `HealthTrail-<版本>.dmg`，打开后把「健康足迹」拖进「应用程序」。
+**1 · 安装**：从 **[Releases](https://github.com/chunbin1/health-trail/releases)** 下载 `HealthTrail-<版本>.dmg`，打开后把「健康足迹」拖进「应用程序」。Windows 下载 `HealthTrail-<版本>-windows.zip`，解压后运行里面的 `health-trail.exe`（需要 WebView2）。
 
-<sub>dmg 用 Developer ID 签名并经过苹果公证，双击就能打开。也可以[从源码构建](#从源码构建)。以后有新版本，App 会在「设置 → 软件更新」里提示，点一下就更新。</sub>
+<sub>dmg 用 Developer ID 签名并经过苹果公证，双击就能打开。Windows 的压缩包没有签名，SmartScreen 可能会拦。也可以[从源码构建](#从源码构建)。Mac 上以后有新版本，App 会在「设置 → 软件更新」里提示，点一下就更新。Windows 上要自己下载新的压缩包。</sub>
 
 **2 · 连接 AI**：打开 App 的「连接 AI」页。可以用 API 接窗口里的 AI 助手（选智谱照着步骤拿密钥，或者自己填地址、密钥和模型），也可以用 MCP，按你用的 AI 复制配置（Claude 桌面版、Claude Code、Codex 或其他支持 MCP 的 AI）。
 
@@ -268,7 +268,7 @@ make dmg      # 同时支持 Apple 芯片和 Intel 的 dmg（发布时用 Develo
 
 想用自己的真实数据边用边调试，用 `make dev-real`：每次启动前会先把数据库和附件备份到 `~/Library/Application Support/HealthVault-dev-backups/<时间>`，保留最近 10 份。
 
-代码结构和改代码的约定见 [CLAUDE.md](CLAUDE.md)，踩过的坑记在 [LESSONS.md](LESSONS.md)。每次推送都会由 [CI](.github/workflows/ci.yml) 在 Mac 和 Windows 上同时跑测试和 MCP 端到端测试，并打出 dmg 和一个未签名的 exe；推送 `v*` 标签仍只签名、公证并发布 Mac 版，见 [RELEASING.md](RELEASING.md)。
+代码结构和改代码的约定见 [CLAUDE.md](CLAUDE.md)，踩过的坑记在 [LESSONS.md](LESSONS.md)。每次推送都会由 [CI](.github/workflows/ci.yml) 在 Mac 和 Windows 上同时跑测试和 MCP 端到端测试，并打出 dmg 和一个未签名的 exe（这两个只留 7 天）。推送 `v*` 标签会签名、公证并发布 Mac 版，同时把 Windows 的压缩包挂到同一个 Release 上，见 [RELEASING.md](RELEASING.md)。
 
 ## 计划
 
