@@ -246,6 +246,8 @@ import (
 // written there syncs through iCloud to the iPhone and the watch.
 type EventKit struct{ mu sync.Mutex }
 
+func (k *EventKit) Supported() bool { return true }
+
 func cstr(s string) (*C.char, func()) {
 	c := C.CString(s)
 	return c, func() { C.free(unsafe.Pointer(c)) }

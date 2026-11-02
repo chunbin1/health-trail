@@ -2,6 +2,7 @@ package calsync
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ func newFakeCal() *fakeCal {
 	return &fakeCal{access: map[bool]access{}, grant: true, events: map[string]calEvent{}, rems: map[string]calReminder{}, doneAt: map[string]time.Time{}}
 }
 
+func (f *fakeCal) Supported() bool      { return true }
 func (f *fakeCal) Access(r bool) access { return f.access[r] }
 func (f *fakeCal) Request(r bool) bool {
 	if f.grant {
@@ -112,6 +114,12 @@ func uidOf(t *testing.T, st *store.Store, entity string, id any) string {
 		t.Fatalf("%s #%v: %q %v", entity, id, uid, err)
 	}
 	return uid
+}
+
+func TestEventKitFollowsTheOS(t *testing.T) {
+	if got := (&EventKit{}).Supported(); got != (runtime.GOOS == "darwin") {
+		t.Fatalf("Supported() = %v on %s", got, runtime.GOOS)
+	}
 }
 
 // What was written before there were uids is the same item: not rewritten,

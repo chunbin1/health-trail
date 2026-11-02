@@ -96,9 +96,10 @@ var realHome = func() string {
 }
 
 // inSandbox says the app runs in the App Sandbox: there the system points
-// the home folder at the app's container.
+// the home folder at the app's container. The marker is the Mac path, with
+// slashes, on every OS — a Windows home never contains it.
 func inSandbox(home string) bool {
-	return strings.Contains(home, string(filepath.Separator)+filepath.Join("Library", "Containers")+string(filepath.Separator))
+	return strings.Contains(home, "/Library/Containers/")
 }
 
 // attach copies a file on this computer into the data directory as an

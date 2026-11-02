@@ -268,7 +268,7 @@ make dmg      # 同时支持 Apple 芯片和 Intel 的 dmg（发布时用 Develo
 
 想用自己的真实数据边用边调试，用 `make dev-real`：每次启动前会先把数据库和附件备份到 `~/Library/Application Support/HealthVault-dev-backups/<时间>`，保留最近 10 份。
 
-代码结构和改代码的约定见 [CLAUDE.md](CLAUDE.md)，踩过的坑记在 [LESSONS.md](LESSONS.md)。每次推送都会由 [CI](.github/workflows/ci.yml) 跑测试、打包和 MCP 端到端测试；推送 `v*` 标签会自动签名、公证并发布，见 [RELEASING.md](RELEASING.md)。
+代码结构和改代码的约定见 [CLAUDE.md](CLAUDE.md)，踩过的坑记在 [LESSONS.md](LESSONS.md)。每次推送都会由 [CI](.github/workflows/ci.yml) 在 Mac 和 Windows 上同时跑测试和 MCP 端到端测试，并打出 dmg 和一个未签名的 exe；推送 `v*` 标签仍只签名、公证并发布 Mac 版，见 [RELEASING.md](RELEASING.md)。
 
 ## 计划
 

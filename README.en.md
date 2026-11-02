@@ -268,7 +268,7 @@ For development, use `make dev`: the UI runs at http://localhost:5173 and fronte
 
 To debug while using your own real data, use `make dev-real`: before each start it backs up the database and attachments to `~/Library/Application Support/HealthVault-dev-backups/<time>`, keeping the most recent 10.
 
-The code structure and coding conventions are in [CLAUDE.md](CLAUDE.md) (Chinese), and pitfalls we've hit are recorded in [LESSONS.md](LESSONS.md) (Chinese). Every push runs the tests, packaging and the MCP end-to-end test in [CI](.github/workflows/ci.yml); pushing a `v*` tag signs, notarizes and publishes a release automatically, see [RELEASING.md](RELEASING.md) (Chinese).
+The code structure and coding conventions are in [CLAUDE.md](CLAUDE.md) (Chinese), and pitfalls we've hit are recorded in [LESSONS.md](LESSONS.md) (Chinese). Every push runs the tests and the MCP end-to-end test on both Mac and Windows in [CI](.github/workflows/ci.yml), and builds a dmg plus an unsigned exe; pushing a `v*` tag still signs, notarizes and publishes the Mac release only, see [RELEASING.md](RELEASING.md) (Chinese).
 
 ## Roadmap
 

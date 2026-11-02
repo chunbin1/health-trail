@@ -151,6 +151,7 @@ const EN = {
   '允许访问': 'Allow access',
   '上次同步 {time}': 'Last synced {time}',
   '登录 Mac 后在菜单栏运行，不打开窗口，到点照常提醒。关掉窗口也会留在菜单栏；要完全退出，点菜单栏的图标 →「退出健康足迹」。': 'Runs in the menu bar after you log in to your Mac, without opening the window, and reminds you on time. Closing the window also leaves it in the menu bar; to quit completely, click its menu bar icon → “Quit Health Trail”.',
+  '登录 Windows 后在任务栏运行，不打开窗口，到点照常提醒。关掉窗口也会留在任务栏；要完全退出，点任务栏图标 →「退出健康足迹」。': 'Runs in the taskbar after you log in to Windows, without opening the window, and reminds you on time. Closing the window also leaves it in the taskbar; to quit completely, click its taskbar icon → “Quit Health Trail”.',
   '最多保留': 'Keep up to',
   '份，更早的自动删除': 'backups; older ones are deleted',
   'App 开着的时候才会自动备份；错过的时间会在下次打开时补上。': 'Automatic backups run while the app is open; a missed one is made the next time it opens.',

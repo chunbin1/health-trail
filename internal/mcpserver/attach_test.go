@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -150,7 +149,7 @@ func TestAddAttachmentOnlyOnThisComputer(t *testing.T) {
 // In the App Store sandbox a file outside Downloads can't be read: the
 // error says where to put it instead, and still names no path.
 func TestUnreadableInSandbox(t *testing.T) {
-	denied := &fs.PathError{Op: "open", Path: "/Users/x/Desktop/体检.pdf", Err: syscall.EPERM}
+	denied := &fs.PathError{Op: "open", Path: "/Users/x/Desktop/体检.pdf", Err: fs.ErrPermission}
 	sandbox := "/Users/x/Library/Containers/com.chunbin1.healthtrail/Data"
 	cases := []struct {
 		err        error
