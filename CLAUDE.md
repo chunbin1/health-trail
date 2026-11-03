@@ -19,7 +19,7 @@ internal/desktop/        桌面 App 这一层
   shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码。dock_other.go、speech_other.go 是其它系统上的空实现
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
   assistant.go           窗口里的「AI助手」：配置、整理、确认后写入；serve 只给本机，手机拿不到
-  speech_darwin.go       Mac 本机听写（SFSpeechRecognizer，要求设备端识别）
+  speech_darwin.go       Mac 本机听写（SFSpeechRecognizer，要求设备端识别）。speech_windows.go 用本机 SAPI，不走云端；protocol_windows.go 登记 healthtrail://
 internal/assistant/      AI助手：进程内连 mcpserver，只读工具照常执行，add_record / add_lab_report / checkin / update_record 变成卡片（commit.go 确认后写入）；密钥在数据目录的 assistant.json
 internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分，eventkit_other.go 在 Windows 上表示不支持
 internal/update/         查 GitHub 最新 Release、下载 zip、校验同一团队的 Developer ID 签名和公证、替换 .app、退出后重新打开

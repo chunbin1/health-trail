@@ -3,6 +3,7 @@ package desktop
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 )
 
@@ -79,12 +80,24 @@ func (a *app) speechMessage(err error) string {
 	if errors.As(err, &se) {
 		switch se.Code {
 		case 1:
+			if runtime.GOOS == "windows" {
+				return a.msg("没有语音识别的权限。请在「设置 → 隐私和安全性 → 语音」里允许健康足迹。不会改用云端识别。",
+					"Speech recognition isn't allowed. Allow Health Trail in Settings → Privacy & security → Speech. Audio is not sent to a cloud recognizer.")
+			}
 			return a.msg("没有语音识别的权限。请在「系统设置 → 隐私与安全性 → 语音识别」里允许健康足迹。",
 				"Speech recognition isn't allowed. Allow Health Trail in System Settings → Privacy & Security → Speech Recognition.")
 		case 2:
+			if runtime.GOOS == "windows" {
+				return a.msg("没有麦克风的权限。请在「设置 → 隐私和安全性 → 麦克风」里允许健康足迹。",
+					"The microphone isn't allowed. Allow Health Trail in Settings → Privacy & security → Microphone.")
+			}
 			return a.msg("没有麦克风的权限。请在「系统设置 → 隐私与安全性 → 麦克风」里允许健康足迹。",
 				"The microphone isn't allowed. Allow Health Trail in System Settings → Privacy & Security → Microphone.")
 		case 3:
+			if runtime.GOOS == "windows" {
+				return a.msg("这台电脑还不能在本机识别这种语言。请到「设置 → 时间和语言 → 语音」下载语音。不会改用云端识别。",
+					"This PC can't recognize that language on the device yet. Download the speech language in Settings → Time & language → Speech. Audio is not sent to a cloud recognizer.")
+			}
 			return a.msg("这台 Mac 还不能在本机识别这种语言。请到「系统设置 → 键盘 → 听写」打开听写并下载语言。不会改用云端识别。",
 				"This Mac can't recognize that language on the device yet. Turn on Dictation in System Settings → Keyboard → Dictation and download the language. Audio is not sent to a cloud recognizer.")
 		case 4:
@@ -92,6 +105,9 @@ func (a *app) speechMessage(err error) string {
 		}
 	}
 	if errors.Is(err, errSpeechUnavailable) {
+		if runtime.GOOS == "windows" {
+			return a.msg("这台电脑没有本机语音识别。", "This PC has no on-device speech recognition.")
+		}
 		return a.msg("只有 Mac 窗口里可以语音。", "Voice input is only in the Mac window.")
 	}
 	return a.msg("没能开始听写，请再试一次。", "Couldn't start listening. Try again.")

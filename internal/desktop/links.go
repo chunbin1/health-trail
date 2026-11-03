@@ -83,6 +83,7 @@ func isStamp(s string) bool {
 // the link a copy started by it was opened with.
 func linkIn(args []string) string {
 	for _, s := range args {
+		s = strings.Trim(s, `"`)
 		if strings.HasPrefix(s, calsync.URLPrefix) {
 			return s
 		}
