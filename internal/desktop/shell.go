@@ -3,7 +3,10 @@ package desktop
 import (
 	_ "embed"
 	"log"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -83,15 +86,35 @@ func (s *shell) hide() {
 	}
 }
 
+// autostart says whether the app opens at login: registered, and on Windows
+// not turned off since in Settings → Apps → Startup.
 func (s *shell) autostart() bool {
 	on, err := s.wapp.Autostart.IsEnabled()
-	return err == nil && on
+	return err == nil && on && !startupDisabled(s.autostartName())
+}
+
+// autostartName is the Windows login entry registered for this copy: the
+// value's name under Run (an older one may still have Wails's default
+// name), "" when there is none.
+func (s *shell) autostartName() string {
+	st, err := s.wapp.Autostart.Status()
+	if err != nil || !st.Enabled {
+		return ""
+	}
+	return st.Path[strings.LastIndexAny(st.Path, `\/`)+1:]
 }
 
 func (s *shell) setAutostart(on bool) error {
+	old := s.autostartName()
 	var err error
 	if on {
 		err = s.wapp.Autostart.EnableWithOptions(autostartOptions())
+		if err == nil {
+			// on in the app is on: an "off" from Windows Settings, under
+			// this name or the one the entry had before, no longer holds
+			clearStartupDisabled(autostartID)
+			clearStartupDisabled(old)
+		}
 	} else {
 		err = s.wapp.Autostart.Disable()
 	}
@@ -99,20 +122,39 @@ func (s *shell) setAutostart(on bool) error {
 	return err
 }
 
+// autostartID names the Windows login entry. Without it Wails derives one
+// from the app's name, which for 健康足迹 is the generic "wails-app".
+const autostartID = "HealthTrail"
+
 // autostartOptions: on Windows the login start carries -login, the only way
 // the app can tell it was started at login and keep the window closed.
 func autostartOptions() application.AutostartOptions {
 	if runtime.GOOS == "windows" {
-		return application.AutostartOptions{Arguments: []string{"-login"}}
+		return application.AutostartOptions{Identifier: autostartID, Arguments: []string{"-login"}}
 	}
 	return application.AutostartOptions{}
 }
 
 // renewAutostart writes the Windows login entry again, so one made before
-// it carried -login, or for an exe since moved, starts this copy right.
+// it carried -login, or under the old name, starts this copy right; one left
+// at the place the exe was moved from points here again. An entry turned off
+// in Windows Settings stays off.
 func (s *shell) renewAutostart() {
-	if runtime.GOOS != "windows" || !s.autostart() {
+	if runtime.GOOS != "windows" {
 		return
+	}
+	if !s.autostart() {
+		exe, err := os.Executable()
+		if err != nil {
+			return
+		}
+		if p, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = p
+		}
+		if s.autostartName() != "" || !movedAutostart(exe) {
+			return
+		}
+		log.Printf("开机自动启动指向的旧位置已经没有 App，改成 %s", exe)
 	}
 	if err := s.wapp.Autostart.EnableWithOptions(autostartOptions()); err != nil {
 		log.Printf("更新开机自动启动失败：%v", err)

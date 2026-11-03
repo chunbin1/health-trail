@@ -75,6 +75,21 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// uiTypes are the types of the UI's own files. Go on Windows takes a type
+// from the registry before its own list, and an installed program can have
+// set .svg (or .js) there to something the window won't show as an image
+// (or run): the logo then appears broken.
+var uiTypes = map[string]string{
+	".html":        "text/html; charset=utf-8",
+	".js":          "text/javascript; charset=utf-8",
+	".css":         "text/css; charset=utf-8",
+	".svg":         "image/svg+xml",
+	".png":         "image/png",
+	".webmanifest": "application/manifest+json",
+	".json":        "application/json",
+	".woff2":       "font/woff2",
+}
+
 // spa serves the built UI, answering unknown paths with index.html so a
 // reload on a client-side route still loads the app.
 func spa(ui fs.FS) http.Handler {
@@ -87,11 +102,15 @@ func spa(ui fs.FS) http.Handler {
 		if _, err := fs.Stat(ui, p); err != nil {
 			r = r.Clone(r.Context())
 			r.URL.Path = "/"
+			p = "index.html"
 		}
 		if strings.HasPrefix(p, "assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
 			w.Header().Set("Cache-Control", "no-cache")
+		}
+		if t, ok := uiTypes[path.Ext(p)]; ok {
+			w.Header().Set("Content-Type", t)
 		}
 		files.ServeHTTP(w, r)
 	})
