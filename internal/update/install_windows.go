@@ -24,10 +24,12 @@ func dirWritable(dir string) bool {
 }
 
 func detachAttr() *syscall.SysProcAttr {
-	// DETACHED_PROCESS (0x8) lets the helper outlive this process, the way
-	// Setsid does on Mac. It is not in the syscall package.
-	const detached = 0x00000008
-	return &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | detached}
+	// The helper outlives this process anyway: Windows doesn't end a child
+	// with its parent. PowerShell needs a console, so it gets a hidden one
+	// (CREATE_NO_WINDOW); started with DETACHED_PROCESS, without any, it
+	// quit at once and the app never came back after an update.
+	const noWindow = 0x08000000
+	return &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | noWindow, HideWindow: true}
 }
 
 // Bundle is the running health-trail.exe, or "" for a build under another name.
