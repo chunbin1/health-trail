@@ -262,7 +262,11 @@ make app      # Build 健康足迹.app; drag it into Applications
 make bin      # Build only the command-line program ./health-trail
 make test     # go vet, go test, frontend type check
 make dmg      # dmg for both Apple silicon and Intel (signed with a Developer ID for releases)
+make win      # health-trail.exe, with -H windowsgui so double-clicking opens no command window
+make win-icon # after changing internal/desktop/appicon.png, rebuild the exe's file icon
 ```
+
+Change the three icons together: `frontend/public/icon.svg` (the drawing), `build/AppIcon.icns` (Mac), `internal/desktop/appicon.png` (the Windows window). Then run `make win-icon`. See [RELEASING.md](RELEASING.md) (Chinese).
 
 For development, use `make dev`: the UI runs at http://localhost:5173 and frontend changes take effect as soon as you save; the backend runs at `127.0.0.1:8722` and recompiles and restarts automatically when a `.go` file changes. Data comes from the test data in `~/Library/Application Support/HealthTrail-Test` (the test window from `make test-window` uses it too), so your real data is never touched.
 

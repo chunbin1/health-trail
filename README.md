@@ -262,7 +262,11 @@ make app      # 生成 健康足迹.app，拖进「应用程序」即可
 make bin      # 只生成命令行程序 ./health-trail
 make test     # go vet、go test、前端类型检查
 make dmg      # 同时支持 Apple 芯片和 Intel 的 dmg（发布时用 Developer ID 签名）
+make win      # health-trail.exe。带 -H windowsgui，双击不弹出命令行
+make win-icon # 换了 internal/desktop/appicon.png 之后，重做 exe 的文件图标
 ```
+
+图标三份一起改：`frontend/public/icon.svg`（原稿）、`build/AppIcon.icns`（Mac）、`internal/desktop/appicon.png`（Windows 窗口）。改完 PNG 再 `make win-icon`。详见 [RELEASING.md](RELEASING.md)。
 
 开发时用 `make dev`：界面在 http://localhost:5173 ，改前端保存后马上生效；后端在 `127.0.0.1:8722`，改了 `.go` 文件会自动重新编译和重启。数据用 `~/Library/Application Support/HealthTrail-Test` 里的测试数据（`make test-window` 打开的测试窗口也用它），不会碰真实数据。
 

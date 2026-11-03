@@ -11,6 +11,8 @@
 #                   rebuilt and restarted when a .go file changes (scripts/dev.sh)
 #   make test-window  the app's window on the shared test data, port 8732
 #   make dev-real   the same on your real data, backed up first (never for tests)
+#   make win        health-trail.exe: no console window when double-clicked (-H windowsgui)
+#   make win-icon   rebuild rsrc_windows_*.syso after internal/desktop/appicon.png changes
 
 export PATH := /opt/homebrew/bin:$(PATH)
 # the Wails/AppKit objects target macOS 13; link for the same
@@ -41,7 +43,7 @@ DMG     := $(DIST)/HealthTrail-$(VERSION).dmg
 # what the app downloads to update itself (internal/update)
 ZIP     := $(DIST)/HealthTrail-$(VERSION).zip
 
-.PHONY: all ui bin app appstore-test dmg notarize test test-window dev dev-real clean
+.PHONY: all ui bin app appstore-test dmg notarize test test-window dev dev-real win win-icon clean
 
 all: bin
 
@@ -53,6 +55,17 @@ ui: frontend/node_modules
 
 bin: ui
 	go build -ldflags "-s -w -X main.version=$(VERSION)" -o health-trail .
+
+# Same flags as CI and the release. Without -H windowsgui, double-clicking
+# the exe opens a command window. On a Mac this cross-compiles.
+win: ui
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -H windowsgui -X main.version=$(VERSION)" -o health-trail.exe .
+
+# Explorer's icon for that exe. The picture is internal/desktop/appicon.png
+# (also embedded for the window). frontend/public/icon.svg is the drawing;
+# build/AppIcon.icns is the Mac app icon. Change those together, then run this.
+win-icon:
+	go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64,arm64 --manifest none --icon internal/desktop/appicon.png --out rsrc
 
 app: bin
 	rm -rf "$(APP)"

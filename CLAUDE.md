@@ -65,7 +65,11 @@ scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_re
 make test        # go vet + go test + 前端类型检查
 make bin         # 构建 UI 和二进制
 make app         # 打包 健康足迹.app
+make win         # health-trail.exe（必须 -H windowsgui，否则双击弹出命令行）
+make win-icon    # 换了 appicon.png 之后重做 rsrc_windows_*.syso
 ```
+
+图标三份一起改：`frontend/public/icon.svg`（原稿）、`build/AppIcon.icns`（Mac）、`internal/desktop/appicon.png`（Windows 窗口）。资源管理器里的文件图标来自仓库根目录的 `rsrc_windows_*.syso`，由 `make win-icon` 从 PNG 生成。
 
 - 改了 store/server/mcpserver：`make test` 必须全绿。
 - 改了 MCP 工具：用逐条发送的 stdio 驱动做一次端到端测试（见 LESSONS #1），不要一次性把请求全部塞进 stdin。

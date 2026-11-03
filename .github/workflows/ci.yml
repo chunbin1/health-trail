@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           version=$(git describe --tags --always | sed 's/^v//')
-          go build -ldflags "-s -w -X main.version=${version}" -o health-trail.exe .
+          go build -ldflags "-s -w -H windowsgui -X main.version=${version}" -o health-trail.exe .
       - name: MCP end to end
         shell: bash
         run: python -I scripts/mcp_smoke.py "$PWD/health-trail.exe"
