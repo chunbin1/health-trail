@@ -118,6 +118,16 @@ make notarize    # 再交给苹果公证；需要先保存一次凭证：
 
 没有 `local.mk` 时 `make dmg` 用临时签名，只能自己测试用。
 
+Windows 用 `make win`，得到 `health-trail.exe`。必须带 `-H windowsgui`（`make win` 已经带了）：自己写 `go build` 时漏了它，双击会弹出命令行。CI 和打标签发布用的是同一组参数。
+
+图标有三份，改图时一起换，不要只改一处：
+
+- `frontend/public/icon.svg`：图的原稿，README 也用它
+- `build/AppIcon.icns`：Mac 的 .app
+- `internal/desktop/appicon.png`：Windows 窗口和任务栏
+
+换完 PNG 后运行 `make win-icon`，重新生成仓库根目录的 `rsrc_windows_amd64.syso` 和 `rsrc_windows_arm64.syso`。资源管理器里 exe 的图标来自这两个文件，不来自 PNG。
+
 第一次签名时，系统会问 codesign 能不能用钥匙串里的私钥：输入 Mac 登录密码，点「始终允许」。
 
 ## 证书到期
