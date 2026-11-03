@@ -126,7 +126,7 @@ Windows 用 `make win`，得到 `health-trail.exe`。必须带 `-H windowsgui`�
 - `build/AppIcon.icns`：Mac 的 .app
 - `internal/desktop/appicon.png`：Windows 窗口和任务栏
 
-换完 PNG 后运行 `make win-icon`，按 `winres/winres.json` 重新生成仓库根目录的 `rsrc_windows_amd64.syso` 和 `rsrc_windows_arm64.syso`。图标编号必须是 3，窗口和任务栏读的是这个编号；资源管理器里的文件图标也来自这两个文件。PNG 四角要透明。Mac 的 icns 四角是白的，直接拿来用的话，Windows 桌面上会多出一圈白底。
+换完 PNG 后运行 `make win-icon`。它按透明通道做成传统的位图图标（编号 3），写到仓库根目录的 `rsrc_windows_amd64.syso` 和 `rsrc_windows_arm64.syso`。不要把 PNG 直接塞进 ico：资源管理器会垫一层白底，窗口左上角也会裂开。编号必须是 3，窗口和任务栏读的是这个编号。PNG 四角要透明。Mac 的 icns 四角是白的，直接拿来用的话，Windows 桌面上会多出一圈白底。
 
 第一次签名时，系统会问 codesign 能不能用钥匙串里的私钥：输入 Mac 登录密码，点「始终允许」。
 
