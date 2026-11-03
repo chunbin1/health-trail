@@ -148,7 +148,7 @@ export function Connect() {
 
         {ai === 'other' && (
           <Section icon={<Plug size={20} />} title={t('其他支持 MCP 的 AI')}
-            sub={t('Cursor、Cherry Studio 等：添加一个 MCP 服务器，类型选「命令行（stdio）」，填下面的命令和参数；或者类型选 HTTP，填地址（需要本 App 开着）。')}>
+            sub={t('Cursor、Cherry Studio、WorkBuddy 等：添加一个 MCP 服务器，类型选「命令行（stdio）」，填下面的命令和参数；或者类型选 HTTP，填地址，也可以把下面的 JSON 合并进配置（WorkBuddy 写在 ~/.workbuddy/mcp.json；需要本 App 开着）。')}>
             <div className="stack" style={{ gap: 8 }}>
               <div className="sub">{t('命令')}</div>
               <CodeBox text={info.mcp_stdio_command} />
@@ -156,6 +156,8 @@ export function Connect() {
               <CodeBox text={info.mcp_args} />
               <div className="sub">{t('HTTP 地址')}</div>
               <CodeBox text={info.mcp_http_url} />
+              <div className="sub">{t('或者把下面这段合并进配置：')}</div>
+              <CodeBox text={info.mcp_http_config} />
             </div>
           </Section>
         )}
