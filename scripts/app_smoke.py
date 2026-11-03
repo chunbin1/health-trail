@@ -19,11 +19,21 @@ with socket.socket() as s:
     port = s.getsockname()[1]
 base = f"http://127.0.0.1:{port}"
 args = [binary, "app", "-data", data, "-port", str(port)]
-app = subprocess.Popen(args)
+# a windowsgui exe has no console: its log goes where it's handed
+log_path = os.path.join(data, "app.log")
+log = open(log_path, "wb")
+app = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
+
+
+def show_log():
+    log.flush()
+    with open(log_path, encoding="utf-8", errors="replace") as f:
+        print("app log:\n" + f.read()[-3000:])
 
 
 def fail(msg):
     print("FAIL:", msg)
+    show_log()
     subprocess.run(["taskkill", "/F", "/T", "/PID", str(app.pid)], capture_output=True)
     sys.exit(1)
 
@@ -79,7 +89,9 @@ try:
     app.wait(30)
 except subprocess.TimeoutExpired:
     fail("the app didn't quit within 30s of WM_CLOSE (an update's restart would wait forever)")
-print(f"ok  quit ({app.returncode})")
+if app.returncode != 0:
+    fail(f"the app quit with {app.returncode}")
+print("ok  quit")
 with socket.socket() as s:
     try:
         s.bind(("127.0.0.1", port))
