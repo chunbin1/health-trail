@@ -19,10 +19,10 @@ internal/desktop/        桌面 App 这一层
   shell.go, dock_darwin.go  菜单栏图标、关窗留在后台、开机自启；Dock 图标显隐和「是否开机启动」的原生代码。dock_other.go、speech_other.go 是其它系统上的空实现
   links.go               healthtrail:// 链接（来自日历、提醒事项）跳到哪条记录
   assistant.go           窗口里的「AI助手」：配置、整理、确认后写入；serve 只给本机，手机拿不到
-  speech_darwin.go       Mac 本机听写（SFSpeechRecognizer，要求设备端识别）
+  speech_darwin.go       Mac 本机听写（SFSpeechRecognizer，要求设备端识别）。speech_windows.go 用本机 SAPI，不走云端；protocol_windows.go 登记 healthtrail://
 internal/assistant/      AI助手：进程内连 mcpserver，只读工具照常执行，add_record / add_lab_report / checkin / update_record 变成卡片（commit.go 确认后写入）；密钥在数据目录的 assistant.json
 internal/calsync/        预约写进「日历」、吃药写进「提醒事项」（同步到 iPhone），勾掉就记吃药；eventkit_darwin.go 是 EventKit 的原生部分，eventkit_other.go 在 Windows 上表示不支持
-internal/update/         查 GitHub 最新 Release、下载 zip、校验同一团队的 Developer ID 签名和公证、替换 .app、退出后重新打开
+internal/update/         查 GitHub 最新 Release、下载 zip、替换后退出再打开。Mac 校验同一团队的 Developer ID 签名和公证（install_darwin.go）；Windows 没有证书，校验我们自己的 Ed25519 签名（sign.go，install_windows.go），只有 release.yml 编的 exe（Channel=release）会自己更新
 internal/reminders/      打卡、用药、预约的系统通知（Wails 服务）
 internal/folders/        沙盒版「允许读取的文件夹」：安全书签（bookmarks_darwin.go），窗口和 MCP 启动时都打开；非 Mac 上书签就是路径本身（bookmarks_other.go）
 internal/attachopen/     窗口里点附件：复制一份到临时目录，用 Mac 上对应的 App 打开（不认识的类型只在访达里显示）；副本在删除、超过 1 小时、启动和退出时清掉
@@ -39,7 +39,7 @@ internal/backup/         备份成 zip、清理旧备份、恢复（一个事务
 internal/msg/            给人看的报错中英两套：msg.New / msg.Errorf，按界面语言用 msg.In 取
 frontend/                React + TS + Vite；embed.go 把构建结果（dist）嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
-scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_review_gate.py（AI 审阅门禁，见 RELEASING.md）
+scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_review_gate.py（AI 审阅门禁，见 RELEASING.md）、winupdate（打 Windows 更新包并签名）
 .github/workflows/       ci.yml（每次推送）、ai-review.yml（PR 的 AI 审阅检查）、release.yml（打标签发布，先查 AI 审阅）
 ```
 

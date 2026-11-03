@@ -83,12 +83,16 @@ func isStamp(s string) bool {
 // the link a copy started by it was opened with.
 func linkIn(args []string) string {
 	for _, s := range args {
+		s = strings.Trim(s, `"`)
 		if strings.HasPrefix(s, calsync.URLPrefix) {
 			return s
 		}
 	}
 	return ""
 }
+
+// IsLink says whether a command-line argument is one of our links.
+func IsLink(arg string) bool { return linkIn([]string{arg}) != "" }
 
 // openLink shows the window and, for a link to a record, goes to it. Before
 // the page has loaded, Wails holds the script until it has.

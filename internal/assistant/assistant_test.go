@@ -55,17 +55,7 @@ func TestConfigKeepsKey(t *testing.T) {
 	if !c.Configured() {
 		t.Fatal("not configured")
 	}
-	// Windows does not store Unix permission bits, so Stat reports 0666.
-	// OpenFile/WriteFile still ask for 0o600 on every OS.
-	if runtime.GOOS != "windows" {
-		fi, err := os.Stat(c.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if fi.Mode().Perm() != 0o600 {
-			t.Fatalf("mode %o", fi.Mode().Perm())
-		}
-	}
+	assertPrivate(t, c.path)
 	raw, _ := os.ReadFile(c.path)
 	if !strings.Contains(string(raw), key) {
 		t.Fatal("key not stored")
@@ -591,14 +581,22 @@ func TestExchangeLog(t *testing.T) {
 			t.Fatalf("log has %q:\n%s", not, s)
 		}
 	}
-	if runtime.GOOS != "windows" {
-		fi, err := os.Stat(filepath.Join(st.Dir, "assistant.log"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if fi.Mode().Perm() != 0o600 {
-			t.Fatalf("mode %o", fi.Mode().Perm())
-		}
+	assertPrivate(t, filepath.Join(st.Dir, "assistant.log"))
+}
+
+// Windows does not store Unix permission bits, so Stat reports 0666 for a
+// file written as 0600. The mode is still what we ask for on other systems.
+func assertPrivate(t *testing.T, path string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %o", fi.Mode().Perm())
 	}
 }
 

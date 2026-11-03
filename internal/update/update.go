@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -32,14 +33,33 @@ type Release struct {
 	Notes     string `json:"notes"` // the annotated tag's message, plain text
 	Page      string `json:"page"`  // the release on GitHub, with the dmg
 	Published string `json:"published"`
-	// the zip the app installs; "" for a release without one
+	// the zip the app installs; "" for a release without one.
+	// Zip* is the Mac .app. Win* is health-trail.exe plus version.txt.
 	ZipURL    string `json:"-"`
 	ZipSize   int64  `json:"-"`
 	ZipSHA256 string `json:"-"` // hex, when GitHub gives one
+	WinURL    string `json:"-"`
+	WinSize   int64  `json:"-"`
+	WinSHA256 string `json:"-"`
+	WinSigURL string `json:"-"` // the zip's Ed25519 signature (see sign.go)
+}
+
+// Payload is the zip this operating system installs.
+func (r *Release) Payload() (url string, size int64, sha string) {
+	if runtime.GOOS == "windows" {
+		return r.WinURL, r.WinSize, r.WinSHA256
+	}
+	return r.ZipURL, r.ZipSize, r.ZipSHA256
 }
 
 // Installable says whether the release can be installed from the app.
-func (r *Release) Installable() bool { return r.ZipURL != "" }
+func (r *Release) Installable() bool {
+	if runtime.GOOS == "windows" {
+		return r.WinURL != "" && r.WinSigURL != ""
+	}
+	url, _, _ := r.Payload()
+	return url != ""
+}
 
 // ErrNoRelease is a repository with no published release (or none it lets
 // us see: a private one answers 404 too).
@@ -85,8 +105,14 @@ func Latest(ctx context.Context, client *http.Client, url string) (*Release, err
 		return nil, fmt.Errorf("the release's tag %q isn't a version", gh.Tag)
 	}
 	for _, a := range gh.Assets {
-		if a.Name == "HealthTrail-"+r.Version+".zip" {
-			r.ZipURL, r.ZipSize, r.ZipSHA256 = a.URL, a.Size, strings.TrimPrefix(a.Digest, "sha256:")
+		sum := strings.TrimPrefix(a.Digest, "sha256:")
+		switch a.Name {
+		case "HealthTrail-" + r.Version + ".zip":
+			r.ZipURL, r.ZipSize, r.ZipSHA256 = a.URL, a.Size, sum
+		case "HealthTrail-" + r.Version + "-windows.zip":
+			r.WinURL, r.WinSize, r.WinSHA256 = a.URL, a.Size, sum
+		case "HealthTrail-" + r.Version + "-windows.zip" + SigSuffix:
+			r.WinSigURL = a.URL
 		}
 	}
 	return r, nil

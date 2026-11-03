@@ -68,4 +68,7 @@ func TestLinkIn(t *testing.T) {
 	if got := linkIn([]string{"health-trail", "-port", "8734"}); got != "" {
 		t.Errorf("linkIn without a link = %q", got)
 	}
+	if got := linkIn([]string{`"healthtrail://appointments/2?uid=0123456789abcdef0123456789abcdef"`}); got != "healthtrail://appointments/2?uid=0123456789abcdef0123456789abcdef" {
+		t.Errorf("quoted link = %q", got)
+	}
 }

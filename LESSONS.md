@@ -169,6 +169,16 @@ WKWebView 只有在 App 实现了对应的 WKUIDelegate 方法时才会显示 JS
 - 证据：2026-10-25，沙盒验证只测了 API 和 MCP 就下了「可以上」的结论，用户打开 App Store 测试版看到白屏；补上 network.client 后重新打包。
 - 出现：1
 
+### 45. Windows 上的系统入口（命令行参数、COM 回调、注册表命令）要从系统那一头顺着走一遍，交叉编译和单测通过不算数
+`healthtrail://` 在 Windows 上是 `health-trail.exe "<链接>"` 启动的，`main.go` 把链接当成子命令，打印用法就退出了，走不到 `RunApp`；听写用 `PutProperty` 设对象属性（SAPI 要 `PutPropertyRef`）、没给 in-proc 识别器接麦克风、事件 sink 只有 COM 拿着会被 GC 回收、COM 不在锁定的线程上：每一处都能编译、单测也绿，合起来是「从来没工作过」。写 Windows 原生功能时，从系统实际传进来的东西开始（注册的命令行、回调签名、属性的 propput/propputref），一步步走到我们的代码，把这条路写成测试（`TestCommand`、`TestHeardKeepsEveryPhrase`）；能在 CI 的 Windows 上跑的，就写 `_windows_test.go`。
+- 证据：2026-11-03，审 cursor/windows-ci-build 的听写、更新、链接三块，找出上面这些；更新那边还有发布包里没有 `version.txt`、`Start-Process -ArgumentList @()` 空数组会报错。
+- 出现：1
+
+### 46. 图标「改了还是不对」，先把编好的 exe 里的图标资源解出来看，再决定改图还是查缓存
+别的会话改了三次 Windows 图标（透明四角、改用位图、编号 3），用户还说有白底。在 Mac 上交叉编译一个只带 `.syso` 的 exe，用 winres 解出 5 个尺寸画在深色和品红底上，四角都是透明的：exe 本身已经对了，剩下的是 Windows 的图标缓存、钉在任务栏上的旧快捷方式，以及托盘一直在用的 Mac 菜单栏模板图（`SetTemplateIcon` 在 Windows 上照原样画黑色）。再改图之前先看产物，分清是哪一处在显示、显示的是哪份资源。
+- 证据：2026-11-03，`rsrc_windows_amd64.syso` 解出的 16–256 像素图标四角 alpha 都是 0；托盘改成彩色 App 图标。
+- 出现：1
+
 ## 数据安全
 
 ### 31. 做「删除」之前，先问清楚它带走的历史记录要不要留

@@ -85,15 +85,14 @@ function PhoneSync() {
   )
 }
 
-// Opening at login, in the Mac app only (elsewhere the API isn't there and
-// the section isn't shown). The switch moves at once; the login item is
+// Opening at login, in the desktop window only (elsewhere the API isn't
+// there and the section isn't shown). The switch moves at once; the login item is
 // read back after.
 function AtLogin() {
   const { data, error } = useLoad(() => api.autostart(), [])
   const [on, setOn] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   if (error || !data) return null
-  const mac = new URLSearchParams(location.search).get('shell') === 'mac'
   const checked = on ?? data.enabled
   async function change(v: boolean) {
     if (busy) return
@@ -110,7 +109,7 @@ function AtLogin() {
   }
   return (
     <Section icon={<Power size={20} />} title={t('开机自动启动')}
-      sub={mac
+      sub={!data.windows
         ? t('登录 Mac 后在菜单栏运行，不打开窗口，到点照常提醒。关掉窗口也会留在菜单栏；要完全退出，点菜单栏的图标 →「退出健康足迹」。')
         : t('登录 Windows 后在任务栏运行，不打开窗口，到点照常提醒。关掉窗口也会留在任务栏；要完全退出，点任务栏图标 →「退出健康足迹」。')}
       right={<Switch checked={checked} onChange={change} label={t('开机自动启动')} />} />

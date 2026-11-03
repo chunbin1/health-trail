@@ -3,6 +3,7 @@ package desktop
 import (
 	_ "embed"
 	"log"
+	"runtime"
 	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -56,7 +57,13 @@ func newShell(wapp *application.App, win *application.WebviewWindow, lang func()
 	s.menu.AddSeparator()
 	s.quitItem = s.menu.Add("").OnClick(func(*application.Context) { wapp.Quit() })
 	tray := wapp.SystemTray.New()
-	tray.SetTemplateIcon(trayIcon)
+	if runtime.GOOS == "windows" {
+		// Windows draws a tray icon as it is: the black menu-bar template
+		// would vanish on the dark taskbar, so it gets the colored app icon
+		tray.SetIcon(appIcon)
+	} else {
+		tray.SetTemplateIcon(trayIcon)
+	}
 	tray.SetMenu(s.menu)
 	s.refresh()
 	return s
@@ -84,12 +91,32 @@ func (s *shell) autostart() bool {
 func (s *shell) setAutostart(on bool) error {
 	var err error
 	if on {
-		err = s.wapp.Autostart.Enable()
+		err = s.wapp.Autostart.EnableWithOptions(autostartOptions())
 	} else {
 		err = s.wapp.Autostart.Disable()
 	}
 	s.refresh()
 	return err
+}
+
+// autostartOptions: on Windows the login start carries -login, the only way
+// the app can tell it was started at login and keep the window closed.
+func autostartOptions() application.AutostartOptions {
+	if runtime.GOOS == "windows" {
+		return application.AutostartOptions{Arguments: []string{"-login"}}
+	}
+	return application.AutostartOptions{}
+}
+
+// renewAutostart writes the Windows login entry again, so one made before
+// it carried -login, or for an exe since moved, starts this copy right.
+func (s *shell) renewAutostart() {
+	if runtime.GOOS != "windows" || !s.autostart() {
+		return
+	}
+	if err := s.wapp.Autostart.EnableWithOptions(autostartOptions()); err != nil {
+		log.Printf("更新开机自动启动失败：%v", err)
+	}
 }
 
 // setUpdate shows the newer version found in the menu, or hides it (nil).

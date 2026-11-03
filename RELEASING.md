@@ -1,6 +1,6 @@
 # 发布新版本
 
-健康足迹不上 Mac App Store，发的是 Developer ID 签名、苹果公证过的 dmg。别人下载后双击就能打开，不会弹「无法验证开发者」。同一个 Release 上还有一个未签名的 `HealthTrail-<版本>-windows.zip`，里面是 `health-trail.exe`，解压后直接运行。它不会自己更新，下一版仍要自己下载。
+健康足迹不上 Mac App Store，发的是 Developer ID 签名、苹果公证过的 dmg。别人下载后双击就能打开，不会弹「无法验证开发者」。同一个 Release 上还有一个 `HealthTrail-<版本>-windows.zip`，里面是 `health-trail.exe`（没有代码签名证书）和 `version.txt`，解压后直接运行；旁边的 `.sig` 是这个 zip 的签名，Windows 版的 App 内更新靠它（见下面「Windows 的更新签名」）。
 
 ## 先过 AI 审阅
 
@@ -62,7 +62,7 @@ git push origin v1.0.1
 
 一定要用 `-a`（带说明的标签）：不带说明的话，Release 页面上只会显示最后一次提交的提交说明。也可以直接跟 Claude 说「发个 1.0.1」，它会先写好说明给你确认，再打标签。
 
-GitHub Actions（`.github/workflows/release.yml`）先查 AI 审阅，再跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，并打一个未签名的 Windows zip，再跑一遍 MCP 端到端测试，最后建一个 GitHub Release 把 dmg、Mac 的 zip 和 Windows 的 zip 都挂上去。版本号直接取标签：`v1.0.0` → `1.0.0`。这些 Release 上的文件不会过期；每次推送时 CI 里的 dmg 和 exe 才只留 7 天。
+GitHub Actions（`.github/workflows/release.yml`）先查 AI 审阅，然后 Mac 和 Windows 同时打包：Mac 跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，再跑一遍 MCP 端到端测试；Windows 跑测试、编 exe、跑 MCP 端到端测试，打 zip 并用 `UPDATE_SIGNING_KEY` 签名（Windows 这几步写在 `.github/actions/windows`，CI 也用它）。最后建一个 GitHub Release 把 dmg、Mac 的 zip、Windows 的 zip 和签名都挂上去。Windows 那边失败的话，这一版只发 Mac 的，Actions 页面上会有一条警告。版本号直接取标签：`v1.0.0` → `1.0.0`。这些 Release 上的文件不会过期；每次推送时 CI 里的 dmg 和 exe 才只留 7 天。
 
 ## App 里的自动更新
 
@@ -73,7 +73,13 @@ Release 上除了 dmg，还有一个 `HealthTrail-<版本>.zip`：订了公证�
 - 自己 `make app` 构建的版本是临时签名，不会自动更新，只提示有新版本。
 - 用户把 App 放在「应用程序」以外、用户没有写权限的地方，或者直接从 dmg 里运行，也只能手动装。
 
-每次推送分支跑的是 `ci.yml`：测试，加一个临时签名的 dmg（只能自己测，别的 Mac 打不开）。
+Windows 版一样每 4 小时查一次。点「更新并重启」后：下载 `HealthTrail-<版本>-windows.zip` 和 `.sig` → 校验大小和 SHA-256 → 用 App 里写死的公钥验签（`internal/update/sign.go`）→ 用验过签的同一份数据解压，核对 `version.txt` → 把正在运行的 exe 改名挪进临时文件夹，新 exe 放到原位 → 退出后由 PowerShell 删掉旧的、启动新的。
+
+- 只有打标签发布编的 exe 会自己更新（编译时带 `-X …/internal/update.Channel=release`）。CI 里的 exe、自己 `make win` 编的，只提示有新版本。
+- exe 放在没有写权限的地方（比如 `C:\Program Files`）的，只能手动装。
+- 加上更新签名之前发布的 Windows 版不会自己更新，要手动换一次。
+
+每次推送分支跑的是 `ci.yml`：测试，加一个临时签名的 dmg（只能自己测，别的 Mac 打不开），以及一个不带签名文件、不会自己更新的 Windows zip。
 
 ## 第一次：把签名和公证用的东西放进 GitHub Secrets
 
@@ -104,7 +110,23 @@ Release 上除了 dmg，还有一个 `HealthTrail-<版本>.zip`：订了公证�
    gh secret set NOTARY_ISSUER_ID --body IssuerID
    ```
 
-用 `gh secret list` 检查，应该有这 5 个：`DEVELOPER_ID_P12`、`DEVELOPER_ID_P12_PASSWORD`、`NOTARY_KEY`、`NOTARY_KEY_ID`、`NOTARY_ISSUER_ID`。
+**3. Windows 的更新签名（UPDATE_SIGNING_KEY）**
+
+Windows 没有买代码签名证书，更新包用我们自己的 Ed25519 密钥签名：私钥放在 Secret 里给发布用，公钥写在 `internal/update/sign.go`，编进每个 exe。App 只装用这把私钥签过的包，所以 Release 上的文件被换掉、下载时被改了都装不上。
+
+现在这把私钥在 `~/.config/health-trail/update-signing-key.txt`。放进 Secret：
+
+```bash
+gh secret set UPDATE_SIGNING_KEY < ~/.config/health-trail/update-signing-key.txt
+```
+
+然后把这个文件备份到离线的地方（密码管理器、加密 U 盘），再从电脑上删掉。
+
+- **私钥丢了**：已经装上的 Windows 版再也收不到自动更新，用户要手动下载一次。
+- **私钥泄露了**：拿到它的人可以给所有 Windows 用户推更新，而且没法吊销。马上换钥：`go run ./scripts/winupdate keygen -out <新文件>` 生成新的一对，把新公钥加进 `sign.go` 的 `publicKeys`（旧的先留着），用旧私钥签发一版；之后 Secret 换成新私钥、删掉旧公钥再发一版。
+- 发布时 `scripts/winupdate` 签完会拿 `sign.go` 里的公钥验一遍，Secret 和公钥对不上就直接失败，不会发出一个装不上的包。
+
+用 `gh secret list` 检查，应该有这 6 个：`DEVELOPER_ID_P12`、`DEVELOPER_ID_P12_PASSWORD`、`NOTARY_KEY`、`NOTARY_KEY_ID`、`NOTARY_ISSUER_ID`、`UPDATE_SIGNING_KEY`。
 
 ## 在本机打包（可选）
 

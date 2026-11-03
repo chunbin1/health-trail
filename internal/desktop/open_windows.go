@@ -5,25 +5,30 @@ package desktop
 import (
 	"fmt"
 	"os/exec"
+	"syscall"
 )
 
 // openWith runs the same arguments attachopen passes to `open` on the Mac:
 // the file itself, or "-R" and the file to show it in a folder.
 func openWith(args ...string) error {
-	var path string
-	reveal := false
 	switch {
 	case len(args) == 1:
-		path = args[0]
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", args[0]).Run()
 	case len(args) == 2 && args[0] == "-R":
-		reveal, path = true, args[1]
+		cmd := exec.Command("explorer")
+		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: revealCmdLine(args[1])}
+		// explorer.exe exits non-zero even when it shows the file
+		cmd.Run()
+		return nil
 	default:
 		return fmt.Errorf("open: %q", args)
 	}
-	if reveal {
-		// explorer.exe exits non-zero even when it shows the file
-		exec.Command("explorer", "/select,"+path).Run()
-		return nil
-	}
-	return exec.Command("rundll32", "url.dll,FileProtocolHandler", path).Run()
+}
+
+// revealCmdLine is explorer's command line to select path. Explorer reads
+// `/select,` itself and wants the quotes around the path only: Go's usual
+// quoting would wrap the whole `/select,…` argument, and a path with a space
+// (C:\Users\Jane Doe\…) would open Documents instead.
+func revealCmdLine(path string) string {
+	return `explorer /select,"` + path + `"`
 }

@@ -38,13 +38,13 @@ Lab reports sit in your photo library, medical records in a hospital app, you re
 
 It's for people who want to manage their own (or their family's) health records seriously but don't want to hand medical records to a cloud service. If you only need to track steps and sleep, the Health app built into your iPhone is enough.
 
-The Mac app is the release build: macOS 13 and later, on both Apple silicon and Intel. The same Release also has an unsigned Windows zip.
+The Mac app is the release build: macOS 13 and later, on both Apple silicon and Intel. The same Release also has a Windows zip (without a code-signing certificate).
 
 ## Quick start
 
 **1 · Install**: download `HealthTrail-<version>.dmg` from **[Releases](https://github.com/chunbin1/health-trail/releases)**, open it, and drag 健康足迹 (Health Trail) into Applications. On Windows, download `HealthTrail-<version>-windows.zip`, unzip it, and run `health-trail.exe` (WebView2 is required).
 
-<sub>The dmg is signed with a Developer ID and notarized by Apple, so it opens with a double-click. The Windows zip is not signed, so SmartScreen may block it. You can also [build from source](#build-from-source). On a Mac, when a new version comes out, the app tells you in Settings → Software update, and one click updates it. On Windows, download the new zip yourself.</sub>
+<sub>The dmg is signed with a Developer ID and notarized by Apple, so it opens with a double-click. The Windows exe has no code-signing certificate, so SmartScreen may block it the first time. You can also [build from source](#build-from-source). When a new version comes out, the app tells you in Settings → Software update, and one click updates it; on Windows it checks the update's signature before putting it in place.</sub>
 
 **2 · Connect AI**: open the app's Connect AI page. Use an API for the assistant in the window (pick Zhipu and follow the steps to get a key, or fill in the address, key and model yourself), or use MCP and copy the configuration for the AI you use (Claude Desktop, Claude Code, Codex, or any other AI that supports MCP).
 
@@ -238,7 +238,7 @@ A single Go program provides the window (Wails v3, the system WebView + React), 
 
 ## Privacy and security
 
-- **Your data stays on your computer**: by default in `~/Library/Application Support/HealthVault`; you can move it with the `-data` flag or the `HEALTH_TRAIL_DATA` environment variable. The app collects no usage statistics. It connects to the network in two cases: checking GitHub for a new version every few hours and when the window comes to the front, if the last check was over half an hour ago (it only asks for the version number, and you can turn this off in Settings → Software update); and the service you fill in for AI assistant. Using AI assistant sends what you said, the names of a few existing records, and the records it reads to answer to that service. Speech is recognized on the Mac and is not uploaded. The key is stored in `assistant.json` in the data folder and is not included in backups.
+- **Your data stays on your computer**: by default in `~/Library/Application Support/HealthVault`; you can move it with the `-data` flag or the `HEALTH_TRAIL_DATA` environment variable. The app collects no usage statistics. It connects to the network in two cases: checking GitHub for a new version every few hours and when the window comes to the front, if the last check was over half an hour ago (it only asks for the version number, and you can turn this off in Settings → Software update); and the service you fill in for AI assistant. Using AI assistant sends what you said, the names of a few existing records, and the records it reads to answer to that service. Speech is recognized on the computer itself (the system dictation on a Mac, the built-in SAPI on Windows) and is not uploaded. The key is stored in `assistant.json` in the data folder and is not included in backups.
 - **The AI sees the records it reads**: when an AI reads records, their content is sent to its provider for processing (Claude to Anthropic, Codex to OpenAI). Which AI you use and what you let it read is up to you.
 - **The local server is open to this Mac only**: by default it listens only on `127.0.0.1`; other websites in your browser can't read or write your data, and the server rejects DNS rebinding and cross-site requests.
 - **Attachments never run as web pages**: only images, PDFs and plain text open directly in the page; every other type is returned as a download.
@@ -272,7 +272,7 @@ For development, use `make dev`: the UI runs at http://localhost:5173 and fronte
 
 To debug while using your own real data, use `make dev-real`: before each start it backs up the database and attachments to `~/Library/Application Support/HealthVault-dev-backups/<time>`, keeping the most recent 10.
 
-The code structure and coding conventions are in [CLAUDE.md](CLAUDE.md) (Chinese), and pitfalls we've hit are recorded in [LESSONS.md](LESSONS.md) (Chinese). Every push runs the tests and the MCP end-to-end test on both Mac and Windows in [CI](.github/workflows/ci.yml), and builds a dmg plus an unsigned exe (those two are kept for 7 days). Pushing a `v*` tag signs, notarizes and publishes the Mac release, and attaches the Windows zip to the same Release, see [RELEASING.md](RELEASING.md) (Chinese).
+The code structure and coding conventions are in [CLAUDE.md](CLAUDE.md) (Chinese), and pitfalls we've hit are recorded in [LESSONS.md](LESSONS.md) (Chinese). Every push runs the tests and the MCP end-to-end test on both Mac and Windows in [CI](.github/workflows/ci.yml), and builds a dmg plus a Windows zip (those two are kept for 7 days). Pushing a `v*` tag signs, notarizes and publishes the Mac release, and attaches the signed Windows update zip to the same Release, see [RELEASING.md](RELEASING.md) (Chinese).
 
 ## Roadmap
 

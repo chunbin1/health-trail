@@ -25,7 +25,7 @@ func TestUpdateRoutes(t *testing.T) {
 			return
 		}
 		fmt.Fprintf(w, `{"tag_name":"v%[1]s","body":"- 新增","html_url":"https://github.com/chunbin1/health-trail/releases/tag/v%[1]s",
-			"assets":[{"name":"HealthTrail-%[1]s.zip","browser_download_url":"https://example.invalid/u.zip","size":3}]}`, release)
+			"assets":%s}`, release, testAssets(release))
 	}))
 	defer gh.Close()
 	dir := t.TempDir()
@@ -53,9 +53,11 @@ func TestUpdateRoutes(t *testing.T) {
 	if l := latest(out); l == nil || l["version"] != "99.0.0" || out["installable"] != true || out["why_not"] == "" {
 		t.Fatalf("after a check = %v", out)
 	}
-	// only a copy in an .app can replace itself; the reason is the error
+	// only an installed copy (an .app, a health-trail.exe) can replace
+	// itself; the reason is the error
+	why := out["why_not"]
 	code, out := call("POST", "/api/update/install", "")
-	if code != http.StatusBadRequest || !strings.Contains(fmt.Sprint(out["error"]), "Mac") {
+	if code != http.StatusBadRequest || out["error"] != why {
 		t.Errorf("install outside an .app = %d %v", code, out)
 	}
 
@@ -144,7 +146,7 @@ func TestUpdateInstallsFreshest(t *testing.T) {
 			http.Error(w, "down", http.StatusBadGateway)
 			return
 		}
-		fmt.Fprintf(w, `{"tag_name":"v%[1]s","assets":[{"name":"HealthTrail-%[1]s.zip","browser_download_url":"https://example.invalid/u.zip","size":3}]}`, release)
+		fmt.Fprintf(w, `{"tag_name":"v%s","assets":%s}`, release, testAssets(release))
 	}))
 	defer gh.Close()
 	u := newUpdates(loadSettings(t.TempDir()))
@@ -279,4 +281,24 @@ func TestUpdateCheckOnOpen(t *testing.T) {
 	u.settings.mu.Unlock()
 	u.windowOpened()
 	wait(2)
+}
+
+// After "update and restart" the window comes back, even when this copy
+// was started at login; the rest of the arguments carry over.
+func TestRelaunchArgs(t *testing.T) {
+	got := relaunchArgs([]string{"-login", "-data", `C:\Health Data`})
+	if len(got) != 2 || got[0] != "-data" || got[1] != `C:\Health Data` {
+		t.Errorf("relaunchArgs = %q", got)
+	}
+	if got := relaunchArgs(nil); len(got) != 0 {
+		t.Errorf("relaunchArgs(nil) = %q", got)
+	}
+}
+
+// testAssets are a release's update files on both systems: the Mac zip, and
+// the Windows zip with its signature.
+func testAssets(v string) string {
+	return fmt.Sprintf(`[{"name":"HealthTrail-%[1]s.zip","browser_download_url":"https://example.invalid/u.zip","size":3},
+		{"name":"HealthTrail-%[1]s-windows.zip","browser_download_url":"https://example.invalid/w.zip","size":3},
+		{"name":"HealthTrail-%[1]s-windows.zip.sig","browser_download_url":"https://example.invalid/w.zip.sig","size":89}]`, v)
 }

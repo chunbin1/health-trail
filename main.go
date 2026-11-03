@@ -23,19 +23,14 @@ var version = "0.1.0"
 
 func main() {
 	desktop.Version = version
-	cmd, args := "app", os.Args[1:]
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		cmd, args = args[0], args[1:]
-	}
-	// macOS passes -psn_… to apps opened from Finder on older systems
-	if len(args) > 0 && strings.HasPrefix(args[0], "-psn_") {
-		args = nil
-	}
+	cmd, args := command(os.Args[1:])
 	fl := flag.NewFlagSet(cmd, flag.ExitOnError)
 	dataDir := fl.String("data", desktop.DefaultDataDir(), "数据目录（也可用环境变量 HEALTH_TRAIL_DATA）")
 	port := fl.String("port", desktop.DefaultPort, "本地服务端口")
 	lan := fl.Bool("lan", false, "serve：允许局域网/Tailscale 中的设备（手机）访问，需令牌")
+	login := fl.Bool("login", false, "app：开机自动启动时由 Windows 带上，只在托盘里运行，不打开窗口")
 	fl.Parse(args)
+	desktop.OpenedAtLogin = *login
 
 	switch cmd {
 	case "mcp":
@@ -52,4 +47,22 @@ func main() {
 		fmt.Fprintf(os.Stderr, "用法：health-trail [app|serve|mcp|info|version] [-data 目录] [-port 端口] [-lan]\n")
 		os.Exit(2)
 	}
+}
+
+// command splits the arguments into the command and its flags.
+func command(args []string) (string, []string) {
+	cmd := "app"
+	switch {
+	case len(args) > 0 && desktop.IsLink(args[0]):
+		// Windows opens a healthtrail:// link as `health-trail.exe "<link>"`:
+		// the app on its usual data. Nothing after the link is read as a flag.
+		return cmd, nil
+	case len(args) > 0 && !strings.HasPrefix(args[0], "-"):
+		cmd, args = args[0], args[1:]
+	}
+	// macOS passes -psn_… to apps opened from Finder on older systems
+	if len(args) > 0 && strings.HasPrefix(args[0], "-psn_") {
+		args = nil
+	}
+	return cmd, args
 }

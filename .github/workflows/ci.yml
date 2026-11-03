@@ -3,8 +3,9 @@ name: CI
 # Every push: the tests on macOS and on Windows, in parallel. macOS also
 # builds an ad-hoc signed universal dmg (the same steps as a release, without
 # the Developer ID certificate) and runs MCP end to end on the binary inside
-# it. Windows builds an unsigned exe and runs the same MCP check on it.
-# Both artifacts are kept for a week to download. Signing the exe comes later.
+# it. Windows runs the same steps as a release (.github/actions/windows):
+# an exe without a certificate, the MCP check on it, and its zip. Both are
+# kept for a week to download; neither updates itself.
 on:
   push:
     branches: ['**'] # a tag runs release.yml instead
@@ -53,39 +54,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # git describe gives the version
-      - uses: actions/setup-go@v7
+      - id: version
+        shell: bash
+        run: echo "v=$(git describe --tags --always | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+      # the same steps as a release, without the signing key: this exe and
+      # zip don't update themselves
+      - uses: ./.github/actions/windows
         with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: UI
-        shell: bash
-        working-directory: frontend
-        run: npm ci && npm run build
-      - name: Test
-        shell: bash
-        run: |
-          go vet ./...
-          go test ./...
-          python -I scripts/test_ai_review_gate.py
-          (cd frontend && npx tsc -b)
-      - name: Build
-        shell: bash
-        run: |
-          version=$(git describe --tags --always | sed 's/^v//')
-          go build -ldflags "-s -w -H windowsgui -X main.version=${version}" -o health-trail.exe .
-      - name: MCP end to end
-        shell: bash
-        run: python -I scripts/mcp_smoke.py "$PWD/health-trail.exe"
+          version: ${{ steps.version.outputs.v }}
       - uses: actions/upload-artifact@v7
         with:
           name: HealthTrail-windows
-          path: health-trail.exe
+          path: dist/HealthTrail-*-windows.zip
           retention-days: 7
