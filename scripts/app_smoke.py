@@ -28,7 +28,7 @@ app = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
 def show_log():
     log.flush()
     with open(log_path, encoding="utf-8", errors="replace") as f:
-        print("app log:\n" + f.read()[-3000:])
+        print("app log:\n" + f.read()[:6000])
 
 
 def fail(msg):
