@@ -4,13 +4,14 @@ hands over to it, and it quits when asked.
 
     python -I scripts/app_smoke.py <path to health-trail.exe>
 
-Runs `health-trail.exe app` on a throwaway data dir and port. Quitting goes
-through `taskkill` without /F: it sends WM_CLOSE to the app's windows, and
-Wails quits on that the same way as the tray's Quit and an update's restart
-(which waits for the old process to be gone). Exits non-zero on the first
-failure. Windows only.
+Runs `health-trail.exe app` on a throwaway data dir and port. Quitting sends
+WM_CLOSE to Wails's hidden main-thread window, which quits the app the same
+way as the tray's Quit and an update's restart (which waits for the old
+process to be gone); WM_CLOSE to the app's window only hides it. Exits
+non-zero on the first failure. Windows only.
 """
-import os, socket, subprocess, sys, tempfile, time, urllib.request
+import ctypes, os, socket, subprocess, sys, tempfile, time, urllib.request
+from ctypes import wintypes
 
 # the app logs in Chinese; the Windows console's code page can't print it
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -97,12 +98,36 @@ if app.poll() is not None or not answers():
     fail("the first app stopped after a second launch")
 print("ok  second launch handed over")
 
+
+def main_thread_window(pid):
+    """Wails's hidden "__wails_hidden_mainthread" window of process pid."""
+    user32 = ctypes.windll.user32
+    found = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def each(hwnd, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        title = ctypes.create_unicode_buffer(64)
+        user32.GetWindowTextW(hwnd, title, 64)
+        if owner.value == pid and title.value == "__wails_hidden_mainthread":
+            found.append(hwnd)
+        return True
+
+    user32.EnumWindows(each, 0)
+    return found[0] if found else None
+
+
 # quitting: the process is gone, the port free
-subprocess.run(["taskkill", "/PID", str(app.pid)], capture_output=True)
+hwnd = main_thread_window(app.pid)
+if not hwnd:
+    fail("no Wails main-thread window to ask to quit")
+WM_CLOSE = 0x0010
+ctypes.windll.user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
 try:
     app.wait(30)
 except subprocess.TimeoutExpired:
-    fail("the app didn't quit within 30s of WM_CLOSE (an update's restart would wait forever)")
+    fail("the app didn't quit within 30s of being asked (an update's restart would wait forever)")
 if app.returncode != 0:
     fail(f"the app quit with {app.returncode}")
 print("ok  quit")
