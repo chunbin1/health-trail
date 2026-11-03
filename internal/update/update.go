@@ -41,6 +41,7 @@ type Release struct {
 	WinURL    string `json:"-"`
 	WinSize   int64  `json:"-"`
 	WinSHA256 string `json:"-"`
+	WinSigURL string `json:"-"` // the zip's Ed25519 signature (see sign.go)
 }
 
 // Payload is the zip this operating system installs.
@@ -53,6 +54,9 @@ func (r *Release) Payload() (url string, size int64, sha string) {
 
 // Installable says whether the release can be installed from the app.
 func (r *Release) Installable() bool {
+	if runtime.GOOS == "windows" {
+		return r.WinURL != "" && r.WinSigURL != ""
+	}
 	url, _, _ := r.Payload()
 	return url != ""
 }
@@ -107,6 +111,8 @@ func Latest(ctx context.Context, client *http.Client, url string) (*Release, err
 			r.ZipURL, r.ZipSize, r.ZipSHA256 = a.URL, a.Size, sum
 		case "HealthTrail-" + r.Version + "-windows.zip":
 			r.WinURL, r.WinSize, r.WinSHA256 = a.URL, a.Size, sum
+		case "HealthTrail-" + r.Version + "-windows.zip" + SigSuffix:
+			r.WinSigURL = a.URL
 		}
 	}
 	return r, nil

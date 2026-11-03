@@ -182,7 +182,7 @@ func (u *updates) whyNot() string {
 		return ""
 	case errors.Is(err, update.ErrUnsigned):
 		if runtime.GOOS == "windows" {
-			return u.settings.msg("这一份没有签名，不能自动更新；请到发布页面下载安装", "This copy isn't signed and can't update itself; download it from the release page")
+			return u.settings.msg("这一份不是从发布页面下载的，不能自动更新；请到发布页面下载安装", "This copy wasn't downloaded from the release page and can't update itself; download it there")
 		}
 		return u.settings.msg("这一份是自己构建的，不能自动更新；要换成正式版，请下载 dmg 安装", "This copy was built locally and can't update itself; download the dmg to switch to the released app")
 	default:
@@ -248,7 +248,7 @@ func (u *updates) run(r *update.Release) {
 	}
 	u.setPhase("restart")
 	log.Printf("已更新到 %s，正在重启", r.Version)
-	if err := update.Relaunch(u.app, stage, os.Args[1:]); err != nil {
+	if err := update.Relaunch(u.app, stage, relaunchArgs(os.Args[1:])); err != nil {
 		// the new copy is in place: it opens next time
 		fail(u.settings.msg("新版本已经装好，请退出健康足迹再打开", "The new version is installed; quit Health Trail and open it again"), err)
 		return
@@ -336,4 +336,16 @@ func (b *backups) beforeUpdate() error {
 	}
 	_, err := b.run(backup.BeforeUpdate)
 	return err
+}
+
+// relaunchArgs are this start's arguments for the updated copy, without
+// -login: after "update and restart" the window comes back.
+func relaunchArgs(args []string) []string {
+	var out []string
+	for _, a := range args {
+		if a != "-login" && a != "--login" {
+			out = append(out, a)
+		}
+	}
+	return out
 }

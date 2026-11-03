@@ -1,0 +1,66 @@
+name: Windows build
+description: >
+  The Windows half of CI and of a release, in one place: the tests, the exe,
+  MCP end to end on it, and dist/HealthTrail-<version>-windows.zip (the exe
+  and version.txt). With a signing key, also the zip's .sig for the in-app
+  update. Run after actions/checkout.
+inputs:
+  version:
+    description: the version built in; a leading v (the tag) is dropped
+    required: true
+  release:
+    description: "'true' builds a copy that updates itself (release.yml only)"
+    default: 'false'
+  signing-key:
+    description: UPDATE_SIGNING_KEY; required when release is 'true'
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: UI
+      shell: bash
+      working-directory: frontend
+      run: npm ci && npm run build
+    - name: Test
+      shell: bash
+      run: |
+        go vet ./...
+        go test ./...
+        python -I scripts/test_ai_review_gate.py
+        (cd frontend && npx tsc -b)
+    - name: Build
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        RELEASE: ${{ inputs.release }}
+      run: |
+        ldflags="-s -w -H windowsgui -X main.version=${VERSION#v}"
+        if [[ "$RELEASE" == true ]]; then
+          ldflags+=" -X github.com/lee/health-trail/internal/update.Channel=release"
+        fi
+        go build -ldflags "$ldflags" -o health-trail.exe .
+    - name: MCP end to end
+      shell: bash
+      run: python -I scripts/mcp_smoke.py "$PWD/health-trail.exe"
+    - name: Zip
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        RELEASE: ${{ inputs.release }}
+        UPDATE_SIGNING_KEY: ${{ inputs.signing-key }}
+      run: |
+        sign=
+        if [[ "$RELEASE" == true ]]; then sign=-sign; fi
+        go run ./scripts/winupdate pack -version "${VERSION#v}" -exe health-trail.exe -out dist $sign

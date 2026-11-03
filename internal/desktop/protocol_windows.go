@@ -12,8 +12,12 @@ import (
 
 // registerProtocol makes healthtrail:// open this exe. It is per-user, so it
 // does not need an administrator. A later start rewrites the command, so
-// moving the exe keeps the links pointed at it.
-func registerProtocol() {
+// moving the exe keeps the links pointed at it. A copy on test data leaves
+// it alone: the links in Calendar belong to the real app.
+func registerProtocol(dataDir string) {
+	if dataDir != DefaultDataDir() {
+		return
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		log.Printf("登记 healthtrail 链接失败：%v", err)

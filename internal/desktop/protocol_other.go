@@ -2,4 +2,4 @@
 
 package desktop
 
-func registerProtocol() {}
+func registerProtocol(string) {}

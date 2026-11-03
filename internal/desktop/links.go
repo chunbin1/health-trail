@@ -91,6 +91,9 @@ func linkIn(args []string) string {
 	return ""
 }
 
+// IsLink says whether a command-line argument is one of our links.
+func IsLink(arg string) bool { return linkIn([]string{arg}) != "" }
+
 // openLink shows the window and, for a link to a record, goes to it. Before
 // the page has loaded, Wails holds the script until it has.
 func (a *app) openLink(win *application.WebviewWindow, link string) {

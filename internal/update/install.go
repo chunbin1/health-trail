@@ -2,6 +2,7 @@ package update
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -84,6 +85,24 @@ func (in *Installer) download(ctx context.Context, url string, size int64, sha, 
 	return f.Close()
 }
 
+// fetchSig downloads a release's signature file, which is a line of base64.
+func (in *Installer) fetchSig(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "health-trail")
+	resp, err := in.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download signature: %s", resp.Status)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+}
+
 type progress struct {
 	done, total int64
 	report      func(done, total int64)
@@ -97,13 +116,14 @@ func (p *progress) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-// unpackZip extracts src into dst. An entry that would write outside dst is refused.
-func unpackZip(src, dst string) error {
-	zr, err := zip.OpenReader(src)
+// unpackZip extracts the zip in data into dst: the same bytes whose
+// signature was checked, not the file again. An entry that would write
+// outside dst is refused.
+func unpackZip(data []byte, dst string) error {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return fmt.Errorf("%w: unzip: %v", ErrBadDownload, err)
 	}
-	defer zr.Close()
 	root, err := filepath.Abs(dst)
 	if err != nil {
 		return err

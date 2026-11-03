@@ -38,13 +38,13 @@ https://github.com/user-attachments/assets/7d57d18b-8832-4bc0-9797-f5483d23beaa
 
 适合想认真管理自己（或家人）健康记录、又不想把病历交给云服务的人。如果你只需要记步数和睡眠，iPhone 自带的「健康」就够了。
 
-Mac 是正式版，支持 macOS 13 及以上，Apple 芯片和 Intel 都可以。同一个 Release 里还有未签名的 Windows 压缩包。
+Mac 是正式版，支持 macOS 13 及以上，Apple 芯片和 Intel 都可以。同一个 Release 里还有 Windows 压缩包（没有代码签名证书）。
 
 ## 快速开始
 
 **1 · 安装**：从 **[Releases](https://github.com/chunbin1/health-trail/releases)** 下载 `HealthTrail-<版本>.dmg`，打开后把「健康足迹」拖进「应用程序」。Windows 下载 `HealthTrail-<版本>-windows.zip`，解压后运行里面的 `health-trail.exe`（需要 WebView2）。
 
-<sub>dmg 用 Developer ID 签名并经过苹果公证，双击就能打开。Windows 的压缩包没有签名，SmartScreen 可能会拦。也可以[从源码构建](#从源码构建)。Mac 上以后有新版本，App 会在「设置 → 软件更新」里提示，点一下就更新。Windows 上要自己下载新的压缩包。</sub>
+<sub>dmg 用 Developer ID 签名并经过苹果公证，双击就能打开。Windows 的 exe 没有代码签名证书，第一次运行时 SmartScreen 可能会拦。也可以[从源码构建](#从源码构建)。以后有新版本，App 会在「设置 → 软件更新」里提示，点一下就更新；Windows 版会先校验更新包的签名再换上。</sub>
 
 **2 · 连接 AI**：打开 App 的「连接 AI」页。可以用 API 接窗口里的 AI 助手（选智谱照着步骤拿密钥，或者自己填地址、密钥和模型），也可以用 MCP，按你用的 AI 复制配置（Claude 桌面版、Claude Code、Codex 或其他支持 MCP 的 AI）。
 
@@ -238,7 +238,7 @@ flowchart LR
 
 ## 隐私与安全
 
-- **数据只在你的电脑上**：默认在 `~/Library/Application Support/HealthVault`，可以用 `-data` 参数或环境变量 `HEALTH_TRAIL_DATA` 换地方。App 不收集使用统计。联网只有两处：向 GitHub 查有没有新版本（每隔几个小时一次，窗口回到前台时距上次超过半小时也会查，只问版本号，可以在「设置 → 软件更新」里关掉）；以及你在「AI助手」里自己填的接口。用「AI助手」时，你说的话、少量已有记录的名称，以及它回答时查到的记录会发给这个接口。声音用 Mac 本机识别，不上传。密钥存在数据目录的 `assistant.json`，不放进备份。
+- **数据只在你的电脑上**：默认在 `~/Library/Application Support/HealthVault`，可以用 `-data` 参数或环境变量 `HEALTH_TRAIL_DATA` 换地方。App 不收集使用统计。联网只有两处：向 GitHub 查有没有新版本（每隔几个小时一次，窗口回到前台时距上次超过半小时也会查，只问版本号，可以在「设置 → 软件更新」里关掉）；以及你在「AI助手」里自己填的接口。用「AI助手」时，你说的话、少量已有记录的名称，以及它回答时查到的记录会发给这个接口。声音在本机识别（Mac 用系统的听写，Windows 用系统自带的 SAPI），不上传。密钥存在数据目录的 `assistant.json`，不放进备份。
 - **AI 会看到它读取的记录**：AI 读取记录时，相关内容会发给它的服务商处理（Claude 发给 Anthropic，Codex 发给 OpenAI）。用哪个 AI、让它读什么，由你决定。
 - **本地服务只对本机开放**：默认只监听 `127.0.0.1`；本机浏览器里的其他网站无法读写数据，服务会拒绝 DNS 重绑定和跨站请求。
 - **附件不会被当成网页运行**：只有图片、PDF 和纯文本能在页面里直接打开，其他类型一律作为下载返回。
@@ -272,7 +272,7 @@ make win-icon # 换了 internal/desktop/appicon.png 之后，重做 exe 的文�
 
 想用自己的真实数据边用边调试，用 `make dev-real`：每次启动前会先把数据库和附件备份到 `~/Library/Application Support/HealthVault-dev-backups/<时间>`，保留最近 10 份。
 
-代码结构和改代码的约定见 [CLAUDE.md](CLAUDE.md)，踩过的坑记在 [LESSONS.md](LESSONS.md)。每次推送都会由 [CI](.github/workflows/ci.yml) 在 Mac 和 Windows 上同时跑测试和 MCP 端到端测试，并打出 dmg 和一个未签名的 exe（这两个只留 7 天）。推送 `v*` 标签会签名、公证并发布 Mac 版，同时把 Windows 的压缩包挂到同一个 Release 上，见 [RELEASING.md](RELEASING.md)。
+代码结构和改代码的约定见 [CLAUDE.md](CLAUDE.md)，踩过的坑记在 [LESSONS.md](LESSONS.md)。每次推送都会由 [CI](.github/workflows/ci.yml) 在 Mac 和 Windows 上同时跑测试和 MCP 端到端测试，并打出 dmg 和一个 Windows 压缩包（这两个只留 7 天）。推送 `v*` 标签会签名、公证并发布 Mac 版，同时把签过名的 Windows 更新包挂到同一个 Release 上，见 [RELEASING.md](RELEASING.md)。
 
 ## 计划
 

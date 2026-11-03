@@ -280,3 +280,15 @@ func TestUpdateCheckOnOpen(t *testing.T) {
 	u.windowOpened()
 	wait(2)
 }
+
+// After "update and restart" the window comes back, even when this copy
+// was started at login; the rest of the arguments carry over.
+func TestRelaunchArgs(t *testing.T) {
+	got := relaunchArgs([]string{"-login", "-data", `C:\Health Data`})
+	if len(got) != 2 || got[0] != "-data" || got[1] != `C:\Health Data` {
+		t.Errorf("relaunchArgs = %q", got)
+	}
+	if got := relaunchArgs(nil); len(got) != 0 {
+		t.Errorf("relaunchArgs(nil) = %q", got)
+	}
+}

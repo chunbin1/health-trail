@@ -45,28 +45,31 @@ func Bundle() string {
 	return exe
 }
 
-// Check says why this exe can't be replaced, or nil when it can. The string
-// is the Authenticode signer's certificate thumbprint.
+// Check says why this exe can't be replaced, or nil when it can. Only a
+// copy release.yml built updates itself; there is no certificate to ask,
+// the download is checked against our own key instead (sign.go).
 func (in *Installer) Check() (string, error) {
-	pub, err := publisher(in.App)
-	if err != nil || pub == "" {
+	if Channel != "release" {
 		return "", ErrUnsigned
 	}
 	if !dirWritable(filepath.Dir(in.App)) {
 		return "", ErrNotMovable
 	}
-	return pub, nil
+	return "", nil
 }
 
+// Install downloads r and its signature, checks them and swaps the new exe
+// in for in.App. Windows lets a running exe be renamed, not deleted: the old
+// one moves into the returned folder, which Relaunch deletes once this
+// process has quit.
 func (in *Installer) Install(ctx context.Context, r *Release) (string, error) {
-	pub, err := in.Check()
-	if err != nil {
+	if _, err := in.Check(); err != nil {
 		return "", err
 	}
-	url, size, sha := r.Payload()
-	if url == "" {
+	if !r.Installable() {
 		return "", errorsNewNoZip()
 	}
+	url, size, sha := r.Payload()
 	stage, err := os.MkdirTemp(filepath.Dir(in.App), stagePrefix)
 	if err != nil {
 		return "", ErrNotMovable
@@ -81,20 +84,27 @@ func (in *Installer) Install(ctx context.Context, r *Release) (string, error) {
 	if err := in.download(ctx, url, size, sha, zip); err != nil {
 		return "", err
 	}
+	sig, err := in.fetchSig(ctx, r.WinSigURL)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(zip)
+	if err != nil {
+		return "", err
+	}
+	if err := CheckSignature(data, sig); err != nil {
+		return "", err
+	}
 	unpacked := filepath.Join(stage, "new")
 	if err := os.MkdirAll(unpacked, 0o755); err != nil {
 		return "", err
 	}
-	if err := unpackZip(zip, unpacked); err != nil {
+	if err := unpackZip(data, unpacked); err != nil {
 		return "", err
 	}
 	exe, err := windowsPayload(unpacked, r.Version)
 	if err != nil {
 		return "", err
-	}
-	got, err := publisher(exe)
-	if err != nil || !strings.EqualFold(got, pub) {
-		return "", fmt.Errorf("%w: signature", ErrBadDownload)
 	}
 	old := filepath.Join(stage, "old.exe")
 	if err := os.Rename(in.App, old); err != nil {
@@ -112,41 +122,47 @@ func (in *Installer) Install(ctx context.Context, r *Release) (string, error) {
 	return stage, nil
 }
 
-// publisher is the signer's certificate thumbprint when the Authenticode
-// signature is valid.
-func publisher(path string) (string, error) {
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
-		`$s = Get-AuthenticodeSignature -LiteralPath $env:HEALTH_TRAIL_SIGN_PATH; Write-Output $s.Status; if ($s.SignerCertificate) { Write-Output $s.SignerCertificate.Thumbprint }`)
-	cmd.Env = append(os.Environ(), "HEALTH_TRAIL_SIGN_PATH="+path)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	lines := strings.Fields(string(out))
-	if len(lines) == 0 || !strings.EqualFold(lines[0], "Valid") || len(lines) < 2 {
-		if len(lines) > 0 && strings.EqualFold(lines[0], "NotSigned") {
-			return "", ErrUnsigned
-		}
-		return "", ErrBadDownload
-	}
-	return lines[1], nil
-}
-
 // Relaunch starts a helper that waits for this process to exit, deletes
-// stage (the old exe) and opens the new exe. The caller quits next.
+// stage (the old exe) and starts the new exe with args. The caller quits next.
 func Relaunch(exe, stage string, args []string) error {
-	var list []string
-	for _, a := range args {
-		list = append(list, "'"+strings.ReplaceAll(a, "'", "''")+"'")
-	}
-	script := fmt.Sprintf(`$pidToWait = %d
-$stage = '%s'
-$exe = '%s'
-while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 200 }
-Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
-Start-Process -FilePath $exe -ArgumentList @(%s)
-`, os.Getpid(), strings.ReplaceAll(stage, "'", "''"), strings.ReplaceAll(exe, "'", "''"), strings.Join(list, ","))
-	cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script)
+	script := relaunchScript(os.Getpid(), exe, stage, args)
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
 	cmd.SysProcAttr = detachAttr()
 	return cmd.Start()
+}
+
+// relaunchScript is the PowerShell for Relaunch. The arguments go to
+// Start-Process as one command line, quoted the Windows way: given as an
+// array, Start-Process joins them with spaces and a path with a space
+// splits; given an empty array, it refuses to start at all.
+func relaunchScript(pid int, exe, stage string, args []string) string {
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = syscall.EscapeArg(a)
+	}
+	start := "Start-Process -FilePath $exe"
+	if len(args) > 0 {
+		start += " -ArgumentList " + psQuote(strings.Join(quoted, " "))
+	}
+	return fmt.Sprintf(`$exe = %s
+while (Get-Process -Id %d -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 200 }
+Remove-Item -LiteralPath %s -Recurse -Force -ErrorAction SilentlyContinue
+%s
+`, psQuote(exe), pid, psQuote(stage), start)
+}
+
+// psQuote is s as a PowerShell literal string. PowerShell also ends one at
+// the typographic single quotes, so those are doubled too.
+func psQuote(s string) string {
+	var b strings.Builder
+	b.WriteByte('\'')
+	for _, r := range s {
+		switch r {
+		case '\'', '\u2018', '\u2019', '\u201a', '\u201b':
+			b.WriteRune(r)
+		}
+		b.WriteRune(r)
+	}
+	b.WriteByte('\'')
+	return b.String()
 }

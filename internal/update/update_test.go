@@ -2,8 +2,11 @@ package update
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -50,7 +53,8 @@ func TestLatest(t *testing.T) {
 		"published_at":"2026-11-01T10:00:00Z","assets":[
 		{"name":"HealthTrail-1.2.0.dmg","browser_download_url":"https://x/dmg","size":10},
 		{"name":"HealthTrail-1.2.0.zip","browser_download_url":"https://x/zip","size":20,"digest":"sha256:abcd"},
-		{"name":"HealthTrail-1.2.0-windows.zip","browser_download_url":"https://x/wzip","size":30,"digest":"sha256:ef01"}]}`
+		{"name":"HealthTrail-1.2.0-windows.zip","browser_download_url":"https://x/wzip","size":30,"digest":"sha256:ef01"},
+		{"name":"HealthTrail-1.2.0-windows.zip.sig","browser_download_url":"https://x/wsig","size":89}]}`
 	var accept string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		accept = r.Header.Get("Accept")
@@ -73,7 +77,7 @@ func TestLatest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Version != "1.2.0" || r.Notes != "- 新增：更新" || r.ZipURL != "https://x/zip" || r.ZipSize != 20 || r.ZipSHA256 != "abcd" || r.WinURL != "https://x/wzip" || r.WinSize != 30 || r.WinSHA256 != "ef01" || !r.Installable() {
+	if r.Version != "1.2.0" || r.Notes != "- 新增：更新" || r.ZipURL != "https://x/zip" || r.ZipSize != 20 || r.ZipSHA256 != "abcd" || r.WinURL != "https://x/wzip" || r.WinSize != 30 || r.WinSHA256 != "ef01" || r.WinSigURL != "https://x/wsig" || !r.Installable() {
 		t.Errorf("release = %+v", r)
 	}
 	// the tag message's first line is the release's name again
@@ -135,14 +139,14 @@ func TestWindowsZipPayload(t *testing.T) {
 	if err := os.Mkdir(dst, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := unpackZip(zipPath, dst); !errors.Is(err, ErrBadDownload) {
+	if err := unpackZip(mustRead(t, zipPath), dst); !errors.Is(err, ErrBadDownload) {
 		t.Fatalf("zip slip = %v", err)
 	}
 
 	writeZip(t, zipPath, map[string]string{"health-trail.exe": "MZ", "version.txt": "1.2.0\n"})
 	os.RemoveAll(dst)
 	os.Mkdir(dst, 0o755)
-	if err := unpackZip(zipPath, dst); err != nil {
+	if err := unpackZip(mustRead(t, zipPath), dst); err != nil {
 		t.Fatal(err)
 	}
 	exe, err := windowsPayload(dst, "1.2.0")
@@ -152,6 +156,15 @@ func TestWindowsZipPayload(t *testing.T) {
 	if _, err := windowsPayload(dst, "9.9.9"); !errors.Is(err, ErrBadDownload) {
 		t.Fatalf("wrong version = %v", err)
 	}
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func writeZip(t *testing.T, path string, files map[string]string) {
@@ -173,5 +186,55 @@ func writeZip(t *testing.T, path string, files map[string]string) {
 	}
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// withTestKey signs with a key of the test's own in place of the release key.
+func withTestKey(t *testing.T) ed25519.PrivateKey {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := publicKeys
+	publicKeys = []string{base64.StdEncoding.EncodeToString(pub)}
+	t.Cleanup(func() { publicKeys = old })
+	return priv
+}
+
+func TestCheckSignature(t *testing.T) {
+	key := withTestKey(t)
+	data := []byte("PK zip bytes")
+	sig := Sign(key, data)
+	if err := CheckSignature(data, sig); err != nil {
+		t.Fatalf("our signature = %v", err)
+	}
+	// a signature file written on Windows may end in CRLF
+	if err := CheckSignature(data, append(bytes.TrimSpace(sig), '\r', '\n')); err != nil {
+		t.Fatalf("CRLF = %v", err)
+	}
+	_, other, _ := ed25519.GenerateKey(nil)
+	for name, c := range map[string]struct{ data, sig []byte }{
+		"changed zip":     {[]byte("PK zip bytez"), sig},
+		"another key":     {data, Sign(other, data)},
+		"not base64":      {data, []byte("not a signature")},
+		"empty signature": {data, nil},
+	} {
+		if err := CheckSignature(c.data, c.sig); !errors.Is(err, ErrBadDownload) {
+			t.Errorf("%s = %v, want ErrBadDownload", name, err)
+		}
+	}
+}
+
+// The key release.yml signs with must match the one built in: a release
+// signed with anything else would never install.
+func TestBuiltInKeyIsValid(t *testing.T) {
+	if len(publicKeys) == 0 {
+		t.Fatal("no public key")
+	}
+	for _, k := range publicKeys {
+		if b, err := base64.StdEncoding.DecodeString(k); err != nil || len(b) != ed25519.PublicKeySize {
+			t.Errorf("public key %q: %v", k, err)
+		}
 	}
 }

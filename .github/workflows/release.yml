@@ -5,8 +5,11 @@ name: Release
 # latest commit of an open PR, reviewed the same way); then the same checks as
 # CI, then a Developer ID signed, notarized universal dmg published as a GitHub
 # Release, with the zip of the app that the app's own update downloads
-# (HealthTrail-<version>.zip). The same release also gets an unsigned
-# Windows zip, HealthTrail-<version>-windows.zip (health-trail.exe inside).
+# (HealthTrail-<version>.zip). The same release also gets the Windows zip,
+# HealthTrail-<version>-windows.zip (health-trail.exe without a certificate,
+# and version.txt), and its .sig, which the Windows app's own update checks.
+# Mac and Windows build in parallel; a Windows failure doesn't hold back the
+# Mac release, it goes out without the Windows files.
 #
 # Secrets (set once with `gh secret set`; how to make each is in RELEASING.md):
 #   DEVELOPER_ID_P12           the Developer ID Application certificate and its
@@ -14,6 +17,7 @@ name: Release
 #   DEVELOPER_ID_P12_PASSWORD  the password chosen when exporting it
 #   NOTARY_KEY                 an App Store Connect API key (.p8 file contents)
 #   NOTARY_KEY_ID, NOTARY_ISSUER_ID  that key's ids
+#   UPDATE_SIGNING_KEY         the Ed25519 key the Windows zip is signed with
 on:
   push:
     tags: ['v*']
@@ -51,45 +55,20 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/windows
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: UI
-        shell: bash
-        working-directory: frontend
-        run: npm ci && npm run build
-      - name: Test
-        shell: bash
-        run: |
-          go vet ./...
-          go test ./...
-          python -I scripts/test_ai_review_gate.py
-          (cd frontend && npx tsc -b)
-      - name: Windows zip
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          go build -ldflags "-s -w -H windowsgui -X main.version=${version}" -o health-trail.exe .
-          mkdir -p dist
-          python -I scripts/mcp_smoke.py "$PWD/health-trail.exe"
-          powershell.exe -NoProfile -Command "Compress-Archive -Path health-trail.exe -DestinationPath 'dist/HealthTrail-${version}-windows.zip' -Force"
+          version: ${{ github.ref_name }}
+          release: 'true'
+          signing-key: ${{ secrets.UPDATE_SIGNING_KEY }}
       - uses: actions/upload-artifact@v7
         with:
           name: HealthTrail-windows-zip
-          path: dist/HealthTrail-*-windows.zip
+          path: |
+            dist/HealthTrail-*-windows.zip
+            dist/HealthTrail-*-windows.zip.sig
 
   macos:
-    needs: [ai-review, windows]
+    needs: ai-review
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -144,23 +123,45 @@ jobs:
       - name: MCP end to end
         run: python3 -I scripts/mcp_smoke.py "dist/root/健康足迹.app/Contents/MacOS/health-trail"
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
-          name: HealthTrail-windows-zip
-          path: dist
-      - name: Publish the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        # the notes are the annotated tag's message (git tag -a v1.1.0 -m "…");
-        # fetched again because checkout may leave a plain tag in its place.
-        # A tag with a hyphen (v1.1.0-test.1) is a pre-release.
-        run: |
-          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-          gh release create "$GITHUB_REF_NAME" dist/*.dmg dist/*.zip --verify-tag --notes-from-tag \
-            --title "健康足迹 ${GITHUB_REF_NAME#v}" $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)
+          name: HealthTrail-mac
+          path: |
+            dist/*.dmg
+            dist/HealthTrail-*.zip
 
       - name: Remove the keychain and key
         if: always()
         run: |
           security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+
+  publish:
+    # the Mac build is required; the Windows one only when it made it
+    needs: [macos, windows]
+    if: ${{ !cancelled() && needs.macos.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: HealthTrail-mac
+          path: dist
+      - if: ${{ needs.windows.result == 'success' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: HealthTrail-windows-zip
+          path: dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS: ${{ needs.windows.result }}
+        # the notes are the annotated tag's message (git tag -a v1.1.0 -m "…");
+        # fetched again because checkout may leave a plain tag in its place.
+        # A tag with a hyphen (v1.1.0-test.1) is a pre-release.
+        run: |
+          [[ "$WINDOWS" == success ]] || echo "::warning::Windows 没打包成功，这次只发 Mac 版"
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --notes-from-tag \
+            --title "健康足迹 ${GITHUB_REF_NAME#v}" $([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease)

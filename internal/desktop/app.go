@@ -42,6 +42,10 @@ import (
 // Version is the app's Version, which main sets from the build.
 var Version = "0.1.0"
 
+// OpenedAtLogin is main's -login: Windows starts the app at login with it
+// (see shell.setAutostart). The Mac asks the system instead.
+var OpenedAtLogin bool
+
 // DefaultPort is the local service's port.
 const DefaultPort = "8721"
 
@@ -312,7 +316,7 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 	})
 	// opening at login is the window's to change, like the folder dialog
 	mux.HandleFunc("GET /api/autostart", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]bool{"enabled": a.shell != nil && a.shell.autostart()})
+		writeJSON(w, autostartView(a.shell != nil && a.shell.autostart()))
 	})
 	mux.HandleFunc("PUT /api/autostart", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
@@ -331,7 +335,7 @@ func (a *app) windowHandler(wapp func() *application.App) http.Handler {
 			writeError(w, why)
 			return
 		}
-		writeJSON(w, map[string]bool{"enabled": a.shell.autostart()})
+		writeJSON(w, autostartView(a.shell.autostart()))
 	})
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), inWindow{}, true)))
@@ -413,6 +417,12 @@ func tomlString(s string) string {
 	return string(b)
 }
 
+// autostartView is what the settings page shows for opening at login; the
+// wording differs between the Mac menu bar and the Windows tray.
+func autostartView(on bool) map[string]bool {
+	return map[string]bool{"enabled": on, "windows": runtime.GOOS == "windows"}
+}
+
 func RunServe(dataDir, port string, lanFlag bool) {
 	a := newApp(dataDir, port)
 	defer a.st.Close()
@@ -442,7 +452,7 @@ func RunServe(dataDir, port string, lanFlag bool) {
 }
 
 func RunApp(dataDir, port string) {
-	registerProtocol()
+	registerProtocol(dataDir)
 	a := newApp(dataDir, port)
 	defer a.st.Close()
 	// The window works without the socket (it talks to the handler in
@@ -533,6 +543,7 @@ func RunApp(dataDir, port string) {
 				a.openLink(win, link)
 			}
 		}
+		a.shell.renewAutostart()
 		a.shell.refresh()
 	})
 	// a link from Calendar or Reminders, to the running app or one it starts
