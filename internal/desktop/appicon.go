@@ -1,6 +1,9 @@
 package desktop
 
-import _ "embed"
+import (
+	_ "embed"
+	"runtime"
+)
 
 // The Windows window and taskbar icon. Corners are transparent: the Mac
 // icon file paints them white, and Windows would show that as a white
@@ -11,3 +14,12 @@ import _ "embed"
 //
 //go:embed appicon.png
 var appIcon []byte
+
+// windowsIcon is only for Windows. On Mac the bundle icon is AppIcon.icns;
+// passing this PNG there replaces it.
+func windowsIcon() []byte {
+	if runtime.GOOS == "windows" {
+		return appIcon
+	}
+	return nil
+}

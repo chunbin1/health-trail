@@ -470,10 +470,12 @@ func RunApp(dataDir, port string) {
 	wapp = application.New(application.Options{
 		Name:        "健康足迹",
 		Description: "个人健康档案",
-		Icon:        appIcon,
-		Assets:      application.AssetOptions{Handler: a.windowHandler(func() *application.App { return wapp })},
-		OnShutdown:  func() { stopBackups(); a.backups.quit(); attachopen.Clear(a.openDir) },
-		Services:    services(a.remind, dataDir),
+		// Mac keeps the icon in the .app (AppIcon.icns). Setting this on
+		// Mac replaces that icon, and the PNG's square shows in the Dock.
+		Icon:       windowsIcon(),
+		Assets:     application.AssetOptions{Handler: a.windowHandler(func() *application.App { return wapp })},
+		OnShutdown: func() { stopBackups(); a.backups.quit(); attachopen.Clear(a.openDir) },
+		Services:   services(a.remind, dataDir),
 		// closing the window leaves the app in the menu bar (see shell)
 		Mac: application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: false},
 		// one window per data directory: a second launch on the same data
