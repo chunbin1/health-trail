@@ -172,6 +172,7 @@ WKWebView 只有在 App 实现了对应的 WKUIDelegate 方法时才会显示 JS
 ### 45. Windows 上的系统入口（命令行参数、COM 回调、注册表命令）要从系统那一头顺着走一遍，交叉编译和单测通过不算数
 `healthtrail://` 在 Windows 上是 `health-trail.exe "<链接>"` 启动的，`main.go` 把链接当成子命令，打印用法就退出了，走不到 `RunApp`；听写用 `PutProperty` 设对象属性（SAPI 要 `PutPropertyRef`）、没给 in-proc 识别器接麦克风、事件 sink 只有 COM 拿着会被 GC 回收、COM 不在锁定的线程上：每一处都能编译、单测也绿，合起来是「从来没工作过」。写 Windows 原生功能时，从系统实际传进来的东西开始（注册的命令行、回调签名、属性的 propput/propputref），一步步走到我们的代码，把这条路写成测试（`TestCommand`、`TestHeardKeepsEveryPhrase`）；能在 CI 的 Windows 上跑的，就写 `_windows_test.go`。
 - 证据：2026-11-03，审 cursor/windows-ci-build 的听写、更新、链接三块，找出上面这些；更新那边还有发布包里没有 `version.txt`、`Start-Process -ArgumentList @()` 空数组会报错。
+- 证据：同一天，1.8.4 的开机启动只走了「我们写注册表 → 开机带 -login」这一头，没走「用户在 Windows 设置里关掉」「exe 挪了位置」这两头：设置里关掉只在 StartupApproved 里记一笔，App 的开关照样显示开；挪了位置旧登记指向空处，开关显示关。Wails 的默认登记名对中文名的 App 是通用的 `wails-app`，也是这时才看到。
 - 出现：1
 
 ### 46. 图标「改了还是不对」，先把编好的 exe 里的图标资源解出来看，再决定改图还是查缓存
