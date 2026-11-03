@@ -54,6 +54,9 @@ runs:
     - name: MCP end to end
       shell: bash
       run: python -I scripts/mcp_smoke.py "$PWD/health-trail.exe"
+    - name: App starts and quits
+      shell: bash
+      run: python -I scripts/app_smoke.py "$PWD/health-trail.exe"
     - name: Zip
       shell: bash
       env:
