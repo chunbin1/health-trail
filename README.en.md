@@ -205,7 +205,17 @@ codex mcp add health-trail -- "/Applications/健康足迹.app/Contents/MacOS/hea
 <details>
 <summary><b>Other AIs that support MCP</b> (Cursor, Cherry Studio and others)</summary>
 
-Add a stdio MCP server: set the command to the program path above and the argument to `mcp`. Or use the HTTP address `http://127.0.0.1:8721/mcp`; this way the app needs to be open.
+Add a stdio MCP server: set the command to the program path above and the argument to `mcp`. Or use HTTP (the app needs to be open) and merge this into the config:
+
+```json
+{
+  "mcpServers": {
+    "health-trail": {
+      "url": "http://127.0.0.1:8721/mcp"
+    }
+  }
+}
+```
 
 </details>
 

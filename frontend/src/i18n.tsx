@@ -295,11 +295,12 @@ const EN = {
   '在终端运行一次；Codex 命令行和编辑器插件共用这个设置。': 'Run once in a terminal; the Codex CLI and editor extension share this setting.',
   '或者手动加进 ~/.codex/config.toml：': 'Or add it to ~/.codex/config.toml by hand:',
   '其他支持 MCP 的 AI': 'Other AI apps that support MCP',
-  'Cursor、Cherry Studio 等：添加一个 MCP 服务器，类型选「命令行（stdio）」，填下面的命令和参数；或者类型选 HTTP，填地址（需要本 App 开着）。':
-    'Cursor, Cherry Studio and others: add an MCP server, choose the command-line (stdio) type and fill in the command and arguments below; or choose HTTP and use the address (this app must be open).',
+  'Cursor、Cherry Studio 等：添加一个 MCP 服务器，类型选「命令行（stdio）」，填下面的命令和参数；或者类型选 HTTP，填地址，也可以把下面的 JSON 合并进配置（需要本 App 开着）。':
+    'Cursor, Cherry Studio and others: add an MCP server, choose the command-line (stdio) type and fill in the command and arguments below; or choose HTTP and fill in the address, or merge the JSON below into the config (this app must be open).',
   '命令': 'Command',
   '参数': 'Arguments',
   'HTTP 地址': 'HTTP address',
+  '或者把下面这段合并进配置：': 'Or merge this into the config:',
   '在终端运行一次，对所有项目生效。': 'Run once in a terminal; it applies to all projects.',
   '或者在本 App 运行时，通过 HTTP 连接：': 'Or, while this app is running, connect over HTTP:',
   '手机访问': 'Phone access',

@@ -124,6 +124,7 @@ export interface Info {
   claude_desktop_config: string
   claude_code_command: string
   mcp_http_url: string
+  mcp_http_config: string
   claude_code_http: string
   codex_command: string
   codex_config: string

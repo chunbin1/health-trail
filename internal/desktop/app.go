@@ -365,6 +365,10 @@ func (a *app) info(r *http.Request) map[string]any {
 	desktop := map[string]any{"mcpServers": map[string]any{"health-trail": map[string]any{"command": exe, "args": args}}}
 	desktopJSON, _ := json.MarshalIndent(desktop, "", "  ")
 	httpURL := "http://127.0.0.1:" + a.port + "/mcp"
+	// Cursor and similar apps take this in their MCP config file. The app
+	// has to be open, because the address is this process, not a subprocess.
+	httpCfg := map[string]any{"mcpServers": map[string]any{"health-trail": map[string]any{"url": httpURL}}}
+	httpJSON, _ := json.MarshalIndent(httpCfg, "", "  ")
 	// Codex keeps MCP servers in ~/.codex/config.toml, shared by its CLI and
 	// editor extension; a TOML basic string escapes like a JSON one
 	tomlArgs := make([]string, len(args))
@@ -390,6 +394,7 @@ func (a *app) info(r *http.Request) map[string]any {
 		"claude_desktop_config": string(desktopJSON),
 		"claude_code_command":   "claude mcp add health-trail -s user -- " + shellJoin(exe, args),
 		"mcp_http_url":          httpURL,
+		"mcp_http_config":       string(httpJSON),
 		"claude_code_http":      "claude mcp add --transport http health-trail -s user " + httpURL,
 		"codex_command":         "codex mcp add health-trail -- " + shellJoin(exe, args),
 		"codex_config":          codexConfig,
