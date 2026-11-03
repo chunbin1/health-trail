@@ -173,7 +173,8 @@ WKWebView 只有在 App 实现了对应的 WKUIDelegate 方法时才会显示 JS
 `healthtrail://` 在 Windows 上是 `health-trail.exe "<链接>"` 启动的，`main.go` 把链接当成子命令，打印用法就退出了，走不到 `RunApp`；听写用 `PutProperty` 设对象属性（SAPI 要 `PutPropertyRef`）、没给 in-proc 识别器接麦克风、事件 sink 只有 COM 拿着会被 GC 回收、COM 不在锁定的线程上：每一处都能编译、单测也绿，合起来是「从来没工作过」。写 Windows 原生功能时，从系统实际传进来的东西开始（注册的命令行、回调签名、属性的 propput/propputref），一步步走到我们的代码，把这条路写成测试（`TestCommand`、`TestHeardKeepsEveryPhrase`）；能在 CI 的 Windows 上跑的，就写 `_windows_test.go`。
 - 证据：2026-11-03，审 cursor/windows-ci-build 的听写、更新、链接三块，找出上面这些；更新那边还有发布包里没有 `version.txt`、`Start-Process -ArgumentList @()` 空数组会报错。
 - 证据：同一天，1.8.4 的开机启动只走了「我们写注册表 → 开机带 -login」这一头，没走「用户在 Windows 设置里关掉」「exe 挪了位置」这两头：设置里关掉只在 StartupApproved 里记一笔，App 的开关照样显示开；挪了位置旧登记指向空处，开关显示关。Wails 的默认登记名对中文名的 App 是通用的 `wails-app`，也是这时才看到。
-- 出现：1
+- 证据：1.8.5 修了「设置页的开关跟着 Windows 设置变」，没看托盘菜单的勾：它只在启动和切换时读一次，而且 Wails 在 Windows 上的 `Menu.Update()` 另建一份菜单、把菜单项接过去，托盘那份从此不再变（语言、「有新版本」也一样）。同一个状态在几个地方显示时，每一处都顺着走一遍；Windows 托盘要用 `SystemTray.SetMenu` 重建，右键时再读一次状态。
+- 出现：2
 
 ### 46. 图标「改了还是不对」，先把编好的 exe 里的图标资源解出来看，再决定改图还是查缓存
 别的会话改了三次 Windows 图标（透明四角、改用位图、编号 3），用户还说有白底。在 Mac 上交叉编译一个只带 `.syso` 的 exe，用 winres 解出 5 个尺寸画在深色和品红底上，四角都是透明的：exe 本身已经对了，剩下的是 Windows 的图标缓存、钉在任务栏上的旧快捷方式，以及托盘一直在用的 Mac 菜单栏模板图（`SetTemplateIcon` 在 Windows 上照原样画黑色）。再改图之前先看产物，分清是哪一处在显示、显示的是哪份资源。
