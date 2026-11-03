@@ -203,9 +203,9 @@ codex mcp add health-trail -- "/Applications/健康足迹.app/Contents/MacOS/hea
 </details>
 
 <details>
-<summary><b>其他支持 MCP 的 AI</b>（Cursor、Cherry Studio 等）</summary>
+<summary><b>其他支持 MCP 的 AI</b>（Cursor、Cherry Studio、WorkBuddy 等）</summary>
 
-添加一个 stdio 类型的 MCP 服务器：命令填上面的程序路径，参数填 `mcp`。或者用 HTTP（需要 App 开着），把下面这段合并进配置：
+添加一个 stdio 类型的 MCP 服务器：命令填上面的程序路径，参数填 `mcp`。或者用 HTTP（需要 App 开着），把下面这段合并进配置。WorkBuddy 写在 `~/.workbuddy/mcp.json`（所有项目）或项目目录里的 `.workbuddy/mcp.json`。
 
 ```json
 {
