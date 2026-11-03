@@ -174,7 +174,8 @@ WKWebView 只有在 App 实现了对应的 WKUIDelegate 方法时才会显示 JS
 - 证据：2026-11-03，审 cursor/windows-ci-build 的听写、更新、链接三块，找出上面这些；更新那边还有发布包里没有 `version.txt`、`Start-Process -ArgumentList @()` 空数组会报错。
 - 证据：同一天，1.8.4 的开机启动只走了「我们写注册表 → 开机带 -login」这一头，没走「用户在 Windows 设置里关掉」「exe 挪了位置」这两头：设置里关掉只在 StartupApproved 里记一笔，App 的开关照样显示开；挪了位置旧登记指向空处，开关显示关。Wails 的默认登记名对中文名的 App 是通用的 `wails-app`，也是这时才看到。
 - 证据：1.8.5 修了「设置页的开关跟着 Windows 设置变」，没看托盘菜单的勾：它只在启动和切换时读一次，而且 Wails 在 Windows 上的 `Menu.Update()` 另建一份菜单、把菜单项接过去，托盘那份从此不再变（语言、「有新版本」也一样）。同一个状态在几个地方显示时，每一处都顺着走一遍；Windows 托盘要用 `SystemTray.SetMenu` 重建，右键时再读一次状态。
-- 出现：2
+- 证据：1.8.6 是第一次有人在 Windows 上走 App 内更新：exe 换好了、旧进程退了，新版本没起来。重启脚本只测过拼出来的文字；用 `DETACHED_PROCESS` 启动的 PowerShell 没有控制台，一启动就退出。CI 的 Windows 是真机，进程、PowerShell、注册表都能真的跑：`TestRelaunchStartsTheNewExe` 让一个进程调用 `Relaunch` 后马上退出，看新 exe 起没起来，第一次跑就复现了。之后加了 `scripts/app_smoke.py`，在 CI 上真的启动 App、二次启动、退出；写它时踩到两处：窗口的 WebView2 没建好就退出，Wails 会按致命错误退出（退出码 1，要把 stderr 接到文件才看得见）；`taskkill` 不带 /F 发的 WM_CLOSE 只让窗口藏起来，要退出得发给 Wails 隐藏的主线程窗口。
+- 出现：3
 
 ### 46. 图标「改了还是不对」，先把编好的 exe 里的图标资源解出来看，再决定改图还是查缓存
 别的会话改了三次 Windows 图标（透明四角、改用位图、编号 3），用户还说有白底。在 Mac 上交叉编译一个只带 `.syso` 的 exe，用 winres 解出 5 个尺寸画在深色和品红底上，四角都是透明的：exe 本身已经对了，剩下的是 Windows 的图标缓存、钉在任务栏上的旧快捷方式，以及托盘一直在用的 Mac 菜单栏模板图（`SetTemplateIcon` 在 Windows 上照原样画黑色）。再改图之前先看产物，分清是哪一处在显示、显示的是哪份资源。
