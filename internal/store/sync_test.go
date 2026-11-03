@@ -108,7 +108,9 @@ func TestOldDatabaseGetsUIDs(t *testing.T) {
 	if a == b {
 		t.Fatal("same uid")
 	}
-	// opening again changes nothing
+	// opening again changes nothing. Close this handle too: the defer above
+	// captured the first store, and Windows will not delete an open database
+	// when the temp dir is removed.
 	s.Close()
 	if s, err = Open(dir); err != nil {
 		t.Fatal(err)
