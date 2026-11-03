@@ -79,7 +79,7 @@ jobs:
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
-          go build -ldflags "-s -w -X main.version=${version}" -o health-trail.exe .
+          go build -ldflags "-s -w -H windowsgui -X main.version=${version}" -o health-trail.exe .
           mkdir -p dist
           python -I scripts/mcp_smoke.py "$PWD/health-trail.exe"
           powershell.exe -NoProfile -Command "Compress-Archive -Path health-trail.exe -DestinationPath 'dist/HealthTrail-${version}-windows.zip' -Force"
