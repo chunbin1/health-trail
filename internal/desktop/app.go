@@ -470,6 +470,7 @@ func RunApp(dataDir, port string) {
 	wapp = application.New(application.Options{
 		Name:        "健康足迹",
 		Description: "个人健康档案",
+		Icon:        appIcon,
 		Assets:      application.AssetOptions{Handler: a.windowHandler(func() *application.App { return wapp })},
 		OnShutdown:  func() { stopBackups(); a.backups.quit(); attachopen.Clear(a.openDir) },
 		Services:    services(a.remind, dataDir),
