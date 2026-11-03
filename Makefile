@@ -64,8 +64,10 @@ win: ui
 # Explorer's icon for that exe. The picture is internal/desktop/appicon.png
 # (also embedded for the window). frontend/public/icon.svg is the drawing;
 # build/AppIcon.icns is the Mac app icon. Change those together, then run this.
+# winres/winres.json names the icon #3: the window loads that id.
+# The PNG's corners stay transparent; a white square shows up on the desktop otherwise.
 win-icon:
-	go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64,arm64 --manifest none --icon internal/desktop/appicon.png --out rsrc
+	go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64,arm64 --out rsrc
 
 app: bin
 	rm -rf "$(APP)"
