@@ -12,6 +12,8 @@ failure. Windows only.
 """
 import os, socket, subprocess, sys, tempfile, time, urllib.request
 
+# the app logs in Chinese; the Windows console's code page can't print it
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 binary = sys.argv[1]
 data = tempfile.mkdtemp(prefix="health-trail-app-smoke-")
 with socket.socket() as s:
