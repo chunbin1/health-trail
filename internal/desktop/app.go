@@ -442,6 +442,7 @@ func RunServe(dataDir, port string, lanFlag bool) {
 }
 
 func RunApp(dataDir, port string) {
+	registerProtocol()
 	a := newApp(dataDir, port)
 	defer a.st.Close()
 	// The window works without the socket (it talks to the handler in
@@ -518,11 +519,16 @@ func RunApp(dataDir, port string) {
 	win.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) { a.updates.windowOpened() })
 	go a.updates.loop(ctx)
 	wapp.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		// opened at login: reminders and backups run, the window waits for a click
-		if launchedAtLogin() {
+		// opened at login: reminders and backups run, the window waits for a click.
+		// a healthtrail:// link still opens the window on that record.
+		link := linkIn(os.Args)
+		if launchedAtLogin() && link == "" {
 			setInDock(false)
 		} else {
 			a.shell.show()
+			if link != "" {
+				a.openLink(win, link)
+			}
 		}
 		a.shell.refresh()
 	})

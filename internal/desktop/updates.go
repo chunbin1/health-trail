@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -170,6 +171,9 @@ func (u *updates) installer() *update.Installer {
 // ("" when it can): what the settings page shows instead of the button.
 func (u *updates) whyNot() string {
 	if u.app == "" {
+		if runtime.GOOS == "windows" {
+			return u.settings.msg("只有安装好的健康足迹能自己更新", "Only an installed Health Trail can update itself")
+		}
 		return u.settings.msg("只有 Mac 上的健康足迹 App 能自己更新", "Only the Health Trail Mac app can update itself")
 	}
 	u.checked.Do(func() { _, u.checkErr = u.installer().Check() })
@@ -177,8 +181,14 @@ func (u *updates) whyNot() string {
 	case err == nil:
 		return ""
 	case errors.Is(err, update.ErrUnsigned):
+		if runtime.GOOS == "windows" {
+			return u.settings.msg("这一份没有签名，不能自动更新；请到发布页面下载安装", "This copy isn't signed and can't update itself; download it from the release page")
+		}
 		return u.settings.msg("这一份是自己构建的，不能自动更新；要换成正式版，请下载 dmg 安装", "This copy was built locally and can't update itself; download the dmg to switch to the released app")
 	default:
+		if runtime.GOOS == "windows" {
+			return u.settings.msg("没能替换健康足迹所在的文件夹，请到发布页面下载安装", "Couldn't replace Health Trail in its folder; download it from the release page")
+		}
 		return u.settings.msg("请先把健康足迹拖进「应用程序」文件夹再更新，或者下载 dmg 手动安装", "Move Health Trail into the Applications folder first, or download the dmg and install it by hand")
 	}
 }
@@ -194,7 +204,8 @@ func (u *updates) install() error {
 		u.mu.Unlock()
 		return errors.New(u.settings.msg("现在没有可以安装的新版本", "There's no update to install right now"))
 	}
-	u.state.Phase, u.state.Error, u.state.Failed, u.state.Done, u.state.Total = "backup", "", "", 0, r.ZipSize
+	_, zipSize, _ := r.Payload()
+	u.state.Phase, u.state.Error, u.state.Failed, u.state.Done, u.state.Total = "backup", "", "", 0, zipSize
 	u.mu.Unlock()
 	go u.run(r)
 	return nil
@@ -217,12 +228,20 @@ func (u *updates) run(r *update.Release) {
 	u.setPhase("download")
 	stage, err := u.installer().Install(context.Background(), r)
 	if err != nil {
-		msg := u.settings.msg("下载没有完成，请稍后再试；也可以下载 dmg 手动安装", "The download didn't finish; try again later, or download the dmg and install it by hand")
+		msg := u.settings.msg("下载没有完成，请稍后再试；也可以到发布页面手动安装", "The download didn't finish; try again later, or install it by hand from the release page")
 		switch {
 		case errors.Is(err, update.ErrBadDownload):
-			msg = u.settings.msg("下载的文件没有通过签名和公证检查，没有安装。请到发布页面下载 dmg", "The download didn't pass the signature and notarization checks, so it wasn't installed. Get the dmg from the release page")
+			if runtime.GOOS == "windows" {
+				msg = u.settings.msg("下载的文件没有通过签名检查，没有安装。请到发布页面下载", "The download didn't pass the signature check, so it wasn't installed. Get it from the release page")
+			} else {
+				msg = u.settings.msg("下载的文件没有通过签名和公证检查，没有安装。请到发布页面下载 dmg", "The download didn't pass the signature and notarization checks, so it wasn't installed. Get the dmg from the release page")
+			}
 		case errors.Is(err, update.ErrNotMovable):
-			msg = u.settings.msg("没能替换健康足迹所在的文件夹，请下载 dmg 手动安装", "Couldn't replace the app in its folder; download the dmg and install it by hand")
+			if runtime.GOOS == "windows" {
+				msg = u.settings.msg("没能替换健康足迹所在的文件夹，请到发布页面下载安装", "Couldn't replace Health Trail in its folder; download it from the release page")
+			} else {
+				msg = u.settings.msg("没能替换健康足迹所在的文件夹，请下载 dmg 手动安装", "Couldn't replace the app in its folder; download the dmg and install it by hand")
+			}
 		}
 		fail(msg, err)
 		return
@@ -250,7 +269,8 @@ func (u *updates) freshest(r *update.Release) *update.Release {
 	}
 	log.Printf("安装前又查到更新的版本：%s（原来找到的是 %s）", n.Version, r.Version)
 	u.mu.Lock()
-	u.state.Latest, u.state.Total = n, n.ZipSize
+	_, zipSize, _ := n.Payload()
+	u.state.Latest, u.state.Total = n, zipSize
 	u.mu.Unlock()
 	if u.changed != nil {
 		u.changed(u)
