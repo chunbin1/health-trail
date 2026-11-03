@@ -33,6 +33,8 @@ type shell struct {
 	newer    string
 	atLogin  *application.MenuItem
 	quitItem *application.MenuItem
+	tray     *application.SystemTray
+	built    string // the language and newer version the Windows tray menu was built with
 	// refresh rebuilds the menu; one at a time, as the start, a language
 	// switch and an update check can each ask for it at once
 	mu sync.Mutex
@@ -64,10 +66,22 @@ func newShell(wapp *application.App, win *application.WebviewWindow, lang func()
 		// Windows draws a tray icon as it is: the black menu-bar template
 		// would vanish on the dark taskbar, so it gets the colored app icon
 		tray.SetIcon(appIcon)
+		// a click opens the window, as Windows tray icons do; the menu is
+		// on the right button
+		tray.OnClick(s.show)
+		// whether it opens at login is read again each time the menu opens:
+		// it can be switched off in Windows Settings meanwhile
+		tray.OnRightClick(func() {
+			go func() {
+				s.refresh()
+				tray.OpenMenu()
+			}()
+		})
 	} else {
 		tray.SetTemplateIcon(trayIcon)
 	}
 	tray.SetMenu(s.menu)
+	s.tray = tray
 	s.refresh()
 	return s
 }
@@ -190,5 +204,16 @@ func (s *shell) refresh() {
 	s.atLogin.SetLabel(pick("开机自动启动", "Open at Login"))
 	s.atLogin.SetChecked(s.autostart())
 	s.quitItem.SetLabel(pick("退出健康足迹", "Quit Health Trail"))
-	s.menu.Update()
+	if runtime.GOOS != "windows" {
+		s.menu.Update()
+		return
+	}
+	// On Windows Update builds a menu of its own, not the one the tray
+	// shows, and leaves the items changing that one. The tray's menu takes
+	// labels and checks in place, but the newer version's item can only
+	// appear or go by building it again.
+	if built := s.lang() + "|" + s.newer; built != s.built {
+		s.built = built
+		s.tray.SetMenu(s.menu)
+	}
 }
