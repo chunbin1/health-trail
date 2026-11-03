@@ -74,6 +74,18 @@ for path, want in (("/", "text/html"), ("/icon.svg", "image/svg+xml")):
         fail(f"{path}: {status} {ctype!r}, want {want}")
     print(f"ok  {path} {ctype}")
 
+# the window: WebView2 sets up in the background, and quitting before it's
+# done ends with a fatal "operation aborted" (exit 1). Nothing outside shows
+# when it's done, so give it time and check it didn't fail.
+time.sleep(15)
+log.flush()
+with open(log_path, encoding="utf-8", errors="replace") as f:
+    if "WebView2 Error" in f.read():
+        fail("the window's WebView2 failed")
+if app.poll() is not None:
+    fail(f"the app exited with {app.returncode} after starting")
+print("ok  window")
+
 # a second launch on the same data hands over to the running one and exits
 second = subprocess.Popen(args)
 try:
