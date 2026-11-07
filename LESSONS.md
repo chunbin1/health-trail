@@ -143,6 +143,11 @@ WKWebView 只有在 App 实现了对应的 WKUIDelegate 方法时才会显示 JS
 - 证据：2026-10-25，用户说附件「点了打不开」「删除也删不掉」。删除附件、删除记录、恢复备份都靠 `confirm()`，在窗口里一直是直接取消；附件链接是 `target="_blank"`。查 Wails v3 beta.31 的 `webview_window_darwin.m`，确实没有 `runJavaScriptConfirmPanel` 和 `createWebViewWith`。
 - 出现：1
 
+### 47. 「窗口专用接口」的判定不能只认 `mac-window`，Windows 窗口也要走同一条路
+给 Mac 窗口做的「点附件走 `api.openAttachment`、由 Go 打开本机 App」只在 `mac-window` 类名下拦截，Windows 窗口（`win-window`）拦不到，退回 `target="_blank"`，点开的是原始地址 `http://wails.localhost/api/attachments/1` 而不是本机 App。判断「现在是在 App 窗口里」用 `mac-window` 或 `win-window`（收成一个 `inWindow()` 帮手），别只写 Mac 那一个；后端 `openWith`（`open_windows.go`）和 `/open` 路由早就写好了，缺的只是界面没接上——这类「后端有、前端没触发」的断点，grep 一遍谁在调这个接口，顺着每一种 shell（`shell=mac`/`shell=win`）走一遍。
+- 证据：2026-11-07，用户说「附件在 win 上打不开」，点附件跳到 `wails.localhost/api/attachments/1`。`openFile` 只认 `mac-window`，Windows 上直接 return；`open_windows.go` 的 `openWith` 和 `openAttachmentHandler` 从没被窗口调用过。
+- 出现：1
+
 ### 36. 把一件事挪到更早或更频繁的时机，先查那一刻还有谁在动同一个界面对象
 检查新版本原来在启动 20 秒后，改成「窗口一拿到焦点就查」，正好和启动时 `ApplicationStarted` 刷新菜单栏撞在同一秒：两个 goroutine 同时 `shell.refresh()`，菜单被重建时另一边还在给旧菜单项改字，App 崩溃。原来的 20 秒延迟碰巧把它们错开了。改触发时机时，把新时机前后会跑的回调（启动、切语言、切前台）列出来，看它们碰不碰同一个对象；原生菜单、窗口这类对象的更新要加锁，一次只让一个在改。在 shell 里起的测试窗口不一定能拿到焦点（系统不让后台启动的 App 抢前台），所以「切到前台」这类路径不能只靠起一次窗口看有没有崩，要么并发压测，要么请审阅复现。
 - 证据：2026-10-26，PR #10 的独立 AI 审阅用假的 GitHub 接口启动测试窗口，第一次就崩，崩溃栈里两个 goroutine 都在 `refresh()`；作者起的测试窗口那次也拿到了焦点，碰巧没崩。给 `shell` 加锁后审阅复测。

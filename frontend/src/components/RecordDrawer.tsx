@@ -1,6 +1,6 @@
 import { useRef, useState, type MouseEvent } from 'react'
 import { ArrowDown, ArrowUp, File, FileImage, FileText, Paperclip, Pencil, Pill, Plus, Trash2, Upload, X } from 'lucide-react'
-import { api, fmtDate, fmtNum, flagClass, labValue, metricValue, today, type Entity, type Field, type Rec } from '../api'
+import { api, fmtDate, fmtNum, flagClass, inWindow, labValue, metricValue, today, type Entity, type Field, type Rec } from '../api'
 import { noun, t, tx, type Key } from '../i18n'
 import { closeRecord, openRecord, recTitle, useApp, useLoad, useRefOptions } from '../state'
 import { Empty, IconButton, KindIcon, RangeBar } from '../ui'
@@ -59,13 +59,16 @@ export function RecordDrawer({ entityName, id }: { entityName: string; id: numbe
   }
 
   // the Mac window can't follow a link to a new window, so there the file
-  // opens in its Mac app; a browser or the phone follows the link
+  // opens in its Mac app; a browser or the phone follows the link. Windows
+  // opens the link as a raw page, so it too asks the app to open the file.
   async function openFile(ev: MouseEvent, aid: number) {
-    if (!document.documentElement.classList.contains('mac-window')) return
+    if (!inWindow()) return
     ev.preventDefault()
     try {
       const { revealed } = await api.openAttachment(aid)
-      if (revealed) toast(t('这种文件不能直接打开，已在访达中显示'))
+      if (revealed) toast(t(document.documentElement.classList.contains('win-window')
+        ? '这种文件不能直接打开，已在资源管理器中显示'
+        : '这种文件不能直接打开，已在访达中显示'))
     } catch (err: any) {
       tell(err.message)
     }

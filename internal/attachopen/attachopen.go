@@ -1,4 +1,4 @@
-// Package attachopen opens an attachment from the window in its Mac app.
+// Package attachopen opens an attachment from the window in its system app.
 package attachopen
 
 import (
@@ -72,8 +72,9 @@ func sweepOpened(base string, now time.Time) {
 
 // Open copies an attachment out under its own name (so the app
 // shows that name, and an edit there can't change the record's copy) into
-// a fresh folder under base, and opens it, or shows it in the Finder when
-// it isn't viewable. run runs `open` with the given arguments.
+// a fresh folder under base, and opens it, or shows it in a folder when
+// it isn't viewable. run runs the platform's opener with the given
+// arguments.
 func Open(st *store.Store, id int64, base string, run func(args ...string) error) (revealed bool, err error) {
 	a, err := st.Attachment(id)
 	if err != nil {
