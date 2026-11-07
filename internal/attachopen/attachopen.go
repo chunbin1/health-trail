@@ -12,13 +12,13 @@ import (
 	"github.com/lee/health-trail/internal/store"
 )
 
-// The window can't follow a link to an attachment: WKWebView opens a new
-// window only if the app makes one, and Wails doesn't, so the click does
-// nothing. The window asks for the file to be opened in its Mac app instead.
+// The window can't follow a link to an attachment: the webview can't open a
+// normal new tab, so the click does nothing. The window asks the app to open
+// the file in its system app instead.
 
 // viewable are the extensions handed to the default app. Anything else is
-// only shown in the Finder: `open` on a file without a known extension can
-// run it (a script opens in Terminal), and an attachment may be any file.
+// only shown in a folder: opening a file without a known extension can run
+// it (a script opens in a terminal), and an attachment may be any file.
 var viewable = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".heic": true, ".tif": true, ".tiff": true,
 	".pdf": true, ".txt": true,
