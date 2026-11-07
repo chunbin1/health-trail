@@ -145,6 +145,7 @@ svg.lucide { flex: none; }
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 14px; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
 .brand img { width: 28px; height: 28px; border-radius: 7px; }
+html.win-window .brand { display: none; }
 .side-search { position: relative; margin: 0 2px 14px; }
 .side-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-3); }
 .side-search input {

@@ -506,8 +506,9 @@ func RunApp(dataDir, port string) {
 			},
 		},
 	})
-	// shell=mac draws under a hidden title bar. Windows keeps a normal one.
-	page := "/"
+	// shell=mac draws under a hidden title bar. Windows keeps a normal one,
+	// which already shows the icon and name, so shell=win drops the page's.
+	page := "/?shell=win"
 	if runtime.GOOS == "darwin" {
 		page = "/?shell=mac"
 	}

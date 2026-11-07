@@ -9,13 +9,16 @@ import './styles.css'
 // In the Mac window (opened at /?shell=mac) the page draws under a hidden
 // title bar: the sidebar is translucent and is where the window is dragged.
 // Wails' runtime, which makes --wails-draggable work, is served only there.
-if (new URLSearchParams(location.search).get('shell') === 'mac') {
+const shell = new URLSearchParams(location.search).get('shell')
+if (shell === 'mac') {
   document.documentElement.classList.add('mac-window')
   const s = document.createElement('script')
   s.type = 'module'
   s.src = '/wails/runtime.js'
   document.head.appendChild(s)
 }
+// The Windows window keeps its title bar, which already names the app.
+if (shell === 'win') document.documentElement.classList.add('win-window')
 
 // The language is kept in the data folder's settings (so the window, the
 // browser and the phone agree) and in this browser, for when the server's
