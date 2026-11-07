@@ -373,6 +373,13 @@ const qs = (p: Record<string, string | number | boolean | undefined | null>) => 
   return s ? '?' + s : ''
 }
 
+// In the app's own window (Mac or Windows) a target="_blank" link can't open
+// a normal new tab, so the page asks the app to open files in the system's
+// app instead (LESSONS #27). main.tsx marks the window with one of these.
+export const inWindow = () =>
+  document.documentElement.classList.contains('mac-window') ||
+  document.documentElement.classList.contains('win-window')
+
 export const api = {
   schema: () => req<Schema>('GET', '/api/schema'),
   info: () => req<Info>('GET', '/api/info'),
@@ -433,7 +440,7 @@ export const api = {
     return api.uploadBase64(owner_type, owner_id, file.name || '附件', file.type, data)
   },
   removeAttachment: (id: number) => req<unknown>('DELETE', `/api/attachments/${id}`),
-  // the Mac window only: opens the file in its Mac app (or the Finder)
+  // the app's window only: opens the file in its system app (or shows it in the folder)
   openAttachment: (id: number) => req<{ revealed: boolean }>('POST', `/api/attachments/${id}/open`),
   assistant: () => req<AssistantConfig>('GET', '/api/assistant'),
   setAssistant: (body: { base_url?: string; api_key?: string; model?: string; clear_key?: boolean; auto_save?: boolean }) =>

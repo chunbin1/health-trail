@@ -1,6 +1,6 @@
 import { CircleCheck } from 'lucide-react'
 import { useState, type MouseEvent } from 'react'
-import { api, type AIProvider, type AssistantConfig } from '../api'
+import { api, inWindow, type AIProvider, type AssistantConfig } from '../api'
 import { isEN, t } from '../i18n'
 import { useApp } from '../state'
 import { AssistantLog } from './AssistantLog'
@@ -16,11 +16,11 @@ function startOn(cfg: AssistantConfig): string {
   return list.find((p) => hostOf(p.base_url) === hostOf(cfg.base_url))?.id ?? 'custom'
 }
 
-// A provider's page. In the Mac window a plain link opens nothing (LESSONS
+// A provider's page. In the app window a plain link opens nothing (LESSONS
 // #27), so the app opens it in the browser; elsewhere it's a new tab.
 function ProviderLink({ p, page, children }: { p: AIProvider; page: 'signup' | 'key'; children: string }) {
   function open(e: MouseEvent) {
-    if (!document.documentElement.classList.contains('mac-window')) return
+    if (!inWindow()) return
     e.preventDefault()
     api.openProviderPage(p.id, page).catch(() => {})
   }

@@ -1,4 +1,4 @@
-// Package attachopen opens an attachment from the window in its Mac app.
+// Package attachopen opens an attachment from the window in its system app.
 package attachopen
 
 import (
@@ -12,13 +12,13 @@ import (
 	"github.com/lee/health-trail/internal/store"
 )
 
-// The window can't follow a link to an attachment: WKWebView opens a new
-// window only if the app makes one, and Wails doesn't, so the click does
-// nothing. The window asks for the file to be opened in its Mac app instead.
+// The window can't follow a link to an attachment: the webview can't open a
+// normal new tab, so the click does nothing. The window asks the app to open
+// the file in its system app instead.
 
 // viewable are the extensions handed to the default app. Anything else is
-// only shown in the Finder: `open` on a file without a known extension can
-// run it (a script opens in Terminal), and an attachment may be any file.
+// only shown in a folder: opening a file without a known extension can run
+// it (a script opens in a terminal), and an attachment may be any file.
 var viewable = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".heic": true, ".tif": true, ".tiff": true,
 	".pdf": true, ".txt": true,
@@ -72,8 +72,9 @@ func sweepOpened(base string, now time.Time) {
 
 // Open copies an attachment out under its own name (so the app
 // shows that name, and an edit there can't change the record's copy) into
-// a fresh folder under base, and opens it, or shows it in the Finder when
-// it isn't viewable. run runs `open` with the given arguments.
+// a fresh folder under base, and opens it, or shows it in a folder when
+// it isn't viewable. run runs the platform's opener with the given
+// arguments.
 func Open(st *store.Store, id int64, base string, run func(args ...string) error) (revealed bool, err error) {
 	a, err := st.Attachment(id)
 	if err != nil {

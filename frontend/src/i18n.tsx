@@ -240,6 +240,7 @@ const EN = {
   '删除这个附件？': 'Delete this attachment?',
   '删除附件': 'Delete attachment',
   '这种文件不能直接打开，已在访达中显示': 'This kind of file can’t be opened here, so it’s shown in the Finder',
+  '这种文件不能直接打开，已在资源管理器中显示': 'This kind of file can’t be opened here, so it’s shown in File Explorer',
   '参考 {range}': 'Ref. {range}',
   '添加一项': 'Add a result',
   '附件': 'Attachments',
