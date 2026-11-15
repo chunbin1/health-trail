@@ -462,20 +462,12 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     }
   }
 
-  function picsBefore(msg: ChatMsg): Pic[] {
-    const i = messages.findIndex((m) => m.id === msg.id)
-    for (let j = i - 1; j >= 0; j--) {
-      if (messages[j].role === 'user') return (messages[j].images || []).filter((p) => p.data)
-    }
-    return []
-  }
-
   async function save(msg: ChatMsg, autoSave = false) {
     if (savingRef.current || savingId || msg.locked || savedAll(msg) || !msg.items?.length) return
     const pending = msg.items.map((it, i) => ({ it, i })).filter(({ it, i }) => !msg.saved?.[i] && !(autoSave && waitsForSave(it)))
     if (!pending.length) return
-    const prior = messages.slice(0, messages.findIndex((m) => m.id === msg.id)).reverse().find((m) => m.role === 'user')
-    if ((prior?.imageCount || prior?.images?.length) && !prior.images?.some((p) => p.data)) {
+    const pic = pictureSource(messages, msg.id)
+    if (pic.missing) {
       setErr(t('这张图片已经不在这次对话里，请重新发一次再保存。'))
       return
     }
@@ -501,7 +493,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
         if (wrote) changed()
         return
       }
-      const pics = picsBefore(msg)
+      const pics = pic.pics
       // pictures go with what was made from them, not onto a record that was changed
       const made = (res.saved || []).filter((s) => s.id && s.kind !== 'update')
       const reports = made.filter((s) => s.type === 'reports')
@@ -828,6 +820,30 @@ function wireOf(messages: ChatMsg[]): ChatMsgWire[] {
     imageCount: m.images?.length || m.imageCount || 0,
     items: m.items, unclear: m.unclear, reply: m.reply, steps: m.steps, usage: m.usage, saved: m.saved, locked: m.locked,
   }))
+}
+
+// pictureSource is the photo that should hang on records saved from msg.
+// The message being answered may have no photo of its own: an earlier one
+// is still waiting when every reply since it only changed a record already
+// on file. A reply that already saved something new used that photo.
+function pictureSource(messages: ChatMsg[], msgId: string): { pics: Pic[]; missing: boolean } {
+  const i = messages.findIndex((m) => m.id === msgId)
+  for (let j = i - 1; j >= 0; j--) {
+    const m = messages[j]
+    if (m.role === 'assistant') {
+      if (tookPictures(m)) return { pics: [], missing: false }
+      continue
+    }
+    const pics = (m.images || []).filter((p) => p.data)
+    if (pics.length) return { pics, missing: false }
+    if ((m.imageCount || 0) > 0 || (m.images && m.images.length > 0)) return { pics: [], missing: true }
+  }
+  return { pics: [], missing: false }
+}
+
+function tookPictures(m: ChatMsg): boolean {
+  if (!m.saved || !m.items) return false
+  return m.items.some((it, n) => !!m.saved![n] && it.kind !== 'update')
 }
 
 // A health issue (often the assistant's own diagnosis), a medicine and a

@@ -29,6 +29,20 @@ func claimsDone(reply string) bool {
 const claimNudge = "（App 检查）你的回复说已经做好了，但这次没有调用 add_record、add_lab_report、checkin 或 update_record，什么都没有整理成卡片，也没有保存。" +
 	"用户要记录或修改的，现在调用对应的工具整理成卡片，再写一两句回复；缺必要的信息（比如预约的具体时刻）就问用户，不要说已经做了。"
 
+// promisesMore is a reply that still says it will record or change something
+// else in this turn. "然后，我会记录这份化验报告" counts; "我来帮你记录今天的
+// 打卡" does not, that sentence is about the tool it just called. "不再记录"
+// is about not writing again.
+var moreRe = regexp.MustCompile(`(然后|接着|接下来|随后)[^。\n]{0,20}(记录|整理|添加|新建|修改|更新|记下|录入|写成)`)
+
+var moreEnRe = regexp.MustCompile(`(?i)\bthen I(?:'ll| will)\b[^.]{0,40}\b(?:record|log|add|create|update|save)\b`)
+
+func promisesMore(reply string) bool {
+	return moreRe.MatchString(reply) || moreEnRe.MatchString(reply)
+}
+
+const moreNudge = "（App 检查）你的回复还说要继续记录或修改，但这一轮没有对应的工具调用。还没做成卡片的，现在调用工具；上面已经整理成卡片的不要再调用。都做完了就只回复一两句，不要再说接下来会记录。"
+
 const claimNote = "\n\n（这次回复没有整理出卡片，什么都没有保存。）"
 const claimNoteEn = "\n\n(This reply made no cards; nothing was saved.)"
 
