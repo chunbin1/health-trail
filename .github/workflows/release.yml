@@ -1,9 +1,8 @@
 name: Release
 
-# A tag like v1.0.0: first, the tagged commit came into main through a PR
-# whose AI review says 可以合 (a test tag like v1.0.0-test.1 may instead be the
-# latest commit of an open PR, reviewed the same way); then the same checks as
-# CI, then a Developer ID signed, notarized universal dmg published as a GitHub
+# A tag like v1.0.0 must point at a commit already on main. A test tag like
+# v1.0.0-test.1 may point elsewhere. Then the same checks as CI, then a
+# Developer ID signed, notarized universal dmg published as a GitHub
 # Release, with the zip of the app that the app's own update downloads
 # (HealthTrail-<version>.zip). The same release also gets the Windows zip,
 # HealthTrail-<version>-windows.zip (health-trail.exe without a certificate,
@@ -26,31 +25,25 @@ permissions:
   contents: write # create the release
 
 jobs:
-  ai-review:
-    name: AI 审阅
+  on-main:
+    name: 在 main 上
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # to tell whether the tag is on main
-      - name: The tagged commit was reviewed and said 可以合
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: A release tag points at main
         run: |
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
-            python3 -I scripts/ai_review_gate.py prerelease "$GITHUB_SHA"
-          else
-            git merge-base --is-ancestor "$GITHUB_SHA" origin/main ||
-              { echo "没通过：$GITHUB_REF_NAME 指向的提交不在 main 上，不能发布。"; exit 1; }
-            python3 -I scripts/ai_review_gate.py commit "$GITHUB_SHA"
+            echo "测试标签，不要求已经在 main 上"
+            exit 0
           fi
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main ||
+            { echo "没通过：$GITHUB_REF_NAME 指向的提交不在 main 上，不能发布。"; exit 1; }
 
   windows:
-    needs: ai-review
+    needs: on-main
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -68,7 +61,7 @@ jobs:
             dist/HealthTrail-*-windows.zip.sig
 
   macos:
-    needs: ai-review
+    needs: on-main
     runs-on: macos-15
     timeout-minutes: 45
     steps:

@@ -2,12 +2,22 @@
 
 健康足迹不上 Mac App Store，发的是 Developer ID 签名、苹果公证过的 dmg。别人下载后双击就能打开，不会弹「无法验证开发者」。同一个 Release 上还有一个 `HealthTrail-<版本>-windows.zip`，里面是 `health-trail.exe`（没有代码签名证书）和 `version.txt`，解压后直接运行；旁边的 `.sig` 是这个 zip 的签名，Windows 版的 App 内更新靠它（见下面「Windows 的更新签名」）。
 
+## 发布由人看过
+
+打正式标签前，人看过 `main` 上这一版要发的改动。发布不再查 AI 审阅，也不等「可以合」那条评审。标签指向的提交必须已经在 `main` 上（带连字符的测试标签除外，如 `v1.3.0-test.1`）。PR 上的「AI 审阅」检查还在，红了也不挡合并、不挡发布。流程图里发布那一步见 [docs/ai-review-flow.md](docs/ai-review-flow.md)。
+
+以前的 AI 审阅门禁仍可在本机对某个 PR 跑，只是发布不用它：
+
+```bash
+python3 -I scripts/ai_review_gate.py pr 8
+```
+
 ## 先过 AI 审阅
 
-每个改动都走 PR，PR 最新的提交要有一条 AI 审阅说「可以合」，才能合并、发布。流程图见 [docs/ai-review-flow.md](docs/ai-review-flow.md)。两道检查：
+AI 审阅不再是合并或发布的条件。下面是门禁还在时怎么读一条评审。流程图见 [docs/ai-review-flow.md](docs/ai-review-flow.md)。PR 上仍有一道检查：
 
 - PR 上的「AI 审阅」检查（`.github/workflows/ai-review.yml`）：没审、结论不是「可以合」、或者审完又推了提交，都是红的。新的审阅一发出去就会重跑。GitHub 把「开 PR / 推提交」触发的和「发审阅」触发的列成两条检查（后面分别标着 pull_request、pull_request_review），发审阅那次会顺手重跑前一条，两条结果一致；审阅通过后还剩一条红的，就是重跑没成功，看 pull_request_review 那次的日志。
-- 打标签发布时（`release.yml` 的第一步）：标签指向的提交必须在 main 上、是从 PR 合并进来的，而且那个 PR 最后一个提交审阅通过，否则不打包、不发布。测试标签（带连字符，如 `v1.3.0-test.1`）也可以打在还没合并的 PR 的最新提交上，同样要审阅通过。
+- 打标签发布时（`release.yml` 的第一步）：正式标签指向的提交必须在 main 上，否则不打包、不发布。不再查 AI 审阅。带连字符的测试标签（如 `v1.3.0-test.1`）可以不在 main 上。
 
 两处用的是同一个脚本，本机也能跑：
 
@@ -40,7 +50,7 @@ python3 -I scripts/ai_review_gate.py pr 8
 
 **改门禁本身的 PR**：PR 上的检查用的是 main 上的脚本，PR 改脚本骗不过它；但 `.github/workflows/` 里的文件 GitHub 会用 PR 自己的那份。所以凡是改了 `.github/workflows/` 或 `scripts/ai_review_gate.py` 的 PR，审阅时要单独核对这部分，在审阅里写明看过。
 
-**让合并按钮也等审阅**：只有在仓库的分支保护里把「AI 审阅」设成合并前必须通过，GitHub 才会挡住合并（PR 改不了这个设置）。没开的话，发布那一步照样会拦下没审过的代码，只是合并本身不拦。
+**让合并按钮也等审阅**：只有在仓库的分支保护里把「AI 审阅」设成合并前必须通过，GitHub 才会挡住合并（PR 改不了这个设置）。现在没开，发布也不再查这条审阅。
 
 ## 平时：打个带说明的标签就行
 
@@ -62,7 +72,7 @@ git push origin v1.0.1
 
 一定要用 `-a`（带说明的标签）：不带说明的话，Release 页面上只会显示最后一次提交的提交说明。也可以直接跟 Claude 说「发个 1.0.1」，它会先写好说明给你确认，再打标签。
 
-GitHub Actions（`.github/workflows/release.yml`）先查 AI 审阅，然后 Mac 和 Windows 同时打包：Mac 跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，再跑一遍 MCP 端到端测试；Windows 跑测试、编 exe、跑 MCP 端到端测试，打 zip 并用 `UPDATE_SIGNING_KEY` 签名（Windows 这几步写在 `.github/actions/windows`，CI 也用它）。最后建一个 GitHub Release 把 dmg、Mac 的 zip、Windows 的 zip 和签名都挂上去。Windows 那边失败的话，这一版只发 Mac 的，Actions 页面上会有一条警告。版本号直接取标签：`v1.0.0` → `1.0.0`。这些 Release 上的文件不会过期；每次推送时 CI 里的 dmg 和 exe 才只留 7 天。
+GitHub Actions（`.github/workflows/release.yml`）先确认正式标签指向的提交在 `main` 上，然后 Mac 和 Windows 同时打包：Mac 跑测试，打一个同时支持 Apple 芯片和 Intel 的 dmg，签名、交给苹果公证，再跑一遍 MCP 端到端测试；Windows 跑测试、编 exe、跑 MCP 端到端测试，打 zip 并用 `UPDATE_SIGNING_KEY` 签名（Windows 这几步写在 `.github/actions/windows`，CI 也用它）。最后建一个 GitHub Release 把 dmg、Mac 的 zip、Windows 的 zip 和签名都挂上去。Windows 那边失败的话，这一版只发 Mac 的，Actions 页面上会有一条警告。版本号直接取标签：`v1.0.0` → `1.0.0`。这些 Release 上的文件不会过期；每次推送时 CI 里的 dmg 和 exe 才只留 7 天。
 
 ## App 里的自动更新
 
