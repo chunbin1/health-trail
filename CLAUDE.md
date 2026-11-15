@@ -40,7 +40,7 @@ internal/msg/            给人看的报错中英两套：msg.New / msg.Errorf�
 frontend/                React + TS + Vite；embed.go 把构建结果（dist）嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
 scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_review_gate.py（AI 审阅门禁，见 RELEASING.md）、winupdate（打 Windows 更新包并签名）
-.github/workflows/       ci.yml（每次推送）、ai-review.yml（PR 的 AI 审阅检查）、release.yml（打标签发布，先查 AI 审阅）
+.github/workflows/       ci.yml（每次推送）、ai-review.yml（PR 的 AI 审阅检查，不挡合并和发布）、release.yml（打标签发布；正式标签要在 main 上，不再查 AI 审阅）
 ```
 
 **schema.go 是唯一的数据来源**：数据表（自动迁移、只增不删）、API 接受的字段、MCP 工具说明里的字段列表、前端表单，全部从它生成。加一个字段只需改 schema.go（再在 schema_en.go 里补英文，`TestEnglishCoversSchema` 会提醒），其他地方会自动跟上；需要特殊展示的地方再改前端。
@@ -76,5 +76,5 @@ make win-icon    # 换了 appicon.png 之后重做 rsrc_windows_*.syso
 - **手动试用一律用统一的测试数据** `~/Library/Application Support/HealthTrail-Test`（Makefile 的 `TEST_DATA`）：里面是编出来的记录、AI助手的接口配置和对话，重启不丢，`make dev`、`make test-window` 和各个会话共用。不要每次另建临时目录、重新造数据；需要空目录或特殊数据的才另建（Go 测试用 `t.TempDir()`）。给用户试的测试窗口也用它，并告诉用户这是测试数据。同一时间只开一个用它的进程（`make dev` 和 `make test-window` 不要同时开，两边写同一个数据库会互相踩）。目录里有 AI助手的接口配置和密钥：不要拷进对外的备份、截图或提交。
 - 改了界面：`./health-trail serve -data "$HOME/Library/Application Support/HealthTrail-Test" -port 8731`，在浏览器里检查桌面宽度和 375px 手机宽度（不能横向溢出）。先确认数据加载完再判断（LESSONS #4），重新构建后强制刷新（LESSONS #5）。弹窗、抽屉、日期选择器都有动画：测量位置或截图前先 `document.getAnimations().forEach(a => a.finish())` 并稍等一下；截图里「没有出现」时，先用 `getBoundingClientRect` 和再截一张确认，再判断是 bug。需要容器宽度才能绘制的组件用 `useLayoutEffect` 在第一次绘制前量好。
 - 改了桌面窗口：`make test-window`（测试数据、端口 8732）启动测试窗口，先确认进程还在运行再截屏（LESSONS #10）。要测日历、提醒事项这类系统权限，改用 `open -n 健康足迹.app --stderr <日志> --args -data <测试数据目录> -port 8734`（LESSONS #25）。不在默认数据目录的测试窗口不发系统通知（会清掉真实 App 排好的提醒），日历和提醒事项写进「健康足迹（测试）」。
-- **PR 要过 AI 审阅才能合并、发布**：审阅由另一个模型照着 [docs/ai-reviewer.md](docs/ai-reviewer.md) 写，编码助手不要自己审，也不要开会话或子代理去跑 `/code-review`、发评审。编码助手只管推 PR，审阅出来后修里面提的问题，验证完再推；推了新提交要等对新提交的审阅。不要在 AI 审阅检查没通过时合并或打标签（`release.yml` 也会拦下）。
+- **发布由人看过再打标签**：正式版的标签必须指向已经在 `main` 上的提交。AI 审阅不再挡住合并和发布；PR 上的「AI 审阅」检查还在，红了也可以合、可以发。编码助手不要自己跑 `/code-review` 或发评审冒充那条检查。有人审了并指出问题，修完再推。
 - **永远不要用默认数据目录做测试**，那里是用户真实的健康数据：`~/Library/Application Support/HealthVault`。`make dev-real` 读写的就是这个目录，只给用户自己用，编码助手不要运行它；要测 `dev.sh --real` 这条路径，就把 `HEALTH_TRAIL_DATA` 设成临时目录。
