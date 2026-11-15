@@ -36,7 +36,7 @@ function ProviderLink({ p, page, children }: { p: AIProvider; page: 'signup' | '
 // three. An empty key keeps the one already saved; the key itself is never
 // sent back to the page. Saving checks the connection with one short
 // message, and onSaved's ok says whether it went through.
-export function AssistantSetup({ cfg, onSaved }: { cfg: AssistantConfig; onSaved: (c: AssistantConfig, ok: boolean) => void }) {
+export function AssistantSetup({ cfg, onSaved, onCancel }: { cfg: AssistantConfig; onSaved: (c: AssistantConfig, ok: boolean) => void; onCancel?: () => void }) {
   const { toast } = useApp()
   const providers = cfg.providers || []
   const [pick, setPick] = useState(() => startOn(cfg))
@@ -222,6 +222,9 @@ export function AssistantSetup({ cfg, onSaved }: { cfg: AssistantConfig; onSaved
         )}
         {saved.has_key && (
           <button type="button" className="btn sm" disabled={!!busy} onClick={() => save(true)}>{t('忘掉密钥')}</button>
+        )}
+        {onCancel && (
+          <button type="button" className="btn sm" disabled={!!busy} onClick={onCancel}>{t('取消')}</button>
         )}
         <button type="button" className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setShowLog(true)}>{t('查看日志')}</button>
       </div>

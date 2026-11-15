@@ -46,9 +46,9 @@ var Providers = []Provider{
 		BaseURL: "https://open.bigmodel.cn/api/paas/v4",
 		// docs.bigmodel.cn/cn/guide/start/pricing, 2026-10-30
 		Models: []ModelOption{
+			{"glm-5.3-flash", "很便宜，新一代；每次先思考，回得慢一些", "Very cheap, newer; thinks first, so replies are slower"},
 			{"glm-4.6v-flash", "免费；用的人多时可能要过一会儿再试", "Free; when it's busy you may have to try again later"},
 			{"glm-4.6v", "很便宜，免费版的正式版", "Very cheap; the full version of the free one"},
-			{"glm-5.3-flash", "很便宜，新一代；每次先思考，回得慢一些", "Very cheap, newer; thinks first, so replies are slower"},
 			{"glm-5v-turbo", "较贵", "Pricier"},
 		},
 		KeyPage: "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
