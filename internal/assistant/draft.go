@@ -36,8 +36,8 @@ type Item struct {
 	Results        []LabResult    `json:"results,omitempty"`
 	Summary        string         `json:"summary,omitempty"`
 	// Unit is the habit's unit, shown on a check-in card ("60 分钟")
-	Unit string `json:"unit,omitempty"`
-	Problem        string         `json:"problem,omitempty"`
+	Unit    string `json:"unit,omitempty"`
+	Problem string `json:"problem,omitempty"`
 	// kind "update" changes record ID of Type: Fields are the new values,
 	// Before what they were when the card was made
 	ID     int64          `json:"id,omitempty"`
@@ -99,7 +99,9 @@ const maxRounds = 8
 
 // Propose answers the latest turn. The model reads the archive with the MCP
 // tools as many rounds as it needs; what it would write comes back as Items.
-// onStep, if set, hears each tool call as it happens.
+// onStep, if set, hears each tool call as it happens. The round loop, from a
+// picture and a question through to the saved card, is drawn in
+// docs/assistant-flow.md.
 func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now time.Time, onStep func(Step)) (Draft, error) {
 	turns, err := cleanTurns(turns)
 	if err != nil {
@@ -133,6 +135,8 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	unresolved := map[string]bool{}
 	// whether the model was asked to check in on a habit it just added
 	askedCheckin := false
+	// whether it was told it still promised another write after some cards
+	askedMore := false
 	stopped := ""
 	for round := 0; ; round++ {
 		last := round == maxRounds-1
@@ -239,7 +243,17 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		// check-in; the model gets one more round to make it.
 		waitCheckin := !askedCheckin && w.habitWithoutCheckin()
 		askedCheckin = askedCheckin || waitCheckin
-		if onlyCards && !failedAny && len(unresolved) == 0 && !waitCheckin && (!read || strings.TrimSpace(m.Content) != "") {
+		// "然后我会记录化验报告" next to a single update_record: the text
+		// still promises a write this round did not call. One more round,
+		// then stop, or a model that keeps announcing the next step would
+		// run out the rounds.
+		waitMore := !askedMore && !waitCheckin && promisesMore(m.Content)
+		askedMore = askedMore || waitMore
+		if waitMore {
+			x.note("回复还说要继续记录或修改：再给一轮")
+			msgs = append(msgs, map[string]any{"role": "user", "content": moreNudge})
+		}
+		if onlyCards && !failedAny && len(unresolved) == 0 && !waitCheckin && !waitMore && (!read || strings.TrimSpace(m.Content) != "") {
 			d.Reply = strings.TrimSpace(m.Content)
 			break
 		}

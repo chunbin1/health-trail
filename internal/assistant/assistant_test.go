@@ -298,6 +298,75 @@ func TestClaimWithoutCardIsSentBack(t *testing.T) {
 	}
 }
 
+func TestPromisesMore(t *testing.T) {
+	for s, want := range map[string]bool{
+		"首先，我会修改预约状态为已完成。\n\n然后，我会记录您提供的这份化验报告。": true,
+		"我需要先创建一个自定义指标来记录喝水量，然后再记录今天的数据。":        true,
+		"接着我会新建一条就诊。":                      true,
+		"Then I'll record the lab report.": true,
+		"记下了今天早上的头痛。":                      false,
+		"整理好了，保存后生效。":                      false,
+		"我来帮你记录今天的打卡。":                     false,
+		"我来帮您修改首次复查的预约时间。":                 false,
+		"这条不用再记录。":                         false,
+		"如果还有其他检查结果，请提供给我继续记录。":            false,
+		"I've saved the appointment.":      false,
+	} {
+		if got := promisesMore(s); got != want {
+			t.Errorf("%q: %v", s, got)
+		}
+	}
+}
+
+// What the log showed: the model updates the appointment and says it will
+// still record the lab report. That promise gets one more round, not a stop.
+func TestPromisedWriteGetsAnotherRound(t *testing.T) {
+	st := openStore(t)
+	appt, err := st.Create("appointments", store.Record{"title": "复查", "scheduled_at": "2026-11-14 14:30", "status": "待去"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := jsonNum(idOf(appt))
+	upd := `{"type":"appointments","id":` + id + `,"fields":{"status":"已完成"}}`
+	lab := `{"report":{"report_date":"2026-11-14","title":"常规+CRP","report_type":"化验"},"results":[{"item_name":"白细胞","value":"8.74","unit":"10^9/L","ref_range":"3.5-9.5"}]}`
+	said := "首先，我会修改预约状态为已完成。\n\n然后，我会记录您提供的这份化验报告。"
+
+	f := &fakeModel{t: t, replies: []string{
+		callsSaying(said, "update_record", upd),
+		callsSaying("整理好了，保存后生效。", "add_lab_report", lab),
+	}}
+	d, err := Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "这个复查已经去了"}}, day, nil)
+	if err != nil || len(f.bodies) != 2 || len(d.Items) != 2 || d.Items[0].Kind != "update" || d.Items[1].Kind != "lab_report" {
+		t.Fatalf("requests %d err %v items %+v", len(f.bodies), err, d.Items)
+	}
+	if !strings.Contains(f.bodies[1], "还说要继续记录或修改") {
+		t.Fatal("second request does not say why")
+	}
+
+	// says it again on the extra round: stop, keep the cards already made
+	f = &fakeModel{t: t, replies: []string{
+		callsSaying(said, "update_record", upd),
+		callsSaying("然后，我会再记录一份就诊。", "add_lab_report", lab),
+		answer("不该有第三次"),
+	}}
+	d, err = Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "这个复查已经去了"}}, day, nil)
+	if err != nil || len(f.bodies) != 2 || len(d.Items) != 2 {
+		t.Fatalf("requests %d err %v items %+v", len(f.bodies), err, d.Items)
+	}
+
+	// claimed it was saved, then only updated: the claim nudge and the
+	// leftover promise are two different rounds
+	f = &fakeModel{t: t, replies: []string{
+		answer("报告已经保存了。"),
+		callsSaying(said, "update_record", upd),
+		callsSaying("整理好了，保存后生效。", "add_lab_report", lab),
+	}}
+	d, err = Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "这个复查已经去了"}}, day, nil)
+	if err != nil || len(f.bodies) != 3 || len(d.Items) != 2 || d.Items[1].Kind != "lab_report" {
+		t.Fatalf("requests %d err %v items %+v", len(f.bodies), err, d.Items)
+	}
+}
+
 func TestClaimsDone(t *testing.T) {
 	for s, want := range map[string]bool{
 		"这个预约已经创建好了":                            true,
