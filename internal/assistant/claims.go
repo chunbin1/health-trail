@@ -5,32 +5,24 @@ import (
 	"strings"
 )
 
-// Some models say they have booked or saved something without calling a
-// tool, whatever the prompt says. A reply like that with no card is sent back
-// once; if it still has no card, the reply says that nothing was saved.
+// A model can say it changed the archive without calling a tool, and the
+// wording is never a closed list. The check is structural: a reply that
+// called nothing did not change anything. It is sent back once, unless it
+// is asking the user something. If it still makes no card, the reply says
+// the archive was not changed.
 
-// "已为您安排" is a claim; "我来帮您预约" is not.
-var doneRe = regexp.MustCompile(`已经?(为您|帮您|给您|帮你|为你|给你)?(创建|安排|预约|设置|设定|保存|记下|记录|添加|修改|更新|改成|改为)|(创建|安排|预约|设置|设|保存|记|添加|修改|改|建)好了`)
+const claimNudge = "（App 检查）这一轮没有调用任何工具，所以没有卡片，档案也不会改。" +
+	"用户要记录、修改、归档或打卡的，现在调用 add_record、update_record、add_lab_report 或 checkin，并在同一条消息里写给用户的那一两句。" +
+	"只是在回答、解释或向用户追问的，把刚才的回复再写一遍，不要说已经改过档案。"
 
-// the same in English, for a model that answers in English
-var doneEnRe = regexp.MustCompile(`(?i)\b(i've|i have|has been|have been|is now|are now|already|successfully)\s+(been\s+)?(booked|scheduled|saved|created|added|set up|set|recorded|logged|updated|changed)\b|\ball set\b`)
+const claimNote = "\n\n（这轮没有修改档案。）"
+const claimNoteEn = "\n\n(This reply didn't change your records.)"
 
-// claimsDone tells whether a reply says something was already done. "已经
-// 记录过" is about an earlier reply, not this one.
-func claimsDone(reply string) bool {
-	for _, loc := range doneRe.FindAllStringIndex(reply, -1) {
-		if !strings.HasPrefix(reply[loc[1]:], "过") {
-			return true
-		}
-	}
-	return doneEnRe.MatchString(reply)
+// asks reports a reply that is waiting on the user, so it is not sent back.
+func asks(reply string) bool {
+	s := strings.TrimSpace(reply)
+	return strings.HasSuffix(s, "？") || strings.HasSuffix(s, "?") || strings.HasSuffix(s, "吗")
 }
-
-const claimNudge = "（App 检查）你的回复说已经做好了，但这次没有调用 add_record、add_lab_report、checkin 或 update_record，什么都没有整理成卡片，也没有保存。" +
-	"用户要记录或修改的，现在调用对应的工具整理成卡片，再写一两句回复；缺必要的信息（比如预约的具体时刻）就问用户，不要说已经做了。"
-
-const claimNote = "\n\n（这次回复没有整理出卡片，什么都没有保存。）"
-const claimNoteEn = "\n\n(This reply made no cards; nothing was saved.)"
 
 var (
 	boldRe    = regexp.MustCompile(`\*\*|__`)
