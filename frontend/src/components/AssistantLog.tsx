@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, ScrollText } from 'lucide-react'
 import { api, type AssistantLogEntry } from '../api'
 import { t } from '../i18n'
 import { useLoad } from '../state'
+import { ask, tell } from './Dialog'
 import { Modal } from './Modal'
 
 // The assistant's log: each reply as it went, newest first. Read from
@@ -11,9 +12,36 @@ import { Modal } from './Modal'
 export function AssistantLog({ onClose }: { onClose: () => void }) {
   const { data, error, loading, reload } = useLoad(() => api.assistantLog(), [])
   const [onlyFailed, setOnlyFailed] = useState(false)
+  const [busy, setBusy] = useState(false)
   // the newest reply starts open; the rest are opened by hand
   const [open, setOpen] = useState<Record<number, boolean>>({ 0: true })
   const entries = (data?.entries || []).map((e, i) => ({ e, i })).filter(({ e }) => !onlyFailed || e.failed)
+  const hasAny = !!data && (data.entries.length > 0 || (data.raw_size || 0) > 0)
+
+  async function toggleRaw(on: boolean) {
+    setBusy(true)
+    try {
+      await api.setAssistant({ raw_log: on })
+      reload()
+    } catch (err: any) {
+      tell(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function clearAll() {
+    if (!(await ask(t('清空所有 AI助手日志（含 assistant.log 和 assistant-raw.log）？'), { ok: t('清空'), danger: true }))) return
+    setBusy(true)
+    try {
+      await api.clearAssistantLog()
+      reload()
+    } catch (err: any) {
+      tell(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <Modal title={t('AI助手日志')} icon={<ScrollText size={20} />} onClose={onClose} wide>
@@ -22,6 +50,10 @@ export function AssistantLog({ onClose }: { onClose: () => void }) {
           {t('每次回答的经过：问了什么、调用了哪些工具、哪里出错。最近的在最前面。日志只存在这台电脑的数据目录里（assistant.log），不含密钥。')}
           {data?.cut && ' ' + t('日志比较长，这里只显示最后一部分。')}
         </p>
+        <label className="row small muted" style={{ marginBottom: 12, cursor: 'pointer' }}>
+          <input type="checkbox" checked={!!data?.raw_log} disabled={busy || loading} onChange={(ev) => toggleRaw(ev.target.checked)} />
+          <span>{t('同时记录完整原始日志（assistant-raw.log，含健康档案上下文与对话原文，仅留在本机）')}</span>
+        </label>
         <div className="pills" style={{ marginBottom: 12 }}>
           <button type="button" className={'pill' + (!onlyFailed ? ' on' : '')} onClick={() => setOnlyFailed(false)}>{t('全部')}</button>
           <button type="button" className={'pill' + (onlyFailed ? ' on' : '')} onClick={() => setOnlyFailed(true)}>{t('只看出错的')}</button>
@@ -41,7 +73,10 @@ export function AssistantLog({ onClose }: { onClose: () => void }) {
         <span className="small muted" style={{ marginRight: 'auto' }}>
           {data ? t('共 {n} 次回答', { n: data.entries.length }) : ''}
         </span>
-        <button type="button" className="btn sm" disabled={loading} onClick={reload}>{loading ? t('正在读取…') : t('刷新')}</button>
+        {hasAny && (
+          <button type="button" className="btn ghost sm" disabled={loading || busy} onClick={clearAll}>{t('清空日志')}</button>
+        )}
+        <button type="button" className="btn sm" disabled={loading || busy} onClick={reload}>{loading ? t('正在读取…') : t('刷新')}</button>
       </div>
     </Modal>
   )

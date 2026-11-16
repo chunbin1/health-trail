@@ -165,7 +165,9 @@ func logExchange(dir string, cfg Config, x *exchange, d Draft, callErr error) {
 		_, _ = f.WriteString(redact(b.String(), cfg.APIKey))
 		_ = f.Close()
 	}
-	writeRawLog(dir, nowStr, cfg, x, d, callErr)
+	if cfg.RawLog {
+		writeRawLog(dir, nowStr, cfg, x, d, callErr)
+	}
 }
 
 func writeRawLog(dir, nowStr string, cfg Config, x *exchange, d Draft, callErr error) {
@@ -276,6 +278,24 @@ type LogView struct {
 	Entries []LogEntry `json:"entries"`
 	Cut     bool       `json:"cut"`
 	Size    int64      `json:"size"`
+	RawLog  bool       `json:"raw_log"`
+	RawSize int64      `json:"raw_size"`
+}
+
+// ClearLog removes both assistant.log and assistant-raw.log (and their .1
+// rotated copies) from dir.
+func ClearLog(dir string) error {
+	logMu.Lock()
+	defer logMu.Unlock()
+	for _, name := range []string{
+		assistantLog, assistantLog + ".1",
+		assistantRawLog, assistantRawLog + ".1",
+	} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // ReadLog reads the last part of the log, and of the one before it when
@@ -288,7 +308,14 @@ func ReadLog(dir string) (LogView, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return LogView{}, err
 	}
-	view := LogView{Entries: []LogEntry{}, Size: size, Cut: curCut}
+	cfg, _ := Load(dir)
+	var rawSize int64
+	for _, name := range []string{assistantRawLog, assistantRawLog + ".1"} {
+		if fi, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			rawSize += fi.Size()
+		}
+	}
+	view := LogView{Entries: []LogEntry{}, Size: size, Cut: curCut, RawLog: cfg.RawLog, RawSize: rawSize}
 	raw := cur
 	if !curCut {
 		old, oldSize, oldCut, err := tail(path+".1", logReadMax-int64(len(cur)))

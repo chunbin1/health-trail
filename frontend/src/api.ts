@@ -201,6 +201,7 @@ export interface AssistantConfig {
   has_key: boolean
   speech: boolean
   auto_save: boolean
+  raw_log?: boolean
   providers: AIProvider[]
 }
 
@@ -264,6 +265,8 @@ export interface AssistantLogView {
   entries: AssistantLogEntry[]
   cut: boolean
   size: number
+  raw_log?: boolean
+  raw_size?: number
 }
 
 // One tool the assistant called while answering.
@@ -444,7 +447,7 @@ export const api = {
   // the app's window only: opens the file in its system app (or shows it in the folder)
   openAttachment: (id: number) => req<{ revealed: boolean }>('POST', `/api/attachments/${id}/open`),
   assistant: () => req<AssistantConfig>('GET', '/api/assistant'),
-  setAssistant: (body: { base_url?: string; api_key?: string; model?: string; clear_key?: boolean; auto_save?: boolean }) =>
+  setAssistant: (body: { base_url?: string; api_key?: string; model?: string; clear_key?: boolean; auto_save?: boolean; raw_log?: boolean }) =>
     req<AssistantConfig>('PUT', '/api/assistant', body).then((c) => { window.dispatchEvent(new Event('assistant-config')); return c }),
   checkAssistant: () => req<{ ok: boolean }>('POST', '/api/assistant/check'),
   openProviderPage: (id: string, page: 'signup' | 'key') =>
@@ -453,6 +456,7 @@ export const api = {
   assistantDraftStatus: () => req<DraftStatus>('GET', '/api/assistant/draft'),
   assistantCommit: (items: DraftItem[]) => req<CommitResult>('POST', '/api/assistant/commit', { items }),
   assistantLog: () => req<AssistantLogView>('GET', '/api/assistant/log'),
+  clearAssistantLog: () => req<{ ok: boolean }>('DELETE', '/api/assistant/log'),
   assistantChats: () => req<ChatHead[]>('GET', '/api/assistant/chats'),
   assistantChat: (id: string) => req<ChatHead & { messages: ChatMsgWire[] }>('GET', '/api/assistant/chats/' + encodeURIComponent(id)),
   saveAssistantChat: (body: { id: string; messages: ChatMsgWire[] }) => req<ChatHead>('PUT', '/api/assistant/chats', body),

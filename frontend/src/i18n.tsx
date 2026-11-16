@@ -561,6 +561,11 @@ const EN = {
   '共 {n} 次回答': ['{n} answer', '{n} answers'],
   '正在读取…': 'Reading…',
   '刷新': 'Refresh',
+  '清空日志': 'Clear log',
+  '清空': 'Clear',
+  '清空所有 AI助手日志（含 assistant.log 和 assistant-raw.log）？': 'Clear all AI assistant logs (including assistant.log and assistant-raw.log)?',
+  '同时记录完整原始日志（assistant-raw.log，含健康档案上下文与对话原文，仅留在本机）':
+    'Also write the full raw log (assistant-raw.log, including health context and full chat text; stays on this computer)',
   '出错': 'Error',
   '{n} 次请求': ['{n} request', '{n} requests'],
   '{n} tokens': '{n} tokens',
