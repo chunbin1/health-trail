@@ -125,8 +125,6 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	read := false
 	// whether a reply that called no tool has been sent back once
 	nudged := false
-	// whether any tool has run in this reply; a later sentence can then stand
-	usedTool := false
 	// the failed calls of earlier rounds: the same one failing again ends
 	// the reply instead of spending the rest of the rounds on it
 	failedBefore := map[string]bool{}
@@ -149,9 +147,6 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 			logExchange(st.Dir, cfg, x, d, err)
 			return Draft{}, err
 		}
-		if len(m.Calls) > 0 {
-			usedTool = true
-		}
 		if len(m.Calls) == 0 || last {
 			d.Reply = strings.TrimSpace(m.Content)
 			if len(m.Calls) > 0 {
@@ -161,12 +156,14 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 				stopped = msg.Pick(cfg.Lang, stopRounds, stopRoundsEn)
 				d.Reply = ""
 			}
-			// No tool at all means nothing was drafted, whatever the sentence
-			// says. A question is left as it is. Anything else gets one more
-			// round to call a write tool, or to repeat an explanation.
-			if !last && !nudged && !usedTool && len(w.items) == 0 && len(m.Calls) == 0 && !asks(d.Reply) {
+			// If no cards were drafted, but the reply claims an archive change
+			// or the user asked to make one, nudge the model once to call a write
+			// tool or explain. A question is left as it is.
+			wantsAction := userWantsAction(turns)
+			claims := claimsChange(d.Reply)
+			if !last && !nudged && len(w.items) == 0 && len(m.Calls) == 0 && !asks(d.Reply) && (claims || wantsAction) {
 				nudged = true
-				x.note("这一轮没有调用工具：请它补上写入，或说明只是在回答")
+				x.note("这轮没有生成卡片却声称修改或用户要求修改：请它补上写入，或说明只是在回答")
 				msgs = append(msgs, m.Raw, map[string]any{"role": "user", "content": claimNudge})
 				continue
 			}
@@ -260,7 +257,7 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		// the model's own words here lead into a call that never ran
 		d.Reply = strings.TrimSpace(stopped)
 	}
-	if nudged && stopped == "" && len(d.Items) == 0 {
+	if (nudged || claimsChange(d.Reply)) && stopped == "" && len(d.Items) == 0 {
 		d.Reply += msg.Pick(cfg.Lang, claimNote, claimNoteEn)
 	}
 	if len(d.Items) == 0 && d.Reply == "" {
