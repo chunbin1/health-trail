@@ -36,8 +36,8 @@ type Item struct {
 	Results        []LabResult    `json:"results,omitempty"`
 	Summary        string         `json:"summary,omitempty"`
 	// Unit is the habit's unit, shown on a check-in card ("60 分钟")
-	Unit string `json:"unit,omitempty"`
-	Problem        string         `json:"problem,omitempty"`
+	Unit    string `json:"unit,omitempty"`
+	Problem string `json:"problem,omitempty"`
 	// kind "update" changes record ID of Type: Fields are the new values,
 	// Before what they were when the card was made
 	ID     int64          `json:"id,omitempty"`
@@ -123,7 +123,7 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	w := newDrafting(st, turns, now)
 	// whether this reply has looked anything up yet
 	read := false
-	// whether the model was told it claimed something with no card
+	// whether a reply that called no tool has been sent back once
 	nudged := false
 	// the failed calls of earlier rounds: the same one failing again ends
 	// the reply instead of spending the rest of the rounds on it
@@ -156,9 +156,14 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 				stopped = msg.Pick(cfg.Lang, stopRounds, stopRoundsEn)
 				d.Reply = ""
 			}
-			if !last && !nudged && len(w.items) == 0 && claimsDone(d.Reply) {
+			// If no cards were drafted, but the reply claims an archive change
+			// or the user asked to make one, nudge the model once to call a write
+			// tool or explain. A question is left as it is.
+			wantsAction := userWantsAction(turns)
+			claims := claimsChange(d.Reply)
+			if !last && !nudged && len(w.items) == 0 && len(m.Calls) == 0 && !asks(d.Reply) && (claims || wantsAction) {
 				nudged = true
-				x.note("回复说已经做好了，却没有卡片：提醒它再来一次")
+				x.note("这轮没有生成卡片却声称修改或用户要求修改：请它补上写入，或说明只是在回答")
 				msgs = append(msgs, m.Raw, map[string]any{"role": "user", "content": claimNudge})
 				continue
 			}
@@ -252,7 +257,7 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		// the model's own words here lead into a call that never ran
 		d.Reply = strings.TrimSpace(stopped)
 	}
-	if len(d.Items) == 0 && claimsDone(d.Reply) {
+	if (nudged || claimsChange(d.Reply)) && stopped == "" && len(d.Items) == 0 {
 		d.Reply += msg.Pick(cfg.Lang, claimNote, claimNoteEn)
 	}
 	if len(d.Items) == 0 && d.Reply == "" {

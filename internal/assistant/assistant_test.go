@@ -290,32 +290,100 @@ func TestClaimWithoutCardIsSentBack(t *testing.T) {
 		t.Fatalf("requests %d err %v draft %+v", len(f.bodies), err, d)
 	}
 
-	// an offer or a question is not a claim
+	// a question is left alone; wording that never says "done" is still sent back
 	f = &fakeModel{t: t, replies: []string{answer("我来帮您预约，几点方便？")}}
 	d, _ = Propose(context.Background(), st, f.cfg(f.start()), ask, day, nil)
 	if len(f.bodies) != 1 || strings.Contains(d.Reply, claimNote) {
 		t.Fatalf("requests %d draft %+v", len(f.bodies), d)
 	}
+	f = &fakeModel{t: t, replies: []string{answer("每天快走二十分钟。")}}
+	d, err = Propose(context.Background(), st, f.cfg(f.start()), ask, day, nil)
+	if err != nil || len(f.bodies) != 2 || !strings.HasSuffix(d.Reply, claimNote) || !strings.Contains(f.bodies[1], "没有调用任何工具") {
+		t.Fatalf("requests %d err %v draft %+v", len(f.bodies), err, d)
+	}
+
+	// the logged reply: states the new habit and the archive with no 已/好了
+	if _, err := st.Create("habits", store.Record{"name": "完成运动", "unit": "分钟", "target": 30}); err != nil {
+		t.Fatal(err)
+	}
+	said := "按第一周的计划整理成新打卡项，旧的「完成运动」我把它归档停用（历史打卡记录还在，想彻底删除的话在 App 里那条记录上操作）。到第 3 周要加量时说一声，我再帮你调目标。"
+	habit := `{"type":"habits","fields":{"name":"快走","icon":"🚶","unit":"分钟","target":25}}`
+	archive := `{"type":"habits","id":1,"fields":{"archived":true}}`
+	// adding a habit with no check-in gets one more round; the model then just answers
+	f = &fakeModel{t: t, replies: []string{
+		answer(said),
+		calls("add_record", habit, "update_record", archive),
+		answer("整理好了，保存后生效。"),
+	}}
+	d, err = Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "先给第一周弄个打卡项，现在的运动30分钟就不要了"}}, day, nil)
+	if err != nil || len(f.bodies) != 3 || len(d.Items) != 2 || d.Reply != "整理好了，保存后生效。" {
+		t.Fatalf("requests %d err %v draft %+v", len(f.bodies), err, d)
+	}
+	if !strings.Contains(f.bodies[1], "App 检查") {
+		t.Fatal("the logged reply was not sent back")
+	}
 }
 
-func TestClaimsDone(t *testing.T) {
+func TestClaimsChange(t *testing.T) {
 	for s, want := range map[string]bool{
 		"这个预约已经创建好了":                            true,
 		"我已经为您安排了以下预约":                          true,
 		"已为您设置每天早上9点提醒":                         true,
 		"提醒设好了":                                 true,
+		"整理成新打卡项":                              true,
+		"旧的「完成运动」我把它归档停用":                       true,
+		"我把它删除了":                                true,
 		"这条已经记录过了，不用再记":                         false,
 		"我来帮您预约检查":                              false,
-		"整理好了，保存后生效":                            false,
+		"整理好了，保存后生效":                            true,
 		"建议1-2个月后复查，要预约吗":                       false,
+		"高血压日常饮食建议低盐低脂":                         false,
+		"这张看不清，请再拍一张":                           false,
 		"I've booked your check-up for Nov 10.": true,
 		"Your reminder has been set.":           true,
 		"I can book it for you. What time?":     false,
 		"Should I set a reminder for 9:00?":     false,
 	} {
-		if got := claimsDone(s); got != want {
-			t.Errorf("%q: %v", s, got)
+		if got := claimsChange(s); got != want {
+			t.Errorf("%q: got %v, want %v", s, got, want)
 		}
+	}
+}
+
+func TestAsks(t *testing.T) {
+	for s, want := range map[string]bool{
+		"我来帮您预约，几点方便？":     true,
+		"**几点方便？**":       true,
+		"请问几点方便呢？":         true,
+		"您看这样可以吗。":         true,
+		"“需要帮您预约吗？”":       true,
+		"每天快走二十分钟。":        false,
+		"这张看不清，请再拍一张。":     false,
+		"What time is best?": true,
+		"Walk 20 minutes.":   false,
+	} {
+		if got := asks(s); got != want {
+			t.Errorf("%q: got %v, want %v", s, got, want)
+		}
+	}
+}
+
+func TestReadToolThenClaimWithoutWriteCardIsSentBack(t *testing.T) {
+	st := openStore(t)
+	if _, err := st.Create("medications", store.Record{"name": "苯溴马隆", "dosage": "半片"}); err != nil {
+		t.Fatal(err)
+	}
+	// Round 0: model reads records. Round 1: model claims it updated the record
+	// without calling update_record. It is nudged. Round 2: calls update_record.
+	f := &fakeModel{t: t, replies: []string{
+		calls("search_records", `{"query":"苯溴马隆"}`),
+		answer("我已经帮您把苯溴马隆改成每天一片了。"),
+		calls("update_record", `{"type":"medications","id":1,"fields":{"dosage":"每天一片"}}`),
+		answer("整理好了，保存后生效。"),
+	}}
+	d, err := Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "把苯溴马隆改成每天一片"}}, day, nil)
+	if err != nil || len(f.bodies) != 4 || len(d.Items) != 1 || d.Reply != "整理好了，保存后生效。" {
+		t.Fatalf("requests %d err %v draft %+v", len(f.bodies), err, d)
 	}
 }
 
@@ -541,8 +609,9 @@ func TestProposeSendsImageAndRejectsOtherFiles(t *testing.T) {
 	if err != nil || !strings.Contains(f.bodies[0], "image_url") || !strings.Contains(f.bodies[0], "data:image/jpeg;base64,") {
 		t.Fatalf("err=%v", err)
 	}
-	if d.Reply == "" || d.Unclear != "" || len(d.Items) != 0 || d.Usage.TotalTokens != 140 {
-		t.Fatalf("%+v", d)
+	// a tool-free answer to an image without write claims is returned directly in 1 round
+	if len(f.bodies) != 1 || d.Unclear != "" || len(d.Items) != 0 || d.Usage.TotalTokens != 140 || strings.Contains(d.Reply, claimNote) {
+		t.Fatalf("requests %d %+v", len(f.bodies), d)
 	}
 }
 
@@ -623,7 +692,7 @@ func TestInstructionsKeepTheLimitsAndCacheOrder(t *testing.T) {
 	if !strings.HasPrefix(s, "MCP 的说明") {
 		t.Fatal("the MCP instructions should come first")
 	}
-	for _, want := range []string{"结果仅供参考", "需要去医院", "观察中", "计划中", "update_record", "不要说「已设置」", "非布司他", "助手建议的时间", "检查建议"} {
+	for _, want := range []string{"结果仅供参考", "需要去医院", "观察中", "计划中", "update_record", "不要说已经改过档案", "非布司他", "助手建议的时间", "检查建议"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("instructions have no %s", want)
 		}
