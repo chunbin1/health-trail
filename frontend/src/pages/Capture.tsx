@@ -282,6 +282,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     if (!last || last.role !== 'assistant' || autoTried.current.has(last.id)) return
     if (!last.items?.length || savedAll(last) || last.locked) return
     if (last.open && Object.values(last.open).some(Boolean)) return
+    if (last.edits && Object.keys(last.edits).length > 0) return
     const rest = last.items.filter((it, i) => !last.saved?.[i] && !waitsForSave(it))
     if (!rest.length || rest.some((it) => it.problem)) return
     autoTried.current.add(last.id)
@@ -515,9 +516,12 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       const unfinished = currentItems.some((_, i) => !done[i])
       setMessages((ms) => ms.map((m) => {
         if (m.id !== msg.id) return m
+        // Only merge edits for items that actually saved (done[i]); failed items
+        // keep their original m.items[i] so Cancel still restores the pre-edit value.
         const items = m.items?.map((it, i) => {
+          if (!done[i]) return it
           const cur = m.edits?.[i] ? { ...m.edits[i], problem: '' } : it
-          return done[i] ? { ...cur, problem: '' } : cur
+          return { ...cur, problem: '' }
         })
         const open: Record<number, boolean> = {}
         const edits: Record<number, DraftItem> = {}
@@ -525,7 +529,12 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
           const i = Number(k)
           if (!done[i] && v && items?.[i]) {
             open[i] = true
-            edits[i] = cloneItem(items[i])
+          }
+        }
+        for (const [k, v] of Object.entries(m.edits || {})) {
+          const i = Number(k)
+          if (!done[i] && v && items?.[i]) {
+            edits[i] = v
           }
         }
         return { ...m, items, open, edits, saved: done, locked: res.ok && !unfinished }
@@ -564,7 +573,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   }
 
   function startEdit(msgId: string, i: number) {
-    autoTried.current.add(msgId)
+    if (savingRef.current === msgId) return
     setMessages((ms) => ms.map((m) => {
       if (m.id !== msgId) return m
       const it = m.items?.[i]
@@ -572,15 +581,15 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       return {
         ...m,
         open: { ...m.open, [i]: true },
-        edits: { ...m.edits, [i]: cloneItem(it) },
+        edits: { ...m.edits, [i]: m.edits?.[i] ? cloneItem(m.edits[i]) : cloneItem(it) },
       }
     }))
   }
 
-  // An edited reply is saved by hand: automatic saving leaves it alone from
-  // here on, so the old warning can go and the editor stays open.
+  // An edited reply is saved by hand once finished: while open, auto-save
+  // waits; if cancelled without finishing, the original card stays intact.
   function patch(msgId: string, i: number, next: DraftItem) {
-    autoTried.current.add(msgId)
+    if (savingRef.current === msgId) return
     setMessages((ms) => ms.map((m) => m.id === msgId ? {
       ...m,
       open: { ...m.open, [i]: true },
@@ -589,6 +598,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   }
 
   function finishEdit(msgId: string, i: number) {
+    if (savingRef.current === msgId) return
     autoTried.current.add(msgId)
     setMessages((ms) => ms.map((m) => {
       if (m.id !== msgId) return m
@@ -605,6 +615,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   }
 
   function cancelEdit(msgId: string, i: number) {
+    if (savingRef.current === msgId) return
     setMessages((ms) => ms.map((m) => {
       if (m.id !== msgId) return m
       const edits = { ...m.edits }
@@ -618,7 +629,9 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   }
 
   async function dropItem(msgId: string, i: number) {
+    if (savingRef.current === msgId) return
     if (!(await ask(t('去掉这张卡片？'), { ok: t('去掉'), danger: true }))) return
+    if (savingRef.current === msgId) return
     setMessages((ms) => ms.map((m) => {
       if (m.id !== msgId) return m
       const shift = <T,>(rec?: Record<number, T>) => {
@@ -793,6 +806,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
               {m.unclear && <div className="notice"><span>{m.unclear}</span></div>}
               {m.items && m.items.length === 0 && !m.unclear && !m.reply && <div className="sub">{t('没有整理出可以保存的记录。')}</div>}
               {m.items?.map((raw, i) => {
+                const busySaving = savingId === m.id
                 const canEdit = !m.locked && !savedAll(m) && !m.saved?.[i]
                 const editing = canEdit && (m.open?.[i] ?? !!raw.problem)
                 const it = editing && m.edits?.[i] ? m.edits[i] : raw
@@ -804,7 +818,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
                       <h2 style={{ flex: 1, minWidth: 0 }}>{itemTitle(it, entity)}</h2>
                       {itemDate(it, entity) && <span className="small muted nowrap">{itemDate(it, entity)}</span>}
                       {m.saved?.[i] && <span className="tag">{t('已保存')}</span>}
-                      {canEdit && !editing && (
+                      {canEdit && !editing && !busySaving && (
                         <IconButton label={t('去掉')} small onClick={() => dropItem(m.id, i)}>
                           <X size={14} />
                         </IconButton>
@@ -817,7 +831,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
                       <button type="button" className="btn ghost sm" onClick={() => openRecord(m.saved![i].type!, m.saved![i].id!)}>{t('查看')}</button>
                     )}
                     {canEdit && !editing && (
-                      <button type="button" className="btn ghost sm" onClick={() => startEdit(m.id, i)}>
+                      <button type="button" className="btn ghost sm" disabled={busySaving} onClick={() => startEdit(m.id, i)}>
                         {t('修改')}
                       </button>
                     )}
@@ -825,8 +839,8 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
                       <>
                         <ItemEditor item={it} onChange={(next) => patch(m.id, i, next)} />
                         <div className="row" style={{ marginTop: 12 }}>
-                          <button type="button" className="btn sm" onClick={() => finishEdit(m.id, i)}>{t('完成')}</button>
-                          <button type="button" className="btn ghost sm" onClick={() => cancelEdit(m.id, i)}>{t('取消')}</button>
+                          <button type="button" className="btn sm" disabled={busySaving} onClick={() => finishEdit(m.id, i)}>{t('完成')}</button>
+                          <button type="button" className="btn ghost sm" disabled={busySaving} onClick={() => cancelEdit(m.id, i)}>{t('取消')}</button>
                         </div>
                       </>
                     )}
@@ -954,7 +968,7 @@ function itemBrief(it: DraftItem, saved?: boolean) {
     const notes = it.notes ? `（${it.notes}）` : ''
     return `打卡「${it.habit || ''}」${val}${notes}`
   }
-  if (it.kind === 'update') return `修改 ${it.type} #${it.id} ${JSON.stringify(it.fields || {})}`
+  if (it.kind === 'update') return `修改 ${it.type} #${it.id}${it.summary ? `（${it.summary}）` : ''} ${JSON.stringify(it.fields || {})}`
   return `${it.type} ${JSON.stringify(it.fields || {})}`
 }
 
