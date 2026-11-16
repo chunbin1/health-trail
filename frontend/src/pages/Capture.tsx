@@ -192,6 +192,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   const [cfg, setCfg] = useState<AssistantConfig | null>(null)
   const [showSetup, setShowSetup] = useState(false)
   const [chatId, setChatId] = useState(kept.id || String(Date.now()))
+  const chatIdRef = useRef(chatId)
   const [past, setPast] = useState<ChatHead[] | null>(null)
   const [chats, setChats] = useState<ChatHead[]>([])
   // the right-click menu on a chat in the list
@@ -356,6 +357,10 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
 
   function takeReply(id: string, d: { items?: DraftItem[]; unclear?: string; reply?: string; steps?: ToolStep[]; usage?: ChatMsg['usage'] }) {
     if (!id || applied.current === id) return
+    // Guard: ignore replies that belong to a conversation we already left.
+    // pendingRef tracks which message we are waiting for in the *current*
+    // chat; if it was cleared (new chat) or changed, this reply is stale.
+    if (pendingRef.current !== id) return
     applied.current = id
     setMessages((ms) => [...ms, {
       id: id + '-a', role: 'assistant', text: '', items: d.items || [], unclear: d.unclear || '',
@@ -444,6 +449,8 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       const d = await api.assistantDraft({ id, messages: turnsOf(history) })
       takeReply(id, d)
     } catch (e: any) {
+      // If the chat was switched while the request was in flight, drop it.
+      if (pendingRef.current !== id) return
       if (e instanceof ApiError) {
         setPendingId('')
         pendingRef.current = ''
@@ -564,11 +571,15 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
 
   // clearChat starts an empty chat without saving the one on screen
   function clearChat() {
-    setChatId(String(Date.now()))
+    const newId = String(Date.now())
+    setChatId(newId)
+    chatIdRef.current = newId
     setPast(null)
     setMessages([])
     setPendingId('')
     pendingRef.current = ''
+    applied.current = ''
+    autoTried.current = new Set()
     writeText('')
     setPics([])
     setErr('')
@@ -607,9 +618,11 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     try {
       const c = await api.assistantChat(id)
       setChatId(c.id)
+      chatIdRef.current = c.id
       setMessages((c.messages || []).map(restorePics))
       setPendingId('')
       pendingRef.current = ''
+      applied.current = ''
       setPast(null)
     } catch (e: any) {
       setErr(e.message)
