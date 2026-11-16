@@ -330,6 +330,7 @@ export interface ChatTurn {
   role: 'user' | 'assistant'
   text: string
   images?: { mime: string; data: string }[]
+  cards?: string[]
 }
 
 export interface CommitResult {

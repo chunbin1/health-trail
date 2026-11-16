@@ -29,6 +29,7 @@ interface ChatMsg {
   saved?: Record<number, { type?: string; id?: number }>
   locked?: boolean
   open?: Record<number, boolean>
+  edits?: Record<number, DraftItem>
 }
 
 interface KeptCapture {
@@ -72,23 +73,36 @@ function remember(d: KeptCapture) {
 function turnsOf(msgs: ChatMsg[]): ChatTurn[] {
   const out: ChatTurn[] = []
   const users = msgs.filter((m) => m.role === 'user')
+  const lastUserId = users[users.length - 1]?.id
   const keepPics = new Set(users.slice(-2).map((m) => m.id))
-  for (const m of msgs.slice(-12)) {
+  const start = Math.max(0, msgs.length - 12)
+  for (let idx = start; idx < msgs.length; idx++) {
+    const m = msgs[idx]
     if (m.role === 'user') {
+      const next = msgs[idx + 1]
+      const extracted = next?.role === 'assistant' && !!next.items?.length && !next.unclear
+      const shouldKeepPics = m.id === lastUserId || (keepPics.has(m.id) && !extracted)
+      const keptImages = shouldKeepPics ? m.images?.filter((p) => p.data).map((p) => ({ mime: p.mime, data: p.data })) : undefined
+      const hadPics = (m.images?.length || m.imageCount || 0) > 0
+      const text = !m.text.trim() && hadPics && !keptImages?.length ? '（图片）' : m.text
       out.push({
         role: 'user',
-        text: m.text,
-        images: keepPics.has(m.id) ? m.images?.filter((p) => p.data).map((p) => ({ mime: p.mime, data: p.data })) : undefined,
+        text,
+        images: keptImages?.length ? keptImages : undefined,
       })
     } else if (m.reply || m.items?.length || m.unclear) {
       // what the model sees of an earlier reply: its answer, and each card
       // with whether it was saved (and the id it got)
       const cards = (m.items || []).map((it, i) => {
         const s = m.saved?.[i]
-        return '- ' + itemBrief(it) + '：' + (s?.id ? `已保存（${s.type} #${s.id}）` : s ? '已保存' : '还没保存')
+        return '- ' + itemBrief(m.edits?.[i] ?? it, !!s) + '：' + (s?.id ? `已保存（${s.type} #${s.id}）` : s ? '已保存' : '还没保存')
       })
-      const body = [m.reply, m.unclear, cards.length ? '这一轮整理的卡片：\n' + cards.join('\n') : ''].filter(Boolean).join('\n')
-      out.push({ role: 'assistant', text: body })
+      const body = [m.reply, m.unclear].filter(Boolean).join('\n')
+      out.push({
+        role: 'assistant',
+        text: body || (cards.length ? '已为您整理好记录卡片。' : ''),
+        cards: cards.length ? cards : undefined,
+      })
     }
   }
   return out
@@ -479,7 +493,8 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
 
   async function save(msg: ChatMsg, autoSave = false) {
     if (savingRef.current || savingId || msg.locked || savedAll(msg) || !msg.items?.length) return
-    const pending = msg.items.map((it, i) => ({ it, i })).filter(({ it, i }) => !msg.saved?.[i] && !(autoSave && waitsForSave(it)))
+    const currentItems = msg.items.map((it, i) => (msg.edits?.[i] ? { ...msg.edits[i], problem: '' } : it))
+    const pending = currentItems.map((it, i) => ({ it, i })).filter(({ it, i }) => !msg.saved?.[i] && !(autoSave && waitsForSave(it)))
     if (!pending.length) return
     const prior = messages.slice(0, messages.findIndex((m) => m.id === msg.id)).reverse().find((m) => m.role === 'user')
     if ((prior?.imageCount || prior?.images?.length) && !prior.images?.some((p) => p.data)) {
@@ -497,11 +512,23 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
         if (at) done[at.i] = { type: s.type, id: s.id }
       }
       const wrote = !!res.saved?.length
-      const unfinished = msg.items.some((_, i) => !done[i])
+      const unfinished = currentItems.some((_, i) => !done[i])
       setMessages((ms) => ms.map((m) => {
         if (m.id !== msg.id) return m
-        const items = m.items?.map((it, i) => (done[i] ? { ...it, problem: '' } : it))
-        return { ...m, items, saved: done, locked: res.ok && !unfinished }
+        const items = m.items?.map((it, i) => {
+          const cur = m.edits?.[i] ? { ...m.edits[i], problem: '' } : it
+          return done[i] ? { ...cur, problem: '' } : cur
+        })
+        const open: Record<number, boolean> = {}
+        const edits: Record<number, DraftItem> = {}
+        for (const [k, v] of Object.entries(m.open || {})) {
+          const i = Number(k)
+          if (!done[i] && v && items?.[i]) {
+            open[i] = true
+            edits[i] = cloneItem(items[i])
+          }
+        }
+        return { ...m, items, open, edits, saved: done, locked: res.ok && !unfinished }
       }))
       if (!res.ok) {
         setErr(res.error || '')
@@ -536,18 +563,62 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     }
   }
 
+  function startEdit(msgId: string, i: number) {
+    autoTried.current.add(msgId)
+    setMessages((ms) => ms.map((m) => {
+      if (m.id !== msgId) return m
+      const it = m.items?.[i]
+      if (!it) return m
+      return {
+        ...m,
+        open: { ...m.open, [i]: true },
+        edits: { ...m.edits, [i]: cloneItem(it) },
+      }
+    }))
+  }
+
   // An edited reply is saved by hand: automatic saving leaves it alone from
   // here on, so the old warning can go and the editor stays open.
   function patch(msgId: string, i: number, next: DraftItem) {
     autoTried.current.add(msgId)
     setMessages((ms) => ms.map((m) => m.id === msgId ? {
       ...m,
-      items: m.items?.map((it, n) => n === i ? { ...next, problem: '' } : it),
       open: { ...m.open, [i]: true },
+      edits: { ...m.edits, [i]: { ...next, problem: '' } },
     } : m))
   }
 
-  function dropItem(msgId: string, i: number) {
+  function finishEdit(msgId: string, i: number) {
+    autoTried.current.add(msgId)
+    setMessages((ms) => ms.map((m) => {
+      if (m.id !== msgId) return m
+      const draft = m.edits?.[i]
+      const edits = { ...m.edits }
+      delete edits[i]
+      return {
+        ...m,
+        items: m.items?.map((it, n) => (n === i ? (draft ? { ...draft, problem: '' } : { ...it, problem: '' }) : it)),
+        open: { ...m.open, [i]: false },
+        edits,
+      }
+    }))
+  }
+
+  function cancelEdit(msgId: string, i: number) {
+    setMessages((ms) => ms.map((m) => {
+      if (m.id !== msgId) return m
+      const edits = { ...m.edits }
+      delete edits[i]
+      return {
+        ...m,
+        open: { ...m.open, [i]: false },
+        edits,
+      }
+    }))
+  }
+
+  async function dropItem(msgId: string, i: number) {
+    if (!(await ask(t('去掉这张卡片？'), { ok: t('去掉'), danger: true }))) return
     setMessages((ms) => ms.map((m) => {
       if (m.id !== msgId) return m
       const shift = <T,>(rec?: Record<number, T>) => {
@@ -560,7 +631,13 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
         }
         return out
       }
-      return { ...m, items: m.items?.filter((_, n) => n !== i), saved: shift(m.saved), open: shift(m.open) }
+      return {
+        ...m,
+        items: m.items?.filter((_, n) => n !== i),
+        saved: shift(m.saved),
+        open: shift(m.open),
+        edits: shift(m.edits),
+      }
     }))
   }
 
@@ -715,35 +792,47 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
               {m.reply && <div className="bubble-assistant">{m.reply}</div>}
               {m.unclear && <div className="notice"><span>{m.unclear}</span></div>}
               {m.items && m.items.length === 0 && !m.unclear && !m.reply && <div className="sub">{t('没有整理出可以保存的记录。')}</div>}
-              {m.items?.map((it, i) => (
-                <section key={i} className="card">
-                  <div className="card-head">
-                    <KindIcon kind={iconKind(it)} size="sm" />
-                    <h2 style={{ flex: 1, minWidth: 0 }}>{itemTitle(it, entity)}</h2>
-                    {itemDate(it, entity) && <span className="small muted nowrap">{itemDate(it, entity)}</span>}
-                    {m.saved?.[i] && <span className="tag">{t('已保存')}</span>}
-                    {!m.locked && !savedAll(m) && (
-                      <IconButton label={t('去掉')} small onClick={() => dropItem(m.id, i)}>
-                        <X size={14} />
-                      </IconButton>
+              {m.items?.map((raw, i) => {
+                const canEdit = !m.locked && !savedAll(m) && !m.saved?.[i]
+                const editing = canEdit && (m.open?.[i] ?? !!raw.problem)
+                const it = editing && m.edits?.[i] ? m.edits[i] : raw
+                const allItems = m.items!.map((x, idx) => ((m.open?.[idx] ?? !!x.problem) && m.edits?.[idx] ? m.edits[idx] : x))
+                return (
+                  <section key={i} className="card">
+                    <div className="card-head">
+                      <KindIcon kind={iconKind(it)} size="sm" />
+                      <h2 style={{ flex: 1, minWidth: 0 }}>{itemTitle(it, entity)}</h2>
+                      {itemDate(it, entity) && <span className="small muted nowrap">{itemDate(it, entity)}</span>}
+                      {m.saved?.[i] && <span className="tag">{t('已保存')}</span>}
+                      {canEdit && !editing && (
+                        <IconButton label={t('去掉')} small onClick={() => dropItem(m.id, i)}>
+                          <X size={14} />
+                        </IconButton>
+                      )}
+                    </div>
+                    {itemDetail(it, allItems) && <div className="small muted" style={{ marginTop: -6, marginBottom: 8 }}>{itemDetail(it, allItems)}</div>}
+                    {it.problem && <div className="error" style={{ marginBottom: 8 }}>{it.problem}</div>}
+                    {it.kind === 'update' && <UpdateDiff item={it} />}
+                    {m.saved?.[i]?.id && m.saved[i].type && (
+                      <button type="button" className="btn ghost sm" onClick={() => openRecord(m.saved![i].type!, m.saved![i].id!)}>{t('查看')}</button>
                     )}
-                  </div>
-                  {itemDetail(it, m.items!) && <div className="small muted" style={{ marginTop: -6, marginBottom: 8 }}>{itemDetail(it, m.items!)}</div>}
-                  {it.problem && <div className="error" style={{ marginBottom: 8 }}>{it.problem}</div>}
-                  {it.kind === 'update' && <UpdateDiff item={it} />}
-                  {m.saved?.[i]?.id && m.saved[i].type && (
-                    <button type="button" className="btn ghost sm" onClick={() => openRecord(m.saved![i].type!, m.saved![i].id!)}>{t('查看')}</button>
-                  )}
-                  {!m.locked && !savedAll(m) && (
-                    <button type="button" className="btn ghost sm" onClick={() => setMessages((ms) => ms.map((x) => x.id === m.id ? { ...x, open: { ...x.open, [i]: !x.open?.[i] } } : x))}>
-                      {m.open?.[i] ? t('收起') : t('修改')}
-                    </button>
-                  )}
-                  {(m.open?.[i] || it.problem) && !m.locked && (
-                    <ItemEditor item={it} onChange={(next) => patch(m.id, i, next)} />
-                  )}
-                </section>
-              ))}
+                    {canEdit && !editing && (
+                      <button type="button" className="btn ghost sm" onClick={() => startEdit(m.id, i)}>
+                        {t('修改')}
+                      </button>
+                    )}
+                    {editing && (
+                      <>
+                        <ItemEditor item={it} onChange={(next) => patch(m.id, i, next)} />
+                        <div className="row" style={{ marginTop: 12 }}>
+                          <button type="button" className="btn sm" onClick={() => finishEdit(m.id, i)}>{t('完成')}</button>
+                          <button type="button" className="btn ghost sm" onClick={() => cancelEdit(m.id, i)}>{t('取消')}</button>
+                        </div>
+                      </>
+                    )}
+                  </section>
+                )
+              })}
               {!!m.items?.length && !savedAll(m) && (
                 <div className="row">
                   <button type="button" className="btn primary sm" disabled={!!savingId || !!m.locked} onClick={() => save(m)}>
@@ -855,9 +944,16 @@ function savedAll(m: ChatMsg) {
 }
 
 // itemBrief is a card as the model sees it in later turns (not shown).
-function itemBrief(it: DraftItem) {
-  if (it.kind === 'lab_report') return `化验单「${it.report?.title || ''}」${it.results?.length || 0} 项`
-  if (it.kind === 'checkin') return `打卡「${it.habit || ''}」`
+function itemBrief(it: DraftItem, saved?: boolean) {
+  if (it.kind === 'lab_report') {
+    const head = `化验单「${it.report?.title || ''}」${it.results?.length || 0} 项`
+    return saved ? head : `${head} ${JSON.stringify({ report: it.report, panel: it.panel, results: it.results })}`
+  }
+  if (it.kind === 'checkin') {
+    const val = it.value != null && it.value !== '' ? ` ${it.value}` : ''
+    const notes = it.notes ? `（${it.notes}）` : ''
+    return `打卡「${it.habit || ''}」${val}${notes}`
+  }
   if (it.kind === 'update') return `修改 ${it.type} #${it.id} ${JSON.stringify(it.fields || {})}`
   return `${it.type} ${JSON.stringify(it.fields || {})}`
 }
@@ -960,6 +1056,15 @@ function itemTitle(it: DraftItem, entity: (name: string) => { label: string; tit
   if (it.type === 'doses' && it.summary) return it.summary
   const title = e && it.fields ? it.fields[e.titleKey] : ''
   return String(title || it.summary || (e ? tx(e.label) : it.type || ''))
+}
+
+function cloneItem(it: DraftItem): DraftItem {
+  return {
+    ...it,
+    fields: it.fields ? { ...it.fields } : it.fields,
+    report: it.report ? { ...it.report } : it.report,
+    results: it.results?.map((r) => ({ ...r })),
+  }
 }
 
 function cleanItem(it: DraftItem): DraftItem {

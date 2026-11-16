@@ -492,6 +492,7 @@ const EN = {
   '修改': 'Edit',
   '收起': 'Hide',
   '去掉': 'Remove',
+  '去掉这张卡片？': 'Remove this card?',
   '已记入档案': 'Saved to your records',
   '没有整理出可以保存的记录。': 'Nothing to save came out of that.',
   '请先改掉标出的问题，再保存。': 'Fix the problems marked below, then save.',
