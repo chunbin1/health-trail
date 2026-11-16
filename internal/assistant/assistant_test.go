@@ -324,6 +324,69 @@ func TestClaimWithoutCardIsSentBack(t *testing.T) {
 	}
 }
 
+func TestClaimsChange(t *testing.T) {
+	for s, want := range map[string]bool{
+		"这个预约已经创建好了":                            true,
+		"我已经为您安排了以下预约":                          true,
+		"已为您设置每天早上9点提醒":                         true,
+		"提醒设好了":                                 true,
+		"整理成新打卡项":                              true,
+		"旧的「完成运动」我把它归档停用":                       true,
+		"我把它删除了":                                true,
+		"这条已经记录过了，不用再记":                         false,
+		"我来帮您预约检查":                              false,
+		"整理好了，保存后生效":                            true,
+		"建议1-2个月后复查，要预约吗":                       false,
+		"高血压日常饮食建议低盐低脂":                         false,
+		"这张看不清，请再拍一张":                           false,
+		"I've booked your check-up for Nov 10.": true,
+		"Your reminder has been set.":           true,
+		"I can book it for you. What time?":     false,
+		"Should I set a reminder for 9:00?":     false,
+	} {
+		if got := claimsChange(s); got != want {
+			t.Errorf("%q: got %v, want %v", s, got, want)
+		}
+	}
+}
+
+func TestAsks(t *testing.T) {
+	for s, want := range map[string]bool{
+		"我来帮您预约，几点方便？":     true,
+		"**几点方便？**":       true,
+		"请问几点方便呢？":         true,
+		"您看这样可以吗。":         true,
+		"“需要帮您预约吗？”":       true,
+		"每天快走二十分钟。":        false,
+		"这张看不清，请再拍一张。":     false,
+		"What time is best?": true,
+		"Walk 20 minutes.":   false,
+	} {
+		if got := asks(s); got != want {
+			t.Errorf("%q: got %v, want %v", s, got, want)
+		}
+	}
+}
+
+func TestReadToolThenClaimWithoutWriteCardIsSentBack(t *testing.T) {
+	st := openStore(t)
+	if _, err := st.Create("medications", store.Record{"name": "苯溴马隆", "dosage": "半片"}); err != nil {
+		t.Fatal(err)
+	}
+	// Round 0: model reads records. Round 1: model claims it updated the record
+	// without calling update_record. It is nudged. Round 2: calls update_record.
+	f := &fakeModel{t: t, replies: []string{
+		calls("search_records", `{"query":"苯溴马隆"}`),
+		answer("我已经帮您把苯溴马隆改成每天一片了。"),
+		calls("update_record", `{"type":"medications","id":1,"fields":{"dosage":"每天一片"}}`),
+		answer("整理好了，保存后生效。"),
+	}}
+	d, err := Propose(context.Background(), st, f.cfg(f.start()), []Turn{{Role: "user", Text: "把苯溴马隆改成每天一片"}}, day, nil)
+	if err != nil || len(f.bodies) != 4 || len(d.Items) != 1 || d.Reply != "整理好了，保存后生效。" {
+		t.Fatalf("requests %d err %v draft %+v", len(f.bodies), err, d)
+	}
+}
+
 func TestReplyLosesMarkdown(t *testing.T) {
 	got := plainReply("## 复查\n**检查日期**：12月15日\n- 血尿酸\n  * 肾功能\n1-2 个月")
 	if want := "复查\n检查日期：12月15日\n· 血尿酸\n  · 肾功能\n1-2 个月"; got != want {
@@ -546,8 +609,8 @@ func TestProposeSendsImageAndRejectsOtherFiles(t *testing.T) {
 	if err != nil || !strings.Contains(f.bodies[0], "image_url") || !strings.Contains(f.bodies[0], "data:image/jpeg;base64,") {
 		t.Fatalf("err=%v", err)
 	}
-	// a tool-free statement is sent back once, then kept, with a note that nothing changed
-	if len(f.bodies) != 2 || d.Unclear != "" || len(d.Items) != 0 || d.Usage.TotalTokens != 280 || !strings.HasSuffix(d.Reply, claimNote) {
+	// a tool-free answer to an image without write claims is returned directly in 1 round
+	if len(f.bodies) != 1 || d.Unclear != "" || len(d.Items) != 0 || d.Usage.TotalTokens != 140 || strings.Contains(d.Reply, claimNote) {
 		t.Fatalf("requests %d %+v", len(f.bodies), d)
 	}
 }
