@@ -54,6 +54,7 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 			Model    *string `json:"model"`
 			ClearKey bool    `json:"clear_key"`
 			AutoSave *bool   `json:"auto_save"`
+			RawLog   *bool   `json:"raw_log"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&in); err != nil {
 			writeError(w, a.msg("无效的请求", "Invalid request"))
@@ -66,6 +67,13 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 		}
 		if in.BaseURL != nil || in.APIKey != nil || in.Model != nil || in.ClearKey {
 			cfg, err = cfg.Update(in.BaseURL, in.APIKey, in.Model, in.ClearKey)
+			if err != nil {
+				writeError(w, a.errText(err))
+				return
+			}
+		}
+		if in.RawLog != nil {
+			cfg, err = cfg.SetRawLog(*in.RawLog)
 			if err != nil {
 				writeError(w, a.errText(err))
 				return
@@ -132,6 +140,13 @@ func (a *app) assistantRoutesOpt(mux *http.ServeMux, speech, localOnly bool) {
 			return
 		}
 		writeJSON(w, view)
+	}))
+	mux.HandleFunc("DELETE /api/assistant/log", wrap(func(w http.ResponseWriter, r *http.Request) {
+		if err := assistant.ClearLog(a.st.Dir); err != nil {
+			writeError(w, a.msg("AI助手的日志没能清空", "Couldn't clear the AI assistant's log"))
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
 	}))
 	mux.HandleFunc("GET /api/assistant/chats", wrap(func(w http.ResponseWriter, r *http.Request) {
 		list, err := assistant.ListChats(a.st.Dir)
@@ -306,6 +321,7 @@ func (a *app) assistantView(cfg assistant.Config, speech bool) map[string]any {
 		"has_key":    cfg.APIKey != "",
 		"speech":     speech,
 		"auto_save":  a.settings.autoSave(),
+		"raw_log":    cfg.RawLog,
 		"providers":  assistant.Providers,
 	}
 }

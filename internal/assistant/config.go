@@ -19,6 +19,7 @@ type Config struct {
 	BaseURL string `json:"base_url,omitempty"`
 	APIKey  string `json:"api_key,omitempty"`
 	Model   string `json:"model,omitempty"`
+	RawLog  bool   `json:"raw_log,omitempty"`
 	path    string
 	// Lang is the UI's language for what the person sees ("en" or "zh");
 	// not saved
@@ -96,6 +97,15 @@ func (c Config) Update(baseURL, apiKey, model *string, clearKey bool) (Config, e
 	return next, nil
 }
 
+// SetRawLog switches the full raw debug log (assistant-raw.log) on or off.
+func (c Config) SetRawLog(on bool) (Config, error) {
+	c.RawLog = on
+	if err := c.save(); err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
 func (c Config) save() error {
 	if c.path == "" {
 		return msg.New("没有配置文件路径", "No settings file path")
@@ -104,7 +114,8 @@ func (c Config) save() error {
 		BaseURL string `json:"base_url,omitempty"`
 		APIKey  string `json:"api_key,omitempty"`
 		Model   string `json:"model,omitempty"`
-	}{c.BaseURL, c.APIKey, c.Model}, "", "  ")
+		RawLog  bool   `json:"raw_log,omitempty"`
+	}{c.BaseURL, c.APIKey, c.Model, c.RawLog}, "", "  ")
 	if err != nil {
 		return err
 	}

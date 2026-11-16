@@ -16,6 +16,8 @@ import (
 
 const assistantLog = "assistant.log"
 const assistantLogMax = 2 << 20
+const assistantRawLog = "assistant-raw.log"
+const assistantRawLogMax = 8 << 20
 
 // a tool result is shown up to here in the log; the model got all of it
 const logResultMax = 600
@@ -24,12 +26,14 @@ var logMu sync.Mutex
 
 // exchange is what one reply sent and got back, for the log.
 type exchange struct {
-	system  int // characters of the system prompt
-	tools   int // characters of the tool definitions
-	toolN   int
-	history int // turns before the latest one
-	ask     Turn
-	rounds  []round
+	system     int // characters of the system prompt
+	systemText string
+	tools      int // characters of the tool definitions
+	toolN      int
+	history    int // turns before the latest one
+	turns      []Turn
+	ask        Turn
+	rounds     []round
 }
 
 // round is one request: what it cost, what the model wrote and which tools
@@ -37,6 +41,7 @@ type exchange struct {
 type round struct {
 	usage Usage
 	said  string
+	raw   string
 	calls []loggedCall
 	note  string
 }
@@ -47,7 +52,12 @@ type loggedCall struct {
 }
 
 func newExchange(system string, defs []any, turns []Turn) *exchange {
-	x := &exchange{system: utf8.RuneCountInString(system), toolN: len(defs)}
+	x := &exchange{
+		system:     utf8.RuneCountInString(system),
+		systemText: system,
+		toolN:      len(defs),
+		turns:      turns,
+	}
 	if b, err := json.Marshal(defs); err == nil {
 		x.tools = utf8.RuneCount(b)
 	}
@@ -58,8 +68,12 @@ func newExchange(system string, defs []any, turns []Turn) *exchange {
 	return x
 }
 
-func (x *exchange) request(u Usage, said string) {
-	x.rounds = append(x.rounds, round{usage: u, said: strings.TrimSpace(said)})
+func (x *exchange) request(u Usage, said string, raw ...json.RawMessage) {
+	rawStr := ""
+	if len(raw) > 0 && len(raw[0]) > 0 {
+		rawStr = strings.TrimSpace(string(raw[0]))
+	}
+	x.rounds = append(x.rounds, round{usage: u, said: strings.TrimSpace(said), raw: rawStr})
 }
 
 func (x *exchange) note(s string) {
@@ -144,9 +158,90 @@ func logExchange(dir string, cfg Config, x *exchange, d Draft, callErr error) {
 
 	logMu.Lock()
 	defer logMu.Unlock()
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
 	path := filepath.Join(dir, assistantLog)
-	rotateLog(path)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	rotateLog(path, assistantLogMax)
+	if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+		_, _ = f.WriteString(redact(b.String(), cfg.APIKey))
+		_ = f.Close()
+	}
+	if cfg.RawLog {
+		writeRawLog(dir, nowStr, cfg, x, d, callErr)
+	}
+}
+
+func writeRawLog(dir, nowStr string, cfg Config, x *exchange, d Draft, callErr error) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "—— %s  %s  %s ——\n", nowStr, cfg.Model, cfg.BaseURL)
+	fmt.Fprintf(&b, "每次请求都带：系统提示 %d 字 · 工具说明 %d 字（%d 个工具）· 之前的对话 %d 段\n",
+		x.system, x.tools, x.toolN, x.history)
+	b.WriteString("--- system ---\n")
+	b.WriteString(strings.TrimSpace(x.systemText) + "\n")
+	if len(x.turns) > 1 {
+		fmt.Fprintf(&b, "--- 之前的对话（%d 段）---\n", len(x.turns)-1)
+		for i, t := range x.turns[:len(x.turns)-1] {
+			fmt.Fprintf(&b, "[%d %s] %s\n", i+1, t.Role, t.Text)
+			for _, im := range t.Images {
+				fmt.Fprintf(&b, "  （图片 %s，约 %d KB）\n", im.MIME, len(im.Data)*3/4>>10)
+			}
+		}
+	}
+	b.WriteString("--- 用户 ---\n")
+	if x.ask.Text != "" {
+		b.WriteString(x.ask.Text + "\n")
+	}
+	for _, im := range x.ask.Images {
+		fmt.Fprintf(&b, "（图片 %s，约 %d KB）\n", im.MIME, len(im.Data)*3/4>>10)
+	}
+	for i, r := range x.rounds {
+		fmt.Fprintf(&b, "--- 第 %d 次请求 · 输入 %d · 输出 %d · 缓存命中 %d ---\n",
+			i+1, r.usage.PromptTokens, r.usage.CompletionTokens, r.usage.CachedTokens)
+		if r.said != "" {
+			b.WriteString("模型：" + r.said + "\n")
+		}
+		if r.raw != "" {
+			b.WriteString("原始 message：" + r.raw + "\n")
+		}
+		for _, c := range r.calls {
+			args := c.args
+			if args == "" {
+				args = "{}"
+			}
+			fmt.Fprintf(&b, "调用 %s %s\n", c.name, args)
+			mark := "→ "
+			if c.failed {
+				mark = "→ 出错："
+			}
+			out := strings.ReplaceAll(strings.TrimSpace(c.out), "\n", "\n    ")
+			fmt.Fprintf(&b, "  %s%s\n", mark, out)
+		}
+		if r.note != "" {
+			b.WriteString("（" + r.note + "）\n")
+		}
+	}
+	if d.Reply != "" {
+		b.WriteString("--- 回复 ---\n" + d.Reply + "\n")
+	}
+	if len(d.Items) > 0 {
+		b.WriteString("--- 卡片 ---\n")
+		for i, it := range d.Items {
+			j, _ := json.Marshal(it)
+			fmt.Fprintf(&b, "%d. %s\n", i+1, j)
+		}
+	}
+	if d.Unclear != "" {
+		b.WriteString("--- 没整理出来 ---\n" + d.Unclear + "\n")
+	}
+	fmt.Fprintf(&b, "tokens 合计：%d 次请求 · 输入 %d · 输出 %d · 合计 %d · 缓存命中 %d\n",
+		len(x.rounds), d.Usage.PromptTokens, d.Usage.CompletionTokens, d.Usage.TotalTokens, d.Usage.CachedTokens)
+	if callErr != nil {
+		fmt.Fprintf(&b, "--- 出错 ---\n%s\n", callErr.Error())
+	}
+	b.WriteString("\n")
+
+	rawPath := filepath.Join(dir, assistantRawLog)
+	rotateLog(rawPath, assistantRawLogMax)
+	f, err := os.OpenFile(rawPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return
 	}
@@ -154,9 +249,9 @@ func logExchange(dir string, cfg Config, x *exchange, d Draft, callErr error) {
 	_ = f.Close()
 }
 
-func rotateLog(path string) {
+func rotateLog(path string, maxSize int64) {
 	info, err := os.Stat(path)
-	if err != nil || info.Size() < assistantLogMax {
+	if err != nil || info.Size() < maxSize {
 		return
 	}
 	_ = os.Rename(path, path+".1")
@@ -183,6 +278,24 @@ type LogView struct {
 	Entries []LogEntry `json:"entries"`
 	Cut     bool       `json:"cut"`
 	Size    int64      `json:"size"`
+	RawLog  bool       `json:"raw_log"`
+	RawSize int64      `json:"raw_size"`
+}
+
+// ClearLog removes both assistant.log and assistant-raw.log (and their .1
+// rotated copies) from dir.
+func ClearLog(dir string) error {
+	logMu.Lock()
+	defer logMu.Unlock()
+	for _, name := range []string{
+		assistantLog, assistantLog + ".1",
+		assistantRawLog, assistantRawLog + ".1",
+	} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // ReadLog reads the last part of the log, and of the one before it when
@@ -195,7 +308,14 @@ func ReadLog(dir string) (LogView, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return LogView{}, err
 	}
-	view := LogView{Entries: []LogEntry{}, Size: size, Cut: curCut}
+	cfg, _ := Load(dir)
+	var rawSize int64
+	for _, name := range []string{assistantRawLog, assistantRawLog + ".1"} {
+		if fi, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			rawSize += fi.Size()
+		}
+	}
+	view := LogView{Entries: []LogEntry{}, Size: size, Cut: curCut, RawLog: cfg.RawLog, RawSize: rawSize}
 	raw := cur
 	if !curCut {
 		old, oldSize, oldCut, err := tail(path+".1", logReadMax-int64(len(cur)))

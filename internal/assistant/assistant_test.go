@@ -336,6 +336,7 @@ func TestClaimsChange(t *testing.T) {
 		"这条已经记录过了，不用再记":                         false,
 		"我来帮您预约检查":                              false,
 		"整理好了，保存后生效":                            true,
+		"这一轮整理的卡片：\n- 打卡「喝水」：还没保存":              true,
 		"建议1-2个月后复查，要预约吗":                       false,
 		"高血压日常饮食建议低盐低脂":                         false,
 		"这张看不清，请再拍一张":                           false,
@@ -623,12 +624,16 @@ func TestExchangeLog(t *testing.T) {
 	f := &fakeModel{t: t, replies: []string{
 		calls("search_records", `{"query":"头痛"}`),
 		answer("日志测试的回答"),
+		answer("开启原始日志后的回答"),
 	}}
 	cfg := f.cfg(f.start())
 	cfg.APIKey, cfg.Model = "sk-log-secret-should-not-appear", "glm-4.6v"
-	if _, err := Propose(context.Background(), st, cfg, []Turn{{
-		Role: "user", Text: "帮我记下头痛", Images: []Image{{MIME: "image/jpeg", Data: jpg}},
-	}}, day, nil); err != nil {
+	turns := []Turn{
+		{Role: "user", Text: "（图片）"},
+		{Role: "assistant", Text: "已为您整理好记录卡片。", Cards: []string{"- 化验单「血常规」15 项：已保存（reports #12）"}},
+		{Role: "user", Text: "帮我记下头痛", Images: []Image{{MIME: "image/jpeg", Data: jpg}}},
+	}
+	if _, err := Propose(context.Background(), st, cfg, turns, day, nil); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(filepath.Join(st.Dir, "assistant.log"))
@@ -651,6 +656,54 @@ func TestExchangeLog(t *testing.T) {
 		}
 	}
 	assertPrivate(t, filepath.Join(st.Dir, "assistant.log"))
+
+	// RawLog defaults to false, so assistant-raw.log is not written unless enabled.
+	if _, err := os.Stat(filepath.Join(st.Dir, "assistant-raw.log")); !os.IsNotExist(err) {
+		t.Fatalf("expected assistant-raw.log not to exist by default, got err=%v", err)
+	}
+
+	cfg.RawLog = true
+	if _, err := Propose(context.Background(), st, cfg, turns, day, nil); err != nil {
+		t.Fatal(err)
+	}
+	rawBytes, err := os.ReadFile(filepath.Join(st.Dir, "assistant-raw.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawLog := string(rawBytes)
+	for _, want := range []string{
+		"--- system ---",
+		"名册",
+		"本次对话前面已整理的记录卡片",
+		"- 化验单「血常规」15 项：已保存（reports #12）",
+		"--- 之前的对话（2 段）---",
+		"[1 user] （图片）",
+		"[2 assistant] 已为您整理好记录卡片。",
+		"原始 message：",
+		"开启原始日志后的回答",
+	} {
+		if !strings.Contains(rawLog, want) {
+			t.Errorf("raw log missing %q\n%s", want, rawLog)
+		}
+	}
+	for _, not := range []string{cfg.APIKey, jpg[:40]} {
+		if strings.Contains(rawLog, not) {
+			t.Fatalf("raw log has %q:\n%s", not, rawLog)
+		}
+	}
+	assertPrivate(t, filepath.Join(st.Dir, "assistant-raw.log"))
+
+	// ClearLog removes both assistant.log and assistant-raw.log (and .1 rotated files).
+	_ = os.WriteFile(filepath.Join(st.Dir, "assistant.log.1"), []byte("old"), 0o600)
+	_ = os.WriteFile(filepath.Join(st.Dir, "assistant-raw.log.1"), []byte("old"), 0o600)
+	if err := ClearLog(st.Dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"assistant.log", "assistant.log.1", "assistant-raw.log", "assistant-raw.log.1"} {
+		if _, err := os.Stat(filepath.Join(st.Dir, name)); !os.IsNotExist(err) {
+			t.Fatalf("expected %s to be removed, got err=%v", name, err)
+		}
+	}
 }
 
 // Windows does not store Unix permission bits, so Stat reports 0666 for a

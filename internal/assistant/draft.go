@@ -83,9 +83,10 @@ type Draft struct {
 
 // Turn is one side of the capture chat. Images are raw base64, jpeg/png/gif/webp only.
 type Turn struct {
-	Role   string  `json:"role"`
-	Text   string  `json:"text"`
-	Images []Image `json:"images,omitempty"`
+	Role   string   `json:"role"`
+	Text   string   `json:"text"`
+	Images []Image  `json:"images,omitempty"`
+	Cards  []string `json:"cards,omitempty"`
 }
 
 // Image is one picture the person attached.
@@ -114,6 +115,9 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 	}
 	defer tb.close()
 	system := Instructions(st, tb.instructions, now)
+	if cards := priorCards(turns); cards != "" {
+		system += "\n本次对话前面已整理的记录卡片（只通过工具生成，不要在回复文字里模仿写出卡片列表）：\n" + cards
+	}
 	msgs := []any{map[string]any{"role": "system", "content": system}}
 	x := newExchange(system, tb.defs, turns)
 	for _, t := range turns {
@@ -142,7 +146,7 @@ func Propose(ctx context.Context, st *store.Store, cfg Config, turns []Turn, now
 		}
 		m, u, err := chat(ctx, cfg, msgs, tb.defs, choice)
 		d.Usage.add(u)
-		x.request(u, m.Content)
+		x.request(u, m.Content, m.Raw)
 		if err != nil {
 			logExchange(st.Dir, cfg, x, d, err)
 			return Draft{}, err
@@ -733,10 +737,20 @@ func cleanTurns(in []Turn) ([]Turn, error) {
 		}
 		text := strings.TrimSpace(t.Text)
 		if role == "assistant" {
+			text = plainReply(text)
+			var cards []string
+			for _, c := range t.Cards {
+				if c = strings.TrimSpace(c); c != "" {
+					cards = append(cards, c)
+				}
+			}
+			if text == "" && len(cards) > 0 {
+				text = "已为您整理好记录卡片。"
+			}
 			if text == "" {
 				continue
 			}
-			out = append(out, Turn{Role: role, Text: text})
+			out = append(out, Turn{Role: role, Text: text, Cards: cards})
 			continue
 		}
 		pics, err := cleanImages(t.Images)
@@ -759,6 +773,19 @@ func cleanTurns(in []Turn) ([]Turn, error) {
 		return nil, msg.New("先说或写一点内容", "Say or type something first")
 	}
 	return out, nil
+}
+
+func priorCards(turns []Turn) string {
+	var lines []string
+	for _, t := range turns {
+		for _, c := range t.Cards {
+			lines = append(lines, c)
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func cleanImages(in []Image) ([]Image, error) {

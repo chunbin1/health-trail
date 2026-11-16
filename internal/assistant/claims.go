@@ -25,7 +25,8 @@ var doneRe = regexp.MustCompile(
 		`|(创建|安排|预约|设置|设|保存|记|添加|修改|改|建|整理|登记|调整|归档|停用|更新)好了` +
 		`|整理成(新)?(打卡项|记录|预约|用药|健康问题|习惯)` +
 		`|(我把|把它|将它)(它|旧的)?(归档|停用|删除|修改|改成|更新)` +
-		`|(已|已经|帮您|为您)(把|将)?[^\n，。！？；]*(归档|停用|删除|修改|改成)`,
+		`|(已|已经|帮您|为您)(把|将)?[^\n，。！？；]*(归档|停用|删除|修改|改成)` +
+		`|这一轮整理的卡片|已通过工具生成的卡片`,
 )
 
 var doneEnRe = regexp.MustCompile(`(?i)\b(i've|i have|has been|have been|is now|are now|already|successfully)\s+(been\s+)?(booked|scheduled|saved|created|added|set up|set|recorded|logged|updated|changed|archived|deleted)\b|\ball set\b`)
@@ -87,14 +88,16 @@ func isQuestionSuffix(s string) bool {
 }
 
 var (
-	boldRe    = regexp.MustCompile(`\*\*|__`)
-	headingRe = regexp.MustCompile(`(?m)^#{1,6}[ \t]+`)
-	bulletRe  = regexp.MustCompile(`(?m)^([ \t]*)[-*][ \t]+`)
+	boldRe       = regexp.MustCompile(`\*\*|__`)
+	headingRe    = regexp.MustCompile(`(?m)^#{1,6}[ \t]+`)
+	bulletRe     = regexp.MustCompile(`(?m)^([ \t]*)[-*][ \t]+`)
+	fakeCardFoot = regexp.MustCompile(`(?m)\n*(【?本轮已通过工具生成的卡片|这一轮整理的卡片[：:])[\s\S]*$`)
 )
 
 // plainReply takes out the markdown the reply is not meant to have: the
 // window shows it as it is.
 func plainReply(s string) string {
+	s = fakeCardFoot.ReplaceAllString(s, "")
 	s = boldRe.ReplaceAllString(s, "")
 	s = headingRe.ReplaceAllString(s, "")
 	s = bulletRe.ReplaceAllString(s, "${1}· ")
