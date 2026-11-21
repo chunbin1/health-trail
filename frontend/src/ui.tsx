@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import {
-  Activity, CalendarCheck2, CalendarClock, FileText, HeartPulse, Hospital, LayoutGrid, LineChart as LineIcon,
+  Activity, CalendarCheck2, CalendarClock, Coffee, FileText, HeartPulse, Hospital, LayoutGrid, LineChart as LineIcon,
   Pill, PillBottle, Plug, Search, Sparkles, Stethoscope, TestTube2, type LucideIcon,
 } from 'lucide-react'
 
@@ -10,6 +10,7 @@ export const KIND: Record<string, { icon: LucideIcon; color: string }> = {
   overview: { icon: LayoutGrid, color: 'var(--accent)' },
   capture: { icon: Sparkles, color: 'var(--accent)' },
   checkins: { icon: CalendarCheck2, color: 'var(--c-checkins)' },
+  breaks: { icon: Coffee, color: 'var(--c-breaks)' },
   habits: { icon: CalendarCheck2, color: 'var(--c-habits)' },
   conditions: { icon: HeartPulse, color: 'var(--c-conditions)' },
   symptoms: { icon: Activity, color: 'var(--c-symptoms)' },

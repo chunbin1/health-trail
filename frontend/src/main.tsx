@@ -3,13 +3,15 @@ import { createRoot } from 'react-dom/client'
 import { api, type Schema } from './api'
 import { App } from './App'
 import { setLang, storedLang, t, type Lang } from './i18n'
+import { BreakOverlay } from './pages/BreakOverlay'
 import { AppProvider } from './state'
 import './styles.css'
 
 // In the Mac window (opened at /?shell=mac) the page draws under a hidden
 // title bar: the sidebar is translucent and is where the window is dragged.
 // Wails' runtime, which makes --wails-draggable work, is served only there.
-const shell = new URLSearchParams(location.search).get('shell')
+const params = new URLSearchParams(location.search)
+const shell = params.get('shell')
 if (shell === 'mac') {
   document.documentElement.classList.add('mac-window')
   const s = document.createElement('script')
@@ -19,6 +21,7 @@ if (shell === 'mac') {
 }
 // The Windows window keeps its title bar, which already names the app.
 if (shell === 'win') document.documentElement.classList.add('win-window')
+const view = params.get('view')
 
 // The language is kept in the data folder's settings (so the window, the
 // browser and the phone agree) and in this browser, for when the server's
@@ -57,6 +60,6 @@ function Root() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Root />
+    {view === 'break' ? <BreakOverlay /> : <Root />}
   </StrictMode>,
 )
