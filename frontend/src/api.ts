@@ -315,6 +315,52 @@ export interface Draft {
   usage?: TokenUse
 }
 
+export type BreakTimerState = 'idle' | 'working' | 'break' | 'break_done' | 'paused' | 'outside_hours'
+
+export interface BreakTimerConfig {
+  work_minutes: number
+  break_minutes: number
+  snooze_minutes: number
+  water_goal: number
+  auto_schedule: boolean
+  schedule_start: string
+  schedule_end: string
+  weekdays_only: boolean
+  popup_enabled: boolean
+  sound_enabled: boolean
+  menu_bar_countdown: boolean
+}
+
+export interface BreakDayStat {
+  date: string
+  breaks: number
+  water: number
+}
+
+export interface BreakTimerSnapshot {
+  state: BreakTimerState
+  remaining_sec: number
+  total_sec: number
+  today: BreakDayStat
+  history: BreakDayStat[]
+  config: BreakTimerConfig
+  break_seq: number
+  server_now: number
+}
+
+export type BreakTimerAction =
+  | 'start'
+  | 'pause'
+  | 'resume'
+  | 'stop'
+  | 'break_now'
+  | 'complete'
+  | 'complete_idle'
+  | 'snooze'
+  | 'skip'
+  | 'water_add'
+  | 'water_sub'
+
 // A draft keeps running after the page is left. state "pending" means the
 // reply is not back yet.
 export interface DraftStatus {
@@ -464,6 +510,10 @@ export const api = {
   speechStart: () => req<SpeechState>('POST', '/api/assistant/speech/start'),
   speechStop: () => req<SpeechState>('POST', '/api/assistant/speech/stop'),
   speech: () => req<SpeechState>('GET', '/api/assistant/speech'),
+  breakTimer: () => req<BreakTimerSnapshot>('GET', '/api/break-timer'),
+  setBreakTimerConfig: (cfg: BreakTimerConfig) => req<BreakTimerSnapshot>('PUT', '/api/break-timer/config', cfg),
+  breakTimerAction: (action: BreakTimerAction) => req<BreakTimerSnapshot>('POST', '/api/break-timer/action', { action }),
+  hideBreakWindow: () => req<{ ok: boolean }>('POST', '/api/break-timer/hide'),
 }
 
 // ---- formatting helpers
