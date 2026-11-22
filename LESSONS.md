@@ -294,6 +294,28 @@ PR 上冒出一条格式不对的 AI 审阅，把门禁卡红了。我没问来�
 - 证据：2026-11-16，`assistant.log`（glm-5.3-flash）第 3 轮修改尿酸时，模型第 2 次请求不调 `update_record`，而是在正文里手写 `这一轮整理的卡片：- 修改检验指标「尿酸」…`；加括号警告后第 4 轮修改肌酐时，模型把 `【本轮已通过工具生成的卡片（…切勿在回复文字中直接写卡片）：- （无）】` 原样抄进回复。移入 `system` 后第 5 轮修改尿素一次到位调工具，回复干净。
 - 出现：1
 
+## iOS 与移动端
+
+### 49. iOS 弹系统权限框会触发 `scenePhase == .inactive`，不要在 `.inactive` 时中止语音识别，并确保启动中断一定会回发 `stopped`
+首次点语音麦克风时，系统弹出语音识别/麦克风权限框，SwiftUI 的 `scenePhase` 会立刻进入 `.inactive`（控制中心、通知中心也一样）。在 `.inactive` 时调用 `speechManager.stop()` 会重置 `sessionToken`，用户点「允许」后异步回调静默返回、不发任何事件，导致前端 `micBusy` 永久为 `true`，同时锁死麦克风和发送按钮。只在 `.background` 时停止语音；原生侧用 `isStarting` 覆盖权限请求与启动阶段，任何中止都必发 `stopped`；前端原生语音模式下发送按钮不被陈旧 `micBusy` 锁死，并在 `visibilitychange` 时做安全复位。
+- 证据：2026-11-22，TestFlight 真机首次点麦克风弹权限框后按钮卡死（PR #49 修复）。
+- 出现：1
+
+### 50. iOS CI 发布采用两步云端签名，且必须用 `macos-26` 与 Admin/App Manager 权限的 ASC API Key
+`xcodebuild archive` 在 `CODE_SIGN_STYLE=Automatic` 下会申请 `iOS App Development` 描述文件，账号尚未登记任何测试设备 UDID 时直接失败；改为 `xcodebuild archive CODE_SIGNING_ALLOWED=NO` 跳过开发签名，再由 `xcodebuild -exportArchive -allowProvisioningUpdates` 用导入的 `Apple Distribution` 证书 + 自动拉取的 App Store 描述文件签名导出 `.ipa`（不需要登记任何设备）。同时，苹果要求 Xcode 26+（iOS 26 SDK）构建才能上传 App Store Connect，CI runner 须用 `macos-26`（`macos-15` 只有 Xcode 16.4），API Key 需具备 App Manager 或 Admin 权限（`IOS_ASC_KEY*`）。
+- 证据：2026-11-22，`ios-release.yml` 首次运行因无注册设备在 archive 阶段失败（PR #47 改为两步云端签名后 `.ipa` 导出成功），随后上传因 `macos-15` SDK 过旧被拒（PR #48 切 `macos-26` 后成功上传 TestFlight）。
+- 出现：1
+
+### 51. 窄屏移动端（`<= 640px`）不用多列表格，主从联动页不用上下堆叠
+桌面端 4 列化验表格在 375–393px 手机上会把第一列中文项目名挤成 1 字一行的竖排，最右侧参考范围还会被裁掉；应改为两行堆叠卡片网格（第一行：完整项目名 + 粗体数值/单位；第二行：范围条 + 完整参考范围）。桌面端左右分栏的主从页面（如「检查报告 → 指标趋势」）在手机上直接上下堆叠时，点长列表里的项只会高亮、趋势图留在几屏之外看起来像「点不开」；手机端应做成「列表 → 详情」两级视图，并通过 `registerBackInterceptor` 接入 `window.__HEALTH_TRAIL_GO_BACK__` 联动 iOS 边缘右滑返回。
+- 证据：2026-11-22，iOS 模拟器实测化验表中文竖排截断（PR #46 修复），以及真机/模拟器反馈「指标趋势点不开」（提交 `ea44f36` 改为列表→详情）。
+- 出现：1
+
+### 52. 新增前端调用的后端路由时，`mobile/` 必须同步核对挂载，桌面专属组件必须守卫 `isIOSApp()`
+iOS 本机模式运行的是 `mobile/` 而不是 `internal/desktop/`。桌面端新增功能路由（如 `/api/break-timer*`）时，`mobile/` 不会自动继承，导致 iOS 对应页面报 404；反过来，桌面专属组件（如 `NotifyWarning` 调用 `GET /api/notifications`）如果只在设置页隐藏、没在组件内部守卫 `isIOSApp()`，总览页照样会悄悄发 404。改路由或加页面时，把 `frontend/src/api.ts` 里的接口列表和 `mobile/` 逐条对照，并在 `mobile/core_test.go` 补单测。
+- 证据：2026-11-22，iOS v1 初版在「休息」页报 `/api/break-timer` 404，总览页也因 `NotifyWarning` 触发 `/api/notifications` 404；全量 14 页 30 接口审计后在 `mobile/breaktimer.go` 补齐挂载并给 `NotifyWarning` 加 `isIOSApp()` 守卫。
+- 出现：1
+
 ## 已移入 CLAUDE.md 的规则
 
 - #9 测量布局、截图要等动画和尺寸观察结束 → CLAUDE.md「验证」（2026-10-21 第 3 次：日期弹窗刚点开就截图，画面里没有弹窗，量出的位置却是对的）
