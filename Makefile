@@ -94,6 +94,12 @@ appstore-test: bin
 
 # one binary for Apple silicon and Intel; the hardened runtime and a secure
 # timestamp are what notarizing asks for
+# Creating the dmg sometimes hits "hdiutil: create failed - Resource busy" on macOS
+# runners because background indexers (Spotlight, diskimageagent) lock the volume
+# while it's being unmounted. Touch .metadata_never_index, force-detach any lingering
+# volume, sync, and retry a few times.
+CREATE_DMG = create_dmg() { for i in 1 2 3 4 5; do hdiutil detach "/Volumes/健康足迹" -force 2>/dev/null || true; sync; hdiutil create -volname 健康足迹 -srcfolder "$(DIST)/root" -fs HFS+ -format UDZO -ov "$$1" && return 0; [ $$i = 5 ] || { echo "hdiutil create 遇到资源忙，3 秒后重试 (第 $$i 次)..."; sleep 3; }; done; return 1; }; create_dmg
+
 dmg: ui
 	rm -rf "$(DIST)" && mkdir -p "$(DIST)/root/$(APP)/Contents/MacOS" "$(DIST)/root/$(APP)/Contents/Resources"
 	GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o "$(DIST)/health-trail-arm64" .
@@ -104,8 +110,9 @@ dmg: ui
 	codesign --force --options runtime --timestamp$(if $(filter -,$(DEV_ID)),=none) \
 		--entitlements build/developerid.entitlements --sign "$(DEV_ID)" "$(DIST)/root/$(APP)"
 	codesign --verify --strict "$(DIST)/root/$(APP)"
-	ln -s /Applications "$(DIST)/root/Applications"
-	hdiutil create -volname 健康足迹 -srcfolder "$(DIST)/root" -fs HFS+ -format UDZO -ov "$(DMG)"
+	touch "$(DIST)/root/.metadata_never_index"
+	ln -sf /Applications "$(DIST)/root/Applications"
+	$(CREATE_DMG) "$(DMG)"
 	codesign --force --sign "$(DEV_ID)" "$(DMG)"
 	@echo "built $(DMG)"
 

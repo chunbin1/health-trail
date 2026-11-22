@@ -32,6 +32,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Disable Spotlight indexing
+        run: sudo mdutil -a -i off 2>/dev/null || true
+
       # the Go code embeds frontend/dist, so the UI is built before vet
       - run: make ui
       - run: make test
