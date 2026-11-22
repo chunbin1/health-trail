@@ -212,6 +212,7 @@ export function Capture({ panel, onClose, onBack }: { panel?: boolean; onClose?:
   const nativeSpeech = hasIOSSpeech()
   const speechPrefixRef = useRef('')
   const listeningRef = useRef(false)
+  const micBusyRef = useRef(false)
   const { data, error, reload } = useLoad(() => api.assistant(), [])
   const kept = useRef(loadCapture()).current
   const [cfg, setCfg] = useState<AssistantConfig | null>(null)
@@ -347,6 +348,10 @@ export function Capture({ panel, onClose, onBack }: { panel?: boolean; onClose?:
   }, [listening])
 
   useEffect(() => {
+    micBusyRef.current = micBusy
+  }, [micBusy])
+
+  useEffect(() => {
     if (!nativeSpeech) return
     const unsub = subscribeIOSSpeech((ev) => {
       switch (ev.type) {
@@ -375,9 +380,18 @@ export function Capture({ panel, onClose, onBack }: { panel?: boolean; onClose?:
           break
       }
     })
+    // Safety reset: if the app returns from background while a native speech
+    // start never resolved (e.g. aborted during permission prompt), unblock UI.
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && micBusyRef.current && !listeningRef.current) {
+        setMicBusy(false)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
     return () => {
+      document.removeEventListener('visibilitychange', onVis)
       unsub()
-      if (listeningRef.current) stopIOSSpeech()
+      if (listeningRef.current || micBusyRef.current) stopIOSSpeech()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nativeSpeech])
@@ -504,13 +518,14 @@ export function Capture({ panel, onClose, onBack }: { panel?: boolean; onClose?:
   }
 
   async function send() {
-    if (waiting || micBusy) return
+    if (waiting || (!nativeSpeech && micBusy)) return
     setErr('')
     let said = textRef.current
-    if (listening) {
+    if (listening || (nativeSpeech && micBusy)) {
       if (nativeSpeech) {
         stopIOSSpeech()
         setListening(false)
+        setMicBusy(false)
       } else {
         const s = await api.speechStop()
         setListening(false)
@@ -988,7 +1003,7 @@ export function Capture({ panel, onClose, onBack }: { panel?: boolean; onClose?:
                     <Mic size={15} />
                   </button>
                 )}
-                <button type="button" className="btn primary sm sq" disabled={waiting || micBusy} onClick={send}
+                <button type="button" className="btn primary sm sq" disabled={waiting || (!nativeSpeech && micBusy)} onClick={send}
                   aria-label={waiting ? t('正在思考…') : t('发送')} title={waiting ? t('正在思考…') : t('发送')}>
                   <SendHorizontal size={15} />
                 </button>

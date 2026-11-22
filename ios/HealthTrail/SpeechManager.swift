@@ -21,6 +21,7 @@ final class SpeechManager {
     private let audioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    private var isStarting = false
     private var isListening = false
     private var lastTranscript = ""
     private var hasTapInstalled = false
@@ -30,9 +31,15 @@ final class SpeechManager {
         stop(emitStopped: false)
         let currentToken = UUID()
         sessionToken = currentToken
+        isStarting = true
 
         Task { @MainActor [weak self] in
             guard let self, self.sessionToken == currentToken else { return }
+            defer {
+                if self.sessionToken == currentToken {
+                    self.isStarting = false
+                }
+            }
 
             let speechStatus = await Self.requestSpeechAuthorization()
             guard self.sessionToken == currentToken else { return }
@@ -65,8 +72,9 @@ final class SpeechManager {
     }
 
     func stop(emitStopped: Bool = true) {
-        let wasActive = isListening || recognitionTask != nil || recognitionRequest != nil
+        let wasActive = isStarting || isListening || recognitionTask != nil || recognitionRequest != nil
         sessionToken = UUID()
+        isStarting = false
         isListening = false
 
         let finalTranscript = lastTranscript
