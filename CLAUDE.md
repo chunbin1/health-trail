@@ -37,10 +37,14 @@ internal/server/         REST API（/api/...）、安全层 guard.go、UI 静态
 internal/mcpserver/      MCP 工具（mcp.go）和分析模板（prompts.go）；也是 AI助手的工具：标了 ReadOnlyHint 的工具在 App 里不经确认直接执行，写入的工具千万别标
 internal/backup/         备份成 zip、清理旧备份、恢复（一个事务里整表替换）、定时判断
 internal/msg/            给人看的报错中英两套：msg.New / msg.Errorf，按界面语言用 msg.In 取
+mobile/                  iOS 端嵌入式 Go 核心（gomobile 编成 HealthTrailCore.xcframework）：core.go、settings.go、assistant.go、breaktimer.go、backups.go，监听 127.0.0.1:0 并套 server.Guard
+ios/                     iOS App Store 原生 SwiftUI 外壳（HealthTrail.xcodeproj）：双模式（本机离线 BYOK / 连接家用电脑 Keychain + hv_token cookie）、WebViewContainer.swift、SpeechManager.swift（严格端侧听写）、ExportOptions.plist
 frontend/                React + TS + Vite；embed.go 把构建结果（dist）嵌进 Go 程序
   src/i18n.tsx           中英文切换：界面文字的英文对照、t()/tx()
-scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_review_gate.py（AI 审阅门禁，见 RELEASING.md）、winupdate（打 Windows 更新包并签名）
-.github/workflows/       ci.yml（每次推送）、ai-review.yml（PR 的 AI 审阅检查，不挡合并和发布）、release.yml（打标签发布；正式标签要在 main 上，不再查 AI 审阅）
+  src/ios.ts             iOS 端检测（window.__HEALTH_TRAIL_IOS__ / /api/info）与原生桥接（切换连接模式、语音听写）
+PRIVACY.md               中英双语隐私政策（App Store 审核用）
+scripts/                 build_ios_core.sh（gomobile 编译 HealthTrailCore.xcframework）、mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_review_gate.py（AI 审阅门禁，见 RELEASING.md）、winupdate（打 Windows 更新包并签名）
+.github/workflows/       ci.yml（每次推送，含 macos / windows / ios 三路并行）、ai-review.yml（PR 的 AI 审阅检查，不挡合并和发布）、release.yml（桌面打标签发布）、ios-release.yml（iOS TestFlight / App Store Connect 独立发布）
 ```
 
 **schema.go 是唯一的数据来源**：数据表（自动迁移、只增不删）、API 接受的字段、MCP 工具说明里的字段列表、前端表单，全部从它生成。加一个字段只需改 schema.go（再在 schema_en.go 里补英文，`TestEnglishCoversSchema` 会提醒），其他地方会自动跟上；需要特殊展示的地方再改前端。
@@ -58,6 +62,12 @@ scripts/                 mcp_smoke.py（CI 里的 MCP 端到端测试）、ai_re
 - **后端的报错也是两套**：会显示到界面上的报错用 `msg.New(中文, 英文)` / `msg.Errorf`，store 的校验错误用 `invalid(中文, 英文, …)`（`store.ValidationError` 的 `En`）；接口按 settings.json 的语言用 `msg.In` 取，MCP 和发给模型的工具结果照旧只看中文。`TestNoChineseOnlyErrors` 会拦下只有中文的 `errors.New` / `fmt.Errorf`（mcpserver 除外）。
 - **README 中英两份**：`README.md` 是中文版，`README.en.md` 是英文版。改其中一份时同步改另一份，章节、链接和页内锚点一一对应；英文版里的界面名字用 `i18n.tsx` 的 `EN` 里的叫法。
 - **不编造医疗结论**：MCP 的 instructions 和 prompts 要求 Claude 只依据数据说话、提醒就医。改这些文字时保留这些约束。
+- **iOS App Store 3.1.1 合规**：iOS 模式（`isIOSApp()`）下必须隐藏 AI 助手设置中的外部注册、邀请码和 API Key 购买跳转链接，保留服务商预设（如智谱 GLM 的 BaseURL 和模型列表）与手动填写 Key。
+- **iOS 隐私与安全边界**：
+  - 语音听写强制端侧离线识别（`SpeechManager.swift` 检查 `supportsOnDeviceRecognition` 并固定 `requiresOnDeviceRecognition = true`），绝不静默回退云端。
+  - 本机数据目录（`Application Support/HealthTrail`）必须设置 `isExcludedFromBackup = true`，避免 `health.db`、附件和 `assistant.json` 密钥进入 iCloud 备份。
+  - `WebViewContainer.swift` 主文档导航严格校验同源（`scheme + host + port`），拒绝外部页面或 `data:` HTML 注入到带 `healthTrail` JS Bridge 的主 WebView；用户点击的外部链接交由 Safari 打开。
+  - ATS 只允许 `NSAllowsLocalNetworking = true` 与 `NSExceptionDomains` 下的 `ts.net`（Tailscale MagicDNS），绝不加 `NSAllowsArbitraryLoads`。
 
 ## 验证
 
@@ -67,7 +77,12 @@ make bin         # 构建 UI 和二进制
 make app         # 打包 健康足迹.app
 make win         # health-trail.exe（必须 -H windowsgui，否则双击弹出命令行）
 make win-icon    # 换了 appicon.png 之后重做 rsrc_windows_*.syso
+make ios-core    # 编译前端并用 gomobile 生成 ios/Frameworks/HealthTrailCore.xcframework
+make ios-archive-unsigned  # 本机无签名 Release archive 校验（含 -validate-for-store）
+go test ./mobile/...       # 单独跑 iOS 核心 Go 单测
 ```
+
+- 本机 `xcode-select` 指向 CommandLineTools 时，运行 `xcodebuild` / `xcrun simctl` / `gomobile` 需加 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`（`scripts/build_ios_core.sh` 和 `Makefile` 的 iOS 目标已自动处理）。
 
 图标三份一起改：`frontend/public/icon.svg`（原稿）、`build/AppIcon.icns`（Mac）、`internal/desktop/appicon.png`（Windows 窗口）。资源管理器里的文件图标来自仓库根目录的 `rsrc_windows_*.syso`，由 `make win-icon` 从 PNG 生成。
 
