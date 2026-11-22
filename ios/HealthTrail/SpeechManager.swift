@@ -94,6 +94,18 @@ final class SpeechManager {
             return
         }
 
+        // Strict privacy rule: never fall back to cloud speech recognition.
+        guard recognizer.supportsOnDeviceRecognition else {
+            emit(.init(
+                type: "error",
+                error: L10n.pick(
+                    zh: "当前设备或语言不支持离线端侧语音识别。为保护隐私，应用不会上传音频到云端，请使用系统键盘听写或直接打字输入。",
+                    en: "This device or language does not support on-device offline speech recognition. To protect your privacy, audio is never uploaded to the cloud — please use keyboard dictation or type instead."
+                )
+            ))
+            return
+        }
+
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -127,9 +139,7 @@ final class SpeechManager {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
+        request.requiresOnDeviceRecognition = true
         if #available(iOS 16.0, *) {
             request.addsPunctuation = true
         }

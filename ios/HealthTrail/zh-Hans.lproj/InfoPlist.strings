@@ -3,4 +3,4 @@
 "NSLocalNetworkUsageDescription" = "当您选择连接到家用电脑上的健康足迹时，需要使用本地网络。";
 "NSMicrophoneUsageDescription" = "健康足迹需要使用麦克风进行语音输入，方便记录健康信息。";
 "NSPhotoLibraryUsageDescription" = "健康足迹需要访问照片图库，以便您将检查报告和化验单添加到健康档案。";
-"NSSpeechRecognitionUsageDescription" = "健康足迹需要使用语音识别将您的口述转换为健康记录。";
+"NSSpeechRecognitionUsageDescription" = "健康足迹仅使用设备端离线语音识别将您的口述转换为健康记录，不会上传任何音频。";

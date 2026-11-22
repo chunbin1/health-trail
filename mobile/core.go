@@ -288,37 +288,50 @@ func (c *Core) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, c.settings.msg("无效的请求", "Invalid request"))
 		return
 	}
+	if in.LAN != nil && *in.LAN {
+		writeError(w, c.settings.msg("手机端不支持局域网共享", "LAN sharing is not available on mobile"))
+		return
+	}
+	if in.Lang != nil && *in.Lang != "zh" && *in.Lang != "en" {
+		writeError(w, c.settings.msg("lang 只能是 zh 或 en", "lang must be zh or en"))
+		return
+	}
+	var mergedLists map[string]listChoice
 	if len(in.Lists) > 0 {
-		lists, err := c.settings.mergeLists(in.Lists)
+		var err error
+		mergedLists, err = c.settings.mergeLists(in.Lists)
 		if err != nil {
 			writeError(w, c.settings.errText(err))
 			return
 		}
+	}
+	if len(in.Lists) > 0 || in.Lang != nil {
 		c.settings.mu.Lock()
-		c.settings.Lists = lists
-		if _, ok := in.Lists["today_metrics"]; ok {
-			c.settings.HiddenMetrics = nil
+		prevLists := c.settings.Lists
+		prevHidden := c.settings.HiddenMetrics
+		prevLang := c.settings.Lang
+		if len(in.Lists) > 0 {
+			c.settings.Lists = mergedLists
+			if _, ok := in.Lists["today_metrics"]; ok {
+				c.settings.HiddenMetrics = nil
+			}
+		}
+		if in.Lang != nil {
+			c.settings.Lang = strings.TrimPrefix(*in.Lang, "zh")
 		}
 		c.settings.mu.Unlock()
+
 		if err := c.settings.save(); err != nil {
+			c.settings.mu.Lock()
+			c.settings.Lists = prevLists
+			c.settings.HiddenMetrics = prevHidden
+			c.settings.Lang = prevLang
+			c.settings.mu.Unlock()
 			log.Printf("mobile save settings: %v", err)
-		}
-	}
-	if in.Lang != nil {
-		if *in.Lang != "zh" && *in.Lang != "en" {
-			writeError(w, c.settings.msg("lang 只能是 zh 或 en", "lang must be zh or en"))
+			saveErr := msg.Errorf("保存设置失败：%v", "Couldn't save settings: %v", err)
+			writeErrorStatus(w, http.StatusInternalServerError, msg.In(saveErr, c.settings.lang()))
 			return
 		}
-		c.settings.mu.Lock()
-		c.settings.Lang = strings.TrimPrefix(*in.Lang, "zh")
-		c.settings.mu.Unlock()
-		if err := c.settings.save(); err != nil {
-			log.Printf("mobile save settings: %v", err)
-		}
-	}
-	if in.LAN != nil && *in.LAN {
-		writeError(w, c.settings.msg("手机端不支持局域网共享", "LAN sharing is not available on mobile"))
-		return
 	}
 	writeJSON(w, c.info(r))
 }
@@ -331,7 +344,11 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 func writeError(w http.ResponseWriter, message string) {
+	writeErrorStatus(w, http.StatusBadRequest, message)
+}
+
+func writeErrorStatus(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusBadRequest)
+	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

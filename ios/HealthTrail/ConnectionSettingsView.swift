@@ -122,8 +122,8 @@ struct ConnectionSettingsView: View {
                         Text(L10n.pick(zh: "家用电脑连接信息", en: "Home Computer Details"))
                     } footer: {
                         Text(L10n.pick(
-                            zh: "提示：也可以直接粘贴电脑端「连接」页面里的完整手机访问链接，应用会自动拆出地址和令牌。令牌会加密保存在 iPhone 钥匙串中。",
-                            en: "Tip: You can paste the full phone link from Connect AI on your computer — the URL and token will be filled in automatically. Your token is stored securely in the iOS Keychain."
+                            zh: "局域网请填 http://192.168.x.x:8721；Tailscale 请使用 MagicDNS（http://电脑名.tailnet.ts.net:8721）或 HTTPS（tailscale serve），勿填明文 http://100.x.x.x。也可直接粘贴电脑端「连接」页面里的完整手机访问链接，令牌会加密保存在 iPhone 钥匙串中。",
+                            en: "Use http://192.168.x.x:8721 on LAN, or Tailscale MagicDNS (http://mac.tailnet.ts.net:8721) / HTTPS (tailscale serve) instead of plaintext http://100.x.x.x. You can also paste the full phone link from Connect AI; your token is stored in the iOS Keychain."
                         ))
                     }
                 }
@@ -233,9 +233,15 @@ struct ConnectionSettingsView: View {
         switch selectedMode {
         case .local:
             await appState.switchToLocal()
+            dismiss()
         case .remote:
-            await appState.saveAndConnectRemote(rawURL: serverURL, token: accessToken)
+            do {
+                try await appState.saveAndConnectRemote(rawURL: serverURL, token: accessToken)
+                dismiss()
+            } catch {
+                testSucceeded = false
+                testStatusMessage = error.localizedDescription
+            }
         }
-        dismiss()
     }
 }

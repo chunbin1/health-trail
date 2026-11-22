@@ -77,7 +77,7 @@ struct WebViewContainer: UIViewRepresentable {
         context.coordinator.lastBridgeScript = appState.injectedBridgeScript
         context.coordinator.bindSpeechEvents()
 
-        webView.load(URLRequest(url: targetURL))
+        context.coordinator.loadTargetURL(targetURL, in: webView)
         return webView
     }
 
@@ -98,7 +98,7 @@ struct WebViewContainer: UIViewRepresentable {
         if context.coordinator.lastLoadedURL != targetURL || context.coordinator.lastReloadToken != reloadToken {
             context.coordinator.lastLoadedURL = targetURL
             context.coordinator.lastReloadToken = reloadToken
-            webView.load(URLRequest(url: targetURL))
+            context.coordinator.loadTargetURL(targetURL, in: webView)
         }
     }
 
@@ -223,7 +223,54 @@ struct WebViewContainer: UIViewRepresentable {
             }
         }
 
+        // MARK: - Remote Auth Cookie Injection
+
+        func loadTargetURL(_ url: URL, in webView: WKWebView) {
+            Task { @MainActor in
+                let mode = self.appState.mode
+                let token = self.appState.remoteToken.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if mode == .remote, !token.isEmpty, let host = url.host {
+                    var props: [HTTPCookiePropertyKey: Any] = [
+                        .name: "hv_token",
+                        .value: token,
+                        .domain: host,
+                        .path: "/",
+                        .expires: Date().addingTimeInterval(365 * 24 * 3600),
+                    ]
+                    if url.scheme?.lowercased() == "https" {
+                        props[.secure] = "TRUE"
+                    }
+                    if let cookie = HTTPCookie(properties: props) {
+                        await webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
+                    }
+                }
+                webView.load(URLRequest(url: url))
+            }
+        }
+
         // MARK: - WKNavigationDelegate
+
+        private static func effectivePort(for url: URL) -> Int? {
+            if let port = url.port { return port }
+            switch url.scheme?.lowercased() {
+            case "http": return 80
+            case "https": return 443
+            default: return nil
+            }
+        }
+
+        private static func isSameOrigin(_ a: URL, _ b: URL) -> Bool {
+            guard let schemeA = a.scheme?.lowercased(),
+                  let schemeB = b.scheme?.lowercased(),
+                  schemeA == schemeB,
+                  let hostA = a.host?.lowercased(),
+                  let hostB = b.host?.lowercased(),
+                  hostA == hostB else {
+                return false
+            }
+            return effectivePort(for: a) == effectivePort(for: b)
+        }
 
         func webView(
             _ webView: WKWebView,
@@ -231,32 +278,36 @@ struct WebViewContainer: UIViewRepresentable {
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
             guard let url = navigationAction.request.url else {
-                decisionHandler(.allow)
+                decisionHandler(.cancel)
                 return
             }
 
-            // Allow about:, blob:, data:, and same-host navigations inside the WebView.
+            let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
             let scheme = url.scheme?.lowercased() ?? ""
-            if scheme == "about" || scheme == "blob" || scheme == "data" {
+
+            // Allow about:blank (initial WKWebView state).
+            if url.absoluteString == "about:blank" {
                 decisionHandler(.allow)
                 return
             }
 
-            if let currentHost = lastLoadedURL?.host, let targetHost = url.host,
-               currentHost.caseInsensitiveCompare(targetHost) == .orderedSame {
+            // Strict origin whitelist: only the active target origin (scheme + host + port) may load in the WebView.
+            if let expected = lastLoadedURL, Self.isSameOrigin(url, expected) {
                 decisionHandler(.allow)
                 return
             }
 
-            // External links clicked by the user open in Safari.
-            if navigationAction.navigationType == .linkActivated,
+            // User-activated external links open in Safari; never load third-party pages inside the privileged WebView.
+            if isMainFrame,
+               navigationAction.navigationType == .linkActivated,
                (scheme == "http" || scheme == "https" || scheme == "mailto" || scheme == "tel") {
                 UIApplication.shared.open(url)
                 decisionHandler(.cancel)
                 return
             }
 
-            decisionHandler(.allow)
+            // Block arbitrary data: HTML, cross-origin redirects, script navigations, and form submissions.
+            decisionHandler(.cancel)
         }
 
         func webView(
@@ -322,7 +373,10 @@ struct WebViewContainer: UIViewRepresentable {
             }
 
             Task { @MainActor in
-                if self.appState.mode == .remote {
+                if nsError.domain == NSURLErrorDomain,
+                   nsError.code == URLError.appTransportSecurityRequiresSecureConnection.rawValue {
+                    self.appState.loadError = AppState.atsBlockedMessage
+                } else if self.appState.mode == .remote {
                     self.appState.loadError = L10n.pick(
                         zh: "无法连接到家用电脑（\(error.localizedDescription)）。您可以重试、修改连接设置，或切回本机模式离线使用。",
                         en: "Cannot connect to Home Computer (\(error.localizedDescription)). You can retry, update Connection Settings, or switch back to This iPhone."
@@ -344,7 +398,13 @@ struct WebViewContainer: UIViewRepresentable {
             let tempDir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("HealthTrailDownloads", isDirectory: true)
             try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-            let safeName = suggestedFilename.isEmpty ? "download" : suggestedFilename
+            // Sanitize filename to prevent path traversal outside tempDir.
+            let rawComponent = (suggestedFilename as NSString).lastPathComponent
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let sanitized = rawComponent
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "\\", with: "_")
+            let safeName = (sanitized.isEmpty || sanitized == "." || sanitized == "..") ? "download" : sanitized
             let dest = tempDir.appendingPathComponent(safeName)
             try? FileManager.default.removeItem(at: dest)
             pendingDownloadDestination = dest
@@ -372,10 +432,9 @@ struct WebViewContainer: UIViewRepresentable {
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             guard let url = navigationAction.request.url else { return nil }
-            let isSameHost = (lastLoadedURL?.host != nil) &&
-                (url.host?.caseInsensitiveCompare(lastLoadedURL?.host ?? "") == .orderedSame)
+            let isSameOrigin = lastLoadedURL.map { Self.isSameOrigin(url, $0) } ?? false
 
-            if isSameHost {
+            if isSameOrigin {
                 // Present PDF/image attachment in an in-app preview sheet so user keeps scroll state.
                 let title = url.lastPathComponent.removingPercentEncoding ?? L10n.pick(zh: "附件预览", en: "Preview")
                 Task { @MainActor in

@@ -179,20 +179,34 @@ final class AppState: ObservableObject {
         await startLocalServer(forceReload: true)
     }
 
-    func saveAndConnectRemote(rawURL: String, token: String) async {
-        speechManager.stop(emitStopped: false)
+    func saveAndConnectRemote(rawURL: String, token: String) async throws {
         let parsed = Self.parseServerInput(rawURL)
         let finalToken = token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? (parsed.extractedToken ?? "")
             : token.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        guard buildRemoteLaunchURL(baseURLString: parsed.baseURL) != nil else {
+            throw SimpleError(L10n.pick(
+                zh: "请输入有效的服务器地址（例如 http://192.168.1.10:8721 或 http://mac.tailnet.ts.net:8721）。",
+                en: "Enter a valid server URL (for example http://192.168.1.10:8721 or http://mac.tailnet.ts.net:8721)."
+            ))
+        }
+
+        // Persist token to Keychain BEFORE switching mode or updating UserDefaults.
+        guard KeychainStore.saveRemoteToken(finalToken) else {
+            throw SimpleError(L10n.pick(
+                zh: "无法将访问令牌保存到 iPhone 钥匙串，请重试。",
+                en: "Failed to save access token to the iOS Keychain. Please try again."
+            ))
+        }
+
+        speechManager.stop(emitStopped: false)
         remoteBaseURL = parsed.baseURL
         remoteToken = finalToken
         mode = .remote
 
         UserDefaults.standard.set(ConnectionMode.remote.rawValue, forKey: DefaultsKey.connectionMode)
         UserDefaults.standard.set(remoteBaseURL, forKey: DefaultsKey.remoteBaseURL)
-        KeychainStore.saveRemoteToken(finalToken)
 
         loadError = nil
         await activateCurrentMode(forceReload: true)
@@ -214,7 +228,7 @@ final class AppState: ObservableObject {
         case .local:
             await startLocalServer(forceReload: forceReload)
         case .remote:
-            guard let target = buildRemoteLaunchURL(baseURLString: remoteBaseURL, token: remoteToken) else {
+            guard let target = buildRemoteLaunchURL(baseURLString: remoteBaseURL) else {
                 loadError = L10n.pick(
                     zh: "家用电脑地址无效，请在连接设置中重新填写。",
                     en: "Invalid Home Computer URL. Please update it in Connection Settings."
@@ -274,21 +288,24 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func buildRemoteLaunchURL(baseURLString: String, token: String) -> URL? {
+    private func buildRemoteLaunchURL(baseURLString: String) -> URL? {
         let parsed = Self.parseServerInput(baseURLString)
-        guard !parsed.baseURL.isEmpty, var comps = URLComponents(string: parsed.baseURL) else {
+        guard !parsed.baseURL.isEmpty, var comps = URLComponents(string: parsed.baseURL), comps.host != nil else {
             return nil
         }
         if comps.path.isEmpty {
             comps.path = "/"
         }
-        let cleanToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !cleanToken.isEmpty {
-            // guard.go validates ?token= on GET /, sets the HttpOnly hv_token cookie,
-            // and 302-redirects to / stripping the token from the URL.
-            comps.queryItems = [URLQueryItem(name: "token", value: cleanToken)]
-        }
+        // Keep URL clean without ?token=; WebViewContainer injects the hv_token HttpOnly-compatible cookie via WKHTTPCookieStore.
+        comps.queryItems = nil
         return comps.url
+    }
+
+    static var atsBlockedMessage: String {
+        L10n.pick(
+            zh: "iOS 阻止了明文 HTTP 连接：局域网请使用 http://192.168.x.x:端口，Tailscale 请使用 MagicDNS（http://*.ts.net:端口）或 HTTPS（tailscale serve）。",
+            en: "iOS blocked plaintext HTTP for this address. Use a LAN IP (http://192.168.x.x:port), Tailscale MagicDNS (http://*.ts.net:port), or HTTPS (tailscale serve)."
+        )
     }
 
     func testRemoteConnection(rawURL: String, token: String) async -> Result<String, Error> {
@@ -347,6 +364,8 @@ final class AppState: ObservableObject {
         } catch let urlError as URLError {
             let message: String
             switch urlError.code {
+            case .appTransportSecurityRequiresSecureConnection:
+                message = Self.atsBlockedMessage
             case .timedOut:
                 message = L10n.pick(
                     zh: "连接超时：请确认电脑已开机、健康足迹正在运行，且手机与电脑在同一 Wi-Fi 或 Tailscale 网络中。",

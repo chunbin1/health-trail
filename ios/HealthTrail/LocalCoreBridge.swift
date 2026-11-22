@@ -27,6 +27,12 @@ enum LocalCoreBridge {
     }
 
     static func start(dataDir: String) throws -> URL {
+        // Ensure local health database, attachments, and AI keys are excluded from iCloud/system backups.
+        var dirURL = URL(fileURLWithPath: dataDir, isDirectory: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try dirURL.setResourceValues(values)
+
         #if canImport(HealthTrailCore)
         var err: NSError?
         let rawURL = MobileStart(dataDir, &err)

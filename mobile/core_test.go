@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -251,5 +252,28 @@ func TestBreakTimerRoutes(t *testing.T) {
 	resp, hideOut := doJSON(t, "POST", base+"/api/break-timer/hide", nil)
 	if resp.StatusCode != http.StatusOK || hideOut["ok"] != true {
 		t.Fatalf("POST /api/break-timer/hide: status=%d body=%v", resp.StatusCode, hideOut)
+	}
+}
+
+func TestSettingsSaveFailureReturns500(t *testing.T) {
+	c, base := newTestCore(t)
+
+	// Force settings.save() to fail by placing a directory at settings.json.
+	settingsPath := filepath.Join(c.dataDir, "settings.json")
+	_ = os.Remove(settingsPath)
+	if err := os.Mkdir(settingsPath, 0o700); err != nil {
+		t.Fatalf("mkdir settings.json: %v", err)
+	}
+
+	resp, errBody := doJSON(t, "PUT", base+"/api/settings", map[string]any{"lang": "en"})
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when settings save fails, got %d body=%v", resp.StatusCode, errBody)
+	}
+	if msgStr, _ := errBody["error"].(string); msgStr == "" {
+		t.Fatalf("expected non-empty error message, got %v", errBody)
+	}
+	// In-memory language should have been rolled back.
+	if got := c.settings.lang(); got != "zh" {
+		t.Fatalf("expected lang rolled back to zh, got %q", got)
 	}
 }
