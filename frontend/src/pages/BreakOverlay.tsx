@@ -6,7 +6,7 @@ import { setLang, storedLang, t, type Lang } from '../i18n'
 import { useBreakTimer } from '../utils/useBreakTimer'
 
 export function BreakOverlay() {
-  const { snap, remainingSec, busy, act } = useBreakTimer()
+  const { snap, remainingSec, error, busy, act } = useBreakTimer()
   const [, setLangTick] = useState(0)
 
   useEffect(() => {
@@ -95,6 +95,7 @@ export function BreakOverlay() {
           size={122}
         />
         <div className="break-overlay-title">{promptText}</div>
+        {error && <div className="error" style={{ padding: '4px 10px', fontSize: 12 }}>{error}</div>}
       </div>
 
       <div className="break-overlay-actions">

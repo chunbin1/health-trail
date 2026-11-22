@@ -3,6 +3,8 @@ package desktop
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -77,5 +79,32 @@ func TestBreakTimerHTTP(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/break-timer/hide", nil))
 	if w.Code != 200 {
 		t.Fatalf("POST hide status=%d", w.Code)
+	}
+}
+
+func TestBreakTimerHTTPSaveError(t *testing.T) {
+	dir := t.TempDir()
+	a := newApp(dir, "0")
+	defer a.st.Close()
+	h := a.handler()
+
+	// Replace breaktimer.json path with a directory to force save failure.
+	if err := os.Mkdir(filepath.Join(dir, "breaktimer.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/break-timer/action", strings.NewReader(`{"action":"water_add"}`)))
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "保存休息提醒数据失败") {
+		t.Fatalf("expected zh save error, got %d %s", w.Code, w.Body.String())
+	}
+
+	a.settings.mu.Lock()
+	a.settings.Lang = "en"
+	a.settings.mu.Unlock()
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/break-timer/action", strings.NewReader(`{"action":"water_add"}`)))
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "Failed to save break timer data") {
+		t.Fatalf("expected en save error, got %d %s", w.Code, w.Body.String())
 	}
 }

@@ -3,6 +3,7 @@ package breaktimer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +19,19 @@ func (c *fakeClock) Advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
+func mustSnap(t *testing.T) func(Snapshot, error) Snapshot {
+	t.Helper()
+	return func(snap Snapshot, err error) Snapshot {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return snap
+	}
+}
+
 func TestCycleAndBreakDoneWaitsForUser(t *testing.T) {
+	must := mustSnap(t)
 	clk := &fakeClock{t: time.Date(2026, 11, 16, 10, 0, 0, 0, time.Local)} // Monday
 	e := New(t.TempDir(), clk.Now)
 
@@ -27,7 +40,7 @@ func TestCycleAndBreakDoneWaitsForUser(t *testing.T) {
 		events = append(events, ev)
 	})
 
-	snap := e.Start()
+	snap := must(e.Start())
 	if snap.State != StateWorking || snap.RemainingSec != 45*60 || snap.TotalSec != 45*60 {
 		t.Fatalf("after Start: %+v", snap)
 	}
@@ -76,7 +89,7 @@ func TestCycleAndBreakDoneWaitsForUser(t *testing.T) {
 	}
 
 	// User clicks "开始下一轮".
-	snap = e.CompleteBreak(true)
+	snap = must(e.CompleteBreak(true))
 	if snap.State != StateWorking || snap.Today.Breaks != 1 || snap.RemainingSec != 45*60 {
 		t.Fatalf("after CompleteBreak(true): %+v", snap)
 	}
@@ -87,24 +100,25 @@ func TestCycleAndBreakDoneWaitsForUser(t *testing.T) {
 }
 
 func TestCompleteIdleSnoozeSkipPauseWater(t *testing.T) {
+	must := mustSnap(t)
 	clk := &fakeClock{t: time.Date(2026, 11, 16, 10, 0, 0, 0, time.Local)}
 	dir := t.TempDir()
 	e := New(dir, clk.Now)
 
 	// Water increments and clamps at 0.
-	snap := e.AddWater(-1)
+	snap := must(e.AddWater(-1))
 	if snap.Today.Water != 0 {
 		t.Fatalf("water below 0: %d", snap.Today.Water)
 	}
-	snap = e.AddWater(1)
-	snap = e.AddWater(1)
-	snap = e.AddWater(-1)
+	snap = must(e.AddWater(1))
+	snap = must(e.AddWater(1))
+	snap = must(e.AddWater(-1))
 	if snap.Today.Water != 1 {
 		t.Fatalf("water=%d, want 1", snap.Today.Water)
 	}
 
 	// Pause and resume preserves remaining time.
-	e.Start()
+	must(e.Start())
 	clk.Advance(10 * time.Second)
 	snap = e.Pause()
 	if snap.State != StatePaused || snap.RemainingSec != 45*60-10 {
@@ -114,39 +128,39 @@ func TestCompleteIdleSnoozeSkipPauseWater(t *testing.T) {
 	if got := e.Snapshot().RemainingSec; got != 45*60-10 {
 		t.Fatalf("paused drifted to %d", got)
 	}
-	snap = e.Resume()
+	snap = must(e.Resume())
 	if snap.State != StateWorking || snap.RemainingSec != 45*60-10 {
 		t.Fatalf("resumed snap: %+v", snap)
 	}
 
 	// Snooze during working adds snooze minutes.
-	snap = e.Snooze()
+	snap = must(e.Snooze())
 	if snap.State != StateWorking || snap.RemainingSec != 50*60-10 {
 		t.Fatalf("snooze during working: %+v", snap)
 	}
 
 	// Break now -> Snooze during break hides break and starts snooze countdown.
-	snap = e.StartBreakNow()
+	snap = must(e.StartBreakNow())
 	if snap.State != StateBreak || snap.BreakSeq != 1 {
 		t.Fatalf("StartBreakNow: %+v", snap)
 	}
 	var lastEv Event
 	e.SetOnChange(func(ev Event) { lastEv = ev })
-	snap = e.Snooze()
+	snap = must(e.Snooze())
 	if snap.State != StateWorking || snap.RemainingSec != 5*60 || !lastEv.HideBreak {
 		t.Fatalf("snooze during break: snap=%+v ev=%+v", snap, lastEv)
 	}
 
 	// Break now -> Skip does NOT count break and starts fresh work round.
-	e.StartBreakNow()
-	snap = e.SkipBreak()
+	must(e.StartBreakNow())
+	snap = must(e.SkipBreak())
 	if snap.State != StateWorking || snap.Today.Breaks != 0 || snap.RemainingSec != 45*60 || !lastEv.HideBreak {
 		t.Fatalf("SkipBreak: snap=%+v ev=%+v", snap, lastEv)
 	}
 
 	// Break now -> CompleteBreak(false) counts break and goes idle.
-	e.StartBreakNow()
-	snap = e.CompleteBreak(false)
+	must(e.StartBreakNow())
+	snap = must(e.CompleteBreak(false))
 	if snap.State != StateIdle || snap.Today.Breaks != 1 || !lastEv.HideBreak {
 		t.Fatalf("CompleteBreak(false): snap=%+v ev=%+v", snap, lastEv)
 	}
@@ -168,11 +182,129 @@ func TestCompleteIdleSnoozeSkipPauseWater(t *testing.T) {
 	}
 }
 
-func TestSleepWakeDoesNotFireOverduePopup(t *testing.T) {
+func TestSnoozeDuringBreakDoneIsNoOp(t *testing.T) {
+	must := mustSnap(t)
 	clk := &fakeClock{t: time.Date(2026, 11, 16, 10, 0, 0, 0, time.Local)}
 	e := New(t.TempDir(), clk.Now)
 
-	e.Start()
+	must(e.StartBreakNow())
+	clk.Advance(3 * time.Minute)
+	ev := e.Tick()
+	if ev.Snapshot.State != StateBreakDone {
+		t.Fatalf("expected break_done, got %s", ev.Snapshot.State)
+	}
+
+	fired := false
+	e.SetOnChange(func(ev Event) { fired = true })
+	snap := must(e.Snooze())
+	if snap.State != StateBreakDone || fired {
+		t.Fatalf("Snooze during break_done must be a no-op: snap=%+v fired=%v", snap, fired)
+	}
+}
+
+func TestManualStopPersistsAcrossRestart(t *testing.T) {
+	must := mustSnap(t)
+	clk := &fakeClock{t: time.Date(2026, 11, 23, 10, 0, 0, 0, time.Local)} // Monday inside 09:00-18:30
+	dir := t.TempDir()
+	e := New(dir, clk.Now)
+	cfg := DefaultConfig()
+	cfg.AutoSchedule = true
+	if err := e.UpdateConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.Snapshot().State; got != StateWorking {
+		t.Fatalf("expected working inside schedule, got %s", got)
+	}
+
+	// Stop manually, then restart app same day inside schedule -> must remain idle.
+	if snap := must(e.Stop()); snap.State != StateIdle {
+		t.Fatalf("after Stop: %s", snap.State)
+	}
+	e2 := New(dir, clk.Now)
+	if got := e2.Snapshot().State; got != StateIdle {
+		t.Fatalf("after restart same day post-Stop: got %s, want idle", got)
+	}
+	if got := e2.Tick().Snapshot.State; got != StateIdle {
+		t.Fatalf("after Tick post-restart: got %s, want idle", got)
+	}
+
+	// Starting break and choosing "暂不开始" (CompleteBreak(false)) also persists across restart.
+	must(e2.StartBreakNow())
+	if snap := must(e2.CompleteBreak(false)); snap.State != StateIdle {
+		t.Fatalf("after CompleteBreak(false): %s", snap.State)
+	}
+	e3 := New(dir, clk.Now)
+	if got := e3.Snapshot().State; got != StateIdle {
+		t.Fatalf("after restart same day post-CompleteBreak(false): got %s, want idle", got)
+	}
+
+	// Next day inside schedule -> auto-starts working again.
+	clk.t = time.Date(2026, 11, 24, 9, 5, 0, 0, time.Local)
+	e4 := New(dir, clk.Now)
+	if got := e4.Snapshot().State; got != StateWorking {
+		t.Fatalf("next day inside schedule should auto-start working, got %s", got)
+	}
+
+	// Manual Stop then manual Start clears manualStoppedDate on disk too.
+	must(e4.Stop())
+	must(e4.Start())
+	e5 := New(dir, clk.Now)
+	if got := e5.Snapshot().State; got != StateWorking {
+		t.Fatalf("restart after manual Start should enter working, got %s", got)
+	}
+}
+
+func TestSaveFailureReturnsErrorAndRollsBack(t *testing.T) {
+	must := mustSnap(t)
+	clk := &fakeClock{t: time.Date(2026, 11, 16, 10, 0, 0, 0, time.Local)}
+	dir := t.TempDir()
+	// Create a directory at breaktimer.json so os.Rename(tmp, e.path) fails cleanly on all platforms.
+	badTarget := filepath.Join(dir, "breaktimer.json")
+	if err := os.Mkdir(badTarget, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	e := New(dir, clk.Now)
+
+	// AddWater fails and rolls back in-memory count.
+	snap, err := e.AddWater(1)
+	if err == nil {
+		t.Fatal("expected AddWater error when breaktimer.json is a directory")
+	}
+	if !strings.Contains(err.Error(), "保存休息提醒数据失败") || !strings.Contains(msg.In(err, "en"), "Failed to save break timer data") {
+		t.Fatalf("expected bilingual save error, got zh=%q en=%q", err.Error(), msg.In(err, "en"))
+	}
+	if snap.Today.Water != 0 || e.Snapshot().Today.Water != 0 {
+		t.Fatalf("water should roll back on save failure, got %d", e.Snapshot().Today.Water)
+	}
+
+	// CompleteBreak fails and rolls back state & breaks count.
+	must(e.StartBreakNow())
+	snap, err = e.CompleteBreak(true)
+	if err == nil {
+		t.Fatal("expected CompleteBreak error when breaktimer.json is a directory")
+	}
+	if snap.State != StateBreak || snap.Today.Breaks != 0 || e.Snapshot().State != StateBreak {
+		t.Fatalf("CompleteBreak should roll back on save failure: %+v", e.Snapshot())
+	}
+
+	// UpdateConfig fails and rolls back config.
+	cfg := DefaultConfig()
+	cfg.WorkMinutes = 25
+	if err := e.UpdateConfig(cfg); err == nil {
+		t.Fatal("expected UpdateConfig error when breaktimer.json is a directory")
+	}
+	if got := e.Snapshot().Config.WorkMinutes; got != 45 {
+		t.Fatalf("config should roll back on save failure, got %d", got)
+	}
+}
+
+func TestSleepWakeDoesNotFireOverduePopup(t *testing.T) {
+	must := mustSnap(t)
+	clk := &fakeClock{t: time.Date(2026, 11, 16, 10, 0, 0, 0, time.Local)}
+	e := New(t.TempDir(), clk.Now)
+
+	must(e.Start())
 	e.Tick() // sets lastTick = 10:00:00
 
 	// Computer sleeps for 2 hours, missing the 10:45 break deadline.
@@ -186,7 +318,7 @@ func TestSleepWakeDoesNotFireOverduePopup(t *testing.T) {
 	}
 
 	// Computer sleeps during an active break past break deadline.
-	e.StartBreakNow()
+	must(e.StartBreakNow())
 	e.Tick()
 	clk.Advance(30 * time.Minute)
 	ev = e.Tick()
@@ -199,6 +331,7 @@ func TestSleepWakeDoesNotFireOverduePopup(t *testing.T) {
 }
 
 func TestAutoScheduleWeekdaysAndManualStop(t *testing.T) {
+	must := mustSnap(t)
 	// Start on Saturday 10:00 -> outside_hours when weekdays_only=true
 	clk := &fakeClock{t: time.Date(2026, 11, 21, 10, 0, 0, 0, time.Local)} // Saturday
 	e := New(t.TempDir(), clk.Now)
@@ -224,7 +357,7 @@ func TestAutoScheduleWeekdaysAndManualStop(t *testing.T) {
 	}
 
 	// Manual stop stays idle for the rest of today's window
-	if got := e.Stop().State; got != StateIdle {
+	if got := must(e.Stop()).State; got != StateIdle {
 		t.Fatalf("manual stop should go idle, got %s", got)
 	}
 	clk.Advance(time.Second)
@@ -272,6 +405,7 @@ func TestConfigValidationAndBilingualErrors(t *testing.T) {
 }
 
 func TestHistoryPrunesOldDays(t *testing.T) {
+	must := mustSnap(t)
 	clk := &fakeClock{t: time.Date(2026, 11, 21, 10, 0, 0, 0, time.Local)}
 	dir := t.TempDir()
 	// Pre-seed a 40-day-old entry
@@ -280,7 +414,7 @@ func TestHistoryPrunesOldDays(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(dir, clk.Now)
-	e.AddWater(1)
+	must(e.AddWater(1))
 
 	e2 := New(dir, clk.Now)
 	if _, ok := e2.days["2026-10-01"]; ok {

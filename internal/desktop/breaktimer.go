@@ -35,32 +35,39 @@ func (a *app) breakTimerRoutes(mux *http.ServeMux) {
 			writeError(w, a.msg("无效的请求", "Invalid request"))
 			return
 		}
-		var snap breaktimer.Snapshot
+		var (
+			snap breaktimer.Snapshot
+			err  error
+		)
 		switch in.Action {
 		case "start":
-			snap = a.breaks.Start()
+			snap, err = a.breaks.Start()
 		case "pause":
 			snap = a.breaks.Pause()
 		case "resume":
-			snap = a.breaks.Resume()
+			snap, err = a.breaks.Resume()
 		case "stop":
-			snap = a.breaks.Stop()
+			snap, err = a.breaks.Stop()
 		case "break_now":
-			snap = a.breaks.StartBreakNow()
+			snap, err = a.breaks.StartBreakNow()
 		case "complete":
-			snap = a.breaks.CompleteBreak(true)
+			snap, err = a.breaks.CompleteBreak(true)
 		case "complete_idle":
-			snap = a.breaks.CompleteBreak(false)
+			snap, err = a.breaks.CompleteBreak(false)
 		case "snooze":
-			snap = a.breaks.Snooze()
+			snap, err = a.breaks.Snooze()
 		case "skip":
-			snap = a.breaks.SkipBreak()
+			snap, err = a.breaks.SkipBreak()
 		case "water_add":
-			snap = a.breaks.AddWater(1)
+			snap, err = a.breaks.AddWater(1)
 		case "water_sub":
-			snap = a.breaks.AddWater(-1)
+			snap, err = a.breaks.AddWater(-1)
 		default:
 			writeError(w, a.msg("无效的操作", "Invalid action"))
+			return
+		}
+		if err != nil {
+			writeError(w, a.errText(err))
 			return
 		}
 		writeJSON(w, snap)

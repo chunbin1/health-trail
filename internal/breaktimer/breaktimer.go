@@ -4,6 +4,8 @@ package breaktimer
 
 import (
 	"encoding/json"
+	"log"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -86,8 +88,22 @@ type Event struct {
 }
 
 type persisted struct {
-	Config Config             `json:"config"`
-	Days   map[string]DayStat `json:"days,omitempty"`
+	Config            Config             `json:"config"`
+	Days              map[string]DayStat `json:"days,omitempty"`
+	ManualStoppedDate string             `json:"manual_stopped_date,omitempty"`
+}
+
+type engineBackup struct {
+	cfg                Config
+	days               map[string]DayStat
+	state              State
+	deadline           time.Time
+	totalSec           int
+	pausedFrom         State
+	pausedRemainingSec int
+	pausedTotalSec     int
+	manualStoppedDate  string
+	breakSeq           int
 }
 
 const (
@@ -153,12 +169,22 @@ func (e *Engine) Snapshot() Snapshot {
 }
 
 // Start starts (or restarts) a work countdown round.
-func (e *Engine) Start() Snapshot {
+func (e *Engine) Start() (Snapshot, error) {
 	e.mu.Lock()
 	now := e.currentWallTime()
+	backup := e.backupLocked()
 	wasBreak := e.inBreakLocked()
+	needSave := e.manualStoppedDate != ""
 	e.manualStoppedDate = ""
 	e.startWorkingLocked(now)
+	if needSave {
+		if err := e.saveLocked(); err != nil {
+			e.restoreLocked(backup)
+			snap := e.snapshotLocked(now)
+			e.mu.Unlock()
+			return snap, err
+		}
+	}
 	ev := Event{
 		Snapshot:  e.snapshotLocked(now),
 		HideBreak: wasBreak,
@@ -169,7 +195,7 @@ func (e *Engine) Start() Snapshot {
 	if cb != nil {
 		cb(ev)
 	}
-	return ev.Snapshot
+	return ev.Snapshot, nil
 }
 
 // Pause pauses an active work or break countdown.
@@ -203,14 +229,16 @@ func (e *Engine) Pause() Snapshot {
 }
 
 // Resume continues a paused countdown.
-func (e *Engine) Resume() Snapshot {
+func (e *Engine) Resume() (Snapshot, error) {
 	e.mu.Lock()
 	now := e.currentWallTime()
 	if e.state != StatePaused {
 		snap := e.snapshotLocked(now)
 		e.mu.Unlock()
-		return snap
+		return snap, nil
 	}
+	backup := e.backupLocked()
+	needSave := e.manualStoppedDate != ""
 	e.manualStoppedDate = ""
 	target := e.pausedFrom
 	if target != StateWorking && target != StateBreak {
@@ -234,6 +262,14 @@ func (e *Engine) Resume() Snapshot {
 	e.pausedFrom = ""
 	e.pausedRemainingSec = 0
 	e.pausedTotalSec = 0
+	if needSave {
+		if err := e.saveLocked(); err != nil {
+			e.restoreLocked(backup)
+			snap := e.snapshotLocked(now)
+			e.mu.Unlock()
+			return snap, err
+		}
+	}
 	ev := Event{
 		Snapshot: e.snapshotLocked(now),
 		NotifyUI: true,
@@ -243,24 +279,36 @@ func (e *Engine) Resume() Snapshot {
 	if cb != nil {
 		cb(ev)
 	}
-	return ev.Snapshot
+	return ev.Snapshot, nil
 }
 
 // Stop stops the active timer and returns to idle (or outside_hours).
-func (e *Engine) Stop() Snapshot {
+func (e *Engine) Stop() (Snapshot, error) {
 	e.mu.Lock()
 	now := e.currentWallTime()
+	backup := e.backupLocked()
 	wasBreak := e.inBreakLocked()
+	prevStopped := e.manualStoppedDate
 	e.clearTimerLocked()
 	if e.cfg.AutoSchedule {
 		if inSchedule(e.cfg, now) {
 			e.manualStoppedDate = dateStr(now)
 			e.state = StateIdle
 		} else {
+			e.manualStoppedDate = ""
 			e.state = StateOutsideHours
 		}
 	} else {
+		e.manualStoppedDate = ""
 		e.state = StateIdle
+	}
+	if e.manualStoppedDate != prevStopped {
+		if err := e.saveLocked(); err != nil {
+			e.restoreLocked(backup)
+			snap := e.snapshotLocked(now)
+			e.mu.Unlock()
+			return snap, err
+		}
 	}
 	ev := Event{
 		Snapshot:  e.snapshotLocked(now),
@@ -272,13 +320,15 @@ func (e *Engine) Stop() Snapshot {
 	if cb != nil {
 		cb(ev)
 	}
-	return ev.Snapshot
+	return ev.Snapshot, nil
 }
 
 // StartBreakNow transitions immediately into a break session.
-func (e *Engine) StartBreakNow() Snapshot {
+func (e *Engine) StartBreakNow() (Snapshot, error) {
 	e.mu.Lock()
 	now := e.currentWallTime()
+	backup := e.backupLocked()
+	needSave := e.manualStoppedDate != ""
 	e.manualStoppedDate = ""
 	e.state = StateBreak
 	e.totalSec = e.cfg.BreakMinutes * 60
@@ -287,6 +337,14 @@ func (e *Engine) StartBreakNow() Snapshot {
 	e.pausedRemainingSec = 0
 	e.pausedTotalSec = 0
 	e.breakSeq++
+	if needSave {
+		if err := e.saveLocked(); err != nil {
+			e.restoreLocked(backup)
+			snap := e.snapshotLocked(now)
+			e.mu.Unlock()
+			return snap, err
+		}
+	}
 	ev := Event{
 		Snapshot:  e.snapshotLocked(now),
 		OpenBreak: e.cfg.PopupEnabled,
@@ -297,25 +355,25 @@ func (e *Engine) StartBreakNow() Snapshot {
 	if cb != nil {
 		cb(ev)
 	}
-	return ev.Snapshot
+	return ev.Snapshot, nil
 }
 
 // CompleteBreak marks the current break completed (+1 break count), hides the
 // break window, and either starts the next work round or returns to idle.
-func (e *Engine) CompleteBreak(startNext bool) Snapshot {
+func (e *Engine) CompleteBreak(startNext bool) (Snapshot, error) {
 	e.mu.Lock()
 	now := e.currentWallTime()
 	if !e.inBreakLocked() {
 		snap := e.snapshotLocked(now)
 		e.mu.Unlock()
-		return snap
+		return snap, nil
 	}
+	backup := e.backupLocked()
 	today := dateStr(now)
 	st := e.days[today]
 	st.Date = today
 	st.Breaks++
 	e.days[today] = st
-	e.pruneAndSaveLocked(now)
 
 	e.clearTimerLocked()
 	if startNext {
@@ -330,10 +388,18 @@ func (e *Engine) CompleteBreak(startNext bool) Snapshot {
 			e.manualStoppedDate = today
 			e.state = StateIdle
 		} else if e.cfg.AutoSchedule {
+			e.manualStoppedDate = ""
 			e.state = StateOutsideHours
 		} else {
+			e.manualStoppedDate = ""
 			e.state = StateIdle
 		}
+	}
+	if err := e.pruneAndSaveLocked(now); err != nil {
+		e.restoreLocked(backup)
+		snap := e.snapshotLocked(now)
+		e.mu.Unlock()
+		return snap, err
 	}
 	ev := Event{
 		Snapshot:  e.snapshotLocked(now),
@@ -345,22 +411,24 @@ func (e *Engine) CompleteBreak(startNext bool) Snapshot {
 	if cb != nil {
 		cb(ev)
 	}
-	return ev.Snapshot
+	return ev.Snapshot, nil
 }
 
 // Snooze postpones the current break (or extends the current work countdown)
-// by Config.SnoozeMinutes.
-func (e *Engine) Snooze() Snapshot {
+// by Config.SnoozeMinutes. It is a no-op once a break has finished (break_done).
+func (e *Engine) Snooze() (Snapshot, error) {
 	e.mu.Lock()
 	now := e.currentWallTime()
-	if e.state == StateIdle || e.state == StateOutsideHours {
+	if e.state == StateIdle || e.state == StateOutsideHours || e.state == StateBreakDone {
 		snap := e.snapshotLocked(now)
 		e.mu.Unlock()
-		return snap
+		return snap, nil
 	}
+	backup := e.backupLocked()
 	snoozeSec := e.cfg.SnoozeMinutes * 60
 	snoozeDur := time.Duration(snoozeSec) * time.Second
 	wasBreak := e.inBreakLocked()
+	needSave := e.manualStoppedDate != ""
 	e.manualStoppedDate = ""
 
 	switch {
@@ -382,6 +450,15 @@ func (e *Engine) Snooze() Snapshot {
 		e.pausedTotalSec += snoozeSec
 	}
 
+	if needSave {
+		if err := e.saveLocked(); err != nil {
+			e.restoreLocked(backup)
+			snap := e.snapshotLocked(now)
+			e.mu.Unlock()
+			return snap, err
+		}
+	}
+
 	ev := Event{
 		Snapshot:  e.snapshotLocked(now),
 		HideBreak: wasBreak,
@@ -392,25 +469,35 @@ func (e *Engine) Snooze() Snapshot {
 	if cb != nil {
 		cb(ev)
 	}
-	return ev.Snapshot
+	return ev.Snapshot, nil
 }
 
 // SkipBreak dismisses the current break without counting it and returns to
 // a fresh work round (or outside_hours if outside the auto-schedule window).
-func (e *Engine) SkipBreak() Snapshot {
+func (e *Engine) SkipBreak() (Snapshot, error) {
 	e.mu.Lock()
 	now := e.currentWallTime()
 	if !e.inBreakLocked() {
 		snap := e.snapshotLocked(now)
 		e.mu.Unlock()
-		return snap
+		return snap, nil
 	}
+	backup := e.backupLocked()
+	needSave := e.manualStoppedDate != ""
 	e.clearTimerLocked()
 	e.manualStoppedDate = ""
 	if e.cfg.AutoSchedule && !inSchedule(e.cfg, now) {
 		e.state = StateOutsideHours
 	} else {
 		e.startWorkingLocked(now)
+	}
+	if needSave {
+		if err := e.saveLocked(); err != nil {
+			e.restoreLocked(backup)
+			snap := e.snapshotLocked(now)
+			e.mu.Unlock()
+			return snap, err
+		}
 	}
 	ev := Event{
 		Snapshot:  e.snapshotLocked(now),
@@ -422,13 +509,14 @@ func (e *Engine) SkipBreak() Snapshot {
 	if cb != nil {
 		cb(ev)
 	}
-	return ev.Snapshot
+	return ev.Snapshot, nil
 }
 
 // AddWater adjusts today's water cup count by delta (clamped at 0).
-func (e *Engine) AddWater(delta int) Snapshot {
+func (e *Engine) AddWater(delta int) (Snapshot, error) {
 	e.mu.Lock()
 	now := e.currentWallTime()
+	backup := e.backupLocked()
 	today := dateStr(now)
 	st := e.days[today]
 	st.Date = today
@@ -437,7 +525,12 @@ func (e *Engine) AddWater(delta int) Snapshot {
 		st.Water = 0
 	}
 	e.days[today] = st
-	e.pruneAndSaveLocked(now)
+	if err := e.pruneAndSaveLocked(now); err != nil {
+		e.restoreLocked(backup)
+		snap := e.snapshotLocked(now)
+		e.mu.Unlock()
+		return snap, err
+	}
 
 	ev := Event{
 		Snapshot: e.snapshotLocked(now),
@@ -448,7 +541,7 @@ func (e *Engine) AddWater(delta int) Snapshot {
 	if cb != nil {
 		cb(ev)
 	}
-	return ev.Snapshot
+	return ev.Snapshot, nil
 }
 
 // UpdateConfig validates, persists, and applies a new Config.
@@ -458,6 +551,7 @@ func (e *Engine) UpdateConfig(cfg Config) error {
 	}
 	e.mu.Lock()
 	now := e.currentWallTime()
+	backup := e.backupLocked()
 	prev := e.cfg
 	e.cfg = cfg
 
@@ -468,7 +562,11 @@ func (e *Engine) UpdateConfig(cfg Config) error {
 		e.state = StateIdle
 	}
 	e.applyScheduleLocked(now)
-	e.saveLocked()
+	if err := e.saveLocked(); err != nil {
+		e.restoreLocked(backup)
+		e.mu.Unlock()
+		return err
+	}
 
 	ev := Event{
 		Snapshot: e.snapshotLocked(now),
@@ -646,17 +744,55 @@ func (e *Engine) snapshotLocked(now time.Time) Snapshot {
 	}
 }
 
+func (e *Engine) backupLocked() engineBackup {
+	return engineBackup{
+		cfg:                e.cfg,
+		days:               maps.Clone(e.days),
+		state:              e.state,
+		deadline:           e.deadline,
+		totalSec:           e.totalSec,
+		pausedFrom:         e.pausedFrom,
+		pausedRemainingSec: e.pausedRemainingSec,
+		pausedTotalSec:     e.pausedTotalSec,
+		manualStoppedDate:  e.manualStoppedDate,
+		breakSeq:           e.breakSeq,
+	}
+}
+
+func (e *Engine) restoreLocked(b engineBackup) {
+	e.cfg = b.cfg
+	e.days = b.days
+	if e.days == nil {
+		e.days = map[string]DayStat{}
+	}
+	e.state = b.state
+	e.deadline = b.deadline
+	e.totalSec = b.totalSec
+	e.pausedFrom = b.pausedFrom
+	e.pausedRemainingSec = b.pausedRemainingSec
+	e.pausedTotalSec = b.pausedTotalSec
+	e.manualStoppedDate = b.manualStoppedDate
+	e.breakSeq = b.breakSeq
+}
+
 func (e *Engine) load() {
 	b, err := os.ReadFile(e.path)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("读取休息提醒数据失败：%v", err)
+		}
 		return
 	}
 	p := persisted{Config: DefaultConfig()}
 	if err := json.Unmarshal(b, &p); err != nil {
+		log.Printf("解析休息提醒数据失败：%v", err)
 		return
 	}
 	if validateConfig(p.Config) == nil {
 		e.cfg = p.Config
+	}
+	if p.ManualStoppedDate == dateStr(e.currentWallTime()) {
+		e.manualStoppedDate = p.ManualStoppedDate
 	}
 	for k, v := range p.Days {
 		if k != "" && (v.Breaks > 0 || v.Water > 0) {
@@ -666,29 +802,40 @@ func (e *Engine) load() {
 	}
 }
 
-func (e *Engine) pruneAndSaveLocked(now time.Time) {
+func (e *Engine) pruneAndSaveLocked(now time.Time) error {
 	cutoff := dateStr(now.AddDate(0, 0, -(historyRetainDays - 1)))
 	for k, v := range e.days {
 		if k < cutoff || (v.Breaks == 0 && v.Water == 0) {
 			delete(e.days, k)
 		}
 	}
-	e.saveLocked()
+	return e.saveLocked()
 }
 
-func (e *Engine) saveLocked() {
+func (e *Engine) saveLocked() error {
 	if e.path == "" {
-		return
+		return nil
 	}
-	b, err := json.MarshalIndent(persisted{Config: e.cfg, Days: e.days}, "", "  ")
+	b, err := json.MarshalIndent(persisted{
+		Config:            e.cfg,
+		Days:              e.days,
+		ManualStoppedDate: e.manualStoppedDate,
+	}, "", "  ")
 	if err != nil {
-		return
+		log.Printf("序列化休息提醒数据失败：%v", err)
+		return msg.Errorf("保存休息提醒数据失败：%v", "Failed to save break timer data: %v", err)
 	}
 	tmp := e.path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return
+		log.Printf("写入休息提醒数据失败：%v", err)
+		return msg.Errorf("保存休息提醒数据失败：%v", "Failed to save break timer data: %v", err)
 	}
-	_ = os.Rename(tmp, e.path)
+	if err := os.Rename(tmp, e.path); err != nil {
+		_ = os.Remove(tmp)
+		log.Printf("保存休息提醒数据失败：%v", err)
+		return msg.Errorf("保存休息提醒数据失败：%v", "Failed to save break timer data: %v", err)
+	}
+	return nil
 }
 
 func validateConfig(cfg Config) error {

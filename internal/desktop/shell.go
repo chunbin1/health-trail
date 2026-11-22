@@ -34,6 +34,7 @@ type shell struct {
 	breakStatus   *application.MenuItem
 	breakToggle   *application.MenuItem
 	breakAction   *application.MenuItem
+	breakIdle     *application.MenuItem
 	breakSnooze   *application.MenuItem
 	breakWater    *application.MenuItem
 	open          *application.MenuItem
@@ -69,11 +70,20 @@ func newShell(wapp *application.App, win *application.WebviewWindow, lang func()
 		s.breakAction = s.menu.Add("").OnClick(func(*application.Context) {
 			go s.triggerBreakAction()
 		})
+		s.breakIdle = s.menu.Add("").OnClick(func(*application.Context) {
+			go func() {
+				_, _ = s.breaks.CompleteBreak(false)
+			}()
+		})
 		s.breakSnooze = s.menu.Add("").OnClick(func(*application.Context) {
-			go s.breaks.Snooze()
+			go func() {
+				_, _ = s.breaks.Snooze()
+			}()
 		})
 		s.breakWater = s.menu.Add("").OnClick(func(*application.Context) {
-			go s.breaks.AddWater(1)
+			go func() {
+				_, _ = s.breaks.AddWater(1)
+			}()
 		})
 		s.menu.AddSeparator()
 		s.breakSnap = breaks.Snapshot()
@@ -226,9 +236,9 @@ func (s *shell) toggleBreakTimer() {
 	case breaktimer.StateWorking, breaktimer.StateBreak:
 		s.breaks.Pause()
 	case breaktimer.StatePaused:
-		s.breaks.Resume()
+		_, _ = s.breaks.Resume()
 	default:
-		s.breaks.Start()
+		_, _ = s.breaks.Start()
 	}
 }
 
@@ -238,9 +248,9 @@ func (s *shell) triggerBreakAction() {
 	}
 	switch s.breaks.Snapshot().State {
 	case breaktimer.StateBreak, breaktimer.StateBreakDone:
-		s.breaks.CompleteBreak(true)
+		_, _ = s.breaks.CompleteBreak(true)
 	default:
-		s.breaks.StartBreakNow()
+		_, _ = s.breaks.StartBreakNow()
 	}
 }
 
@@ -369,7 +379,10 @@ func (s *shell) applyBreakMenuLocked(snap breaktimer.Snapshot, en bool) {
 		s.breakAction.SetLabel(pick("现在休息", "Take a break now"))
 	}
 
-	hideSnooze := snap.State == breaktimer.StateIdle || snap.State == breaktimer.StateOutsideHours
+	s.breakIdle.SetLabel(pick("暂不开始", "Not now"))
+	s.breakIdle.SetHidden(snap.State != breaktimer.StateBreakDone)
+
+	hideSnooze := snap.State == breaktimer.StateIdle || snap.State == breaktimer.StateOutsideHours || snap.State == breaktimer.StateBreakDone
 	s.breakSnooze.SetHidden(hideSnooze)
 	s.breakSnooze.SetLabel(fmt.Sprintf(pick("推迟 %d 分钟", "Snooze %d min"), snap.Config.SnoozeMinutes))
 	s.breakWater.SetLabel(pick("记一杯水 (+1)", "Log 1 cup (+1)"))
