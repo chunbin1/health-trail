@@ -314,7 +314,7 @@ export function LabTable({ rows, onPick }: { rows: Rec[]; onPick?: (name: string
   }
   return (
     <div className="table-wrap">
-      <table className="data">
+      <table className="data lab-tbl">
         <thead><tr><th>{t('项目')}</th><th>{t('结果')}</th><th style={{ width: '28%' }}>{t('参考范围')}</th><th className="nowrap" /></tr></thead>
         <tbody>
           {[...groups.entries()].map(([panel, rs]) => [

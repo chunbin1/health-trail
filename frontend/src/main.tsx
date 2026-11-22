@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { api, type Schema } from './api'
 import { App } from './App'
 import { setLang, storedLang, t, type Lang } from './i18n'
+import { isIOSApp, markIOSBackend } from './ios'
 import { BreakOverlay } from './pages/BreakOverlay'
 import { AppProvider } from './state'
 import './styles.css'
@@ -21,6 +22,7 @@ if (shell === 'mac') {
 }
 // The Windows window keeps its title bar, which already names the app.
 if (shell === 'win') document.documentElement.classList.add('win-window')
+if (shell === 'ios' || isIOSApp()) document.documentElement.classList.add('ios-app')
 const view = params.get('view')
 
 // The language is kept in the data folder's settings (so the window, the
@@ -34,6 +36,7 @@ function Root() {
     setLang(storedLang())
     Promise.all([api.schema(), api.info().catch(() => null)])
       .then(([s, info]) => {
+        if (info?.mobile || info?.platform === 'ios') markIOSBackend(true)
         const l: Lang = info ? (info.lang === 'en' ? 'en' : 'zh') : storedLang()
         setLang(l, s)
         setLangState(l)

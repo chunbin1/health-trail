@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
-import { Check, ImagePlus, Mic, SendHorizontal, Trash2, X } from 'lucide-react'
+import { Check, ChevronLeft, ImagePlus, Mic, SendHorizontal, Trash2, X } from 'lucide-react'
 import { api, ApiError, fmtDate, today, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft, type ToolStep } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
 import { AssistantSetup } from '../components/AssistantSetup'
 import { ask } from '../components/Dialog'
 import { t, tx } from '../i18n'
+import { hasIOSSpeech, isIOSApp, startIOSSpeech, stopIOSSpeech, subscribeIOSSpeech } from '../ios'
 import { openRecord, useApp, useLoad } from '../state'
 import { habitIcon, IconButton, KindIcon } from '../ui'
 
@@ -199,8 +200,18 @@ function SaveMode({ auto, onChange }: { auto: boolean; onChange: (on: boolean) =
   )
 }
 
-export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => void } = {}) {
-  const { entity, changed, toast } = useApp()
+function joinSpeech(prefix: string, spoken: string): string {
+  if (!prefix) return spoken
+  if (!spoken) return prefix
+  const sep = /[\s\u3000-\u303f\uff00-\uffef\u4e00-\u9fff]$/.test(prefix) ? '' : ' '
+  return prefix + sep + spoken
+}
+
+export function Capture({ panel, onClose, onBack }: { panel?: boolean; onClose?: () => void; onBack?: () => void } = {}) {
+  const { entity, changed, toast, lang } = useApp()
+  const nativeSpeech = hasIOSSpeech()
+  const speechPrefixRef = useRef('')
+  const listeningRef = useRef(false)
   const { data, error, reload } = useLoad(() => api.assistant(), [])
   const kept = useRef(loadCapture()).current
   const [cfg, setCfg] = useState<AssistantConfig | null>(null)
@@ -332,7 +343,47 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   }, [pendingId])
 
   useEffect(() => {
-    if (!listening) return
+    listeningRef.current = listening
+  }, [listening])
+
+  useEffect(() => {
+    if (!nativeSpeech) return
+    const unsub = subscribeIOSSpeech((ev) => {
+      switch (ev.type) {
+        case 'started':
+          setListening(true)
+          setMicBusy(false)
+          setErr('')
+          break
+        case 'partial':
+          if (ev.text != null) writeText(joinSpeech(speechPrefixRef.current, ev.text))
+          break
+        case 'final':
+          if (ev.text != null) writeText(joinSpeech(speechPrefixRef.current, ev.text))
+          setListening(false)
+          setMicBusy(false)
+          break
+        case 'stopped':
+          if (ev.text) writeText(joinSpeech(speechPrefixRef.current, ev.text))
+          setListening(false)
+          setMicBusy(false)
+          break
+        case 'error':
+          if (ev.error) setErr(ev.error)
+          setListening(false)
+          setMicBusy(false)
+          break
+      }
+    })
+    return () => {
+      unsub()
+      if (listeningRef.current) stopIOSSpeech()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nativeSpeech])
+
+  useEffect(() => {
+    if (!listening || nativeSpeech) return
     const id = setInterval(() => {
       api.speech().then((s) => {
         if (s.text) writeText(s.text)
@@ -341,7 +392,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       }, () => {})
     }, 400)
     return () => clearInterval(id)
-  }, [listening])
+  }, [listening, nativeSpeech])
 
   useEffect(() => {
     if (!menu) return
@@ -414,7 +465,23 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
   }
 
   async function mic() {
-    if (micBusy || waiting) return
+    if ((micBusy && !listening) || waiting) return
+    if (nativeSpeech) {
+      setErr('')
+      if (!listening) {
+        speechPrefixRef.current = textRef.current
+        setMicBusy(true)
+        if (!startIOSSpeech(lang)) {
+          setMicBusy(false)
+          setErr(t('语音识别不可用'))
+        }
+      } else {
+        stopIOSSpeech()
+        setListening(false)
+        setMicBusy(false)
+      }
+      return
+    }
     setMicBusy(true)
     setErr('')
     try {
@@ -441,9 +508,14 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
     setErr('')
     let said = textRef.current
     if (listening) {
-      const s = await api.speechStop()
-      setListening(false)
-      if (s.text) said = s.text
+      if (nativeSpeech) {
+        stopIOSSpeech()
+        setListening(false)
+      } else {
+        const s = await api.speechStop()
+        setListening(false)
+        if (s.text) said = s.text
+      }
     }
     said = said.trim()
     if (!said && !pics.length) {
@@ -746,6 +818,12 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
       )}
       <div className="chat-main">
       <div className="page-head">
+        {!panel && onBack && (
+          <button type="button" className="mobile-back-btn icon-only phone-only" aria-label={t('返回')}
+            onClick={() => { if (past) setPast(null); else onBack() }}>
+            <ChevronLeft size={20} />
+          </button>
+        )}
         <div className="titles">
           <h1>{t('AI助手')}</h1>
           <div className="sub">{t('像聊天一样说，也可以问档案里的任何记录，或发化验单、处方的照片。要记下的内容，自动保存开着时会写入档案；健康问题、用药建议和对已有记录的修改不会自动写入，要点保存。')}</div>
@@ -772,7 +850,13 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
         </div>
         {(!view.configured || showSetup) && (
           <section className="card">
-            {!view.configured && <p className="sub" style={{ marginTop: 0 }}>{t('还没有设置接口。照着下面的步骤拿到密钥，就可以在这里说话或打字记档案。')}</p>}
+            {!view.configured && (
+              <p className="sub" style={{ marginTop: 0 }}>
+                {isIOSApp()
+                  ? t('还没有设置接口。填入你已有的 API 密钥，就可以在这里打字或发照片记档案。')
+                  : t('还没有设置接口。照着下面的步骤拿到密钥，就可以在这里说话或打字记档案。')}
+              </p>
+            )}
             <AssistantSetup cfg={view} onSaved={(c, ok) => { setCfg(c); setShowSetup(!ok); reload() }} onCancel={view.configured ? () => setShowSetup(false) : undefined} />
           </section>
         )}
@@ -898,7 +982,7 @@ export function Capture({ panel, onClose }: { panel?: boolean; onClose?: () => v
                   aria-label={t('添加图片')} title={t('添加图片')}>
                   <ImagePlus size={15} />
                 </button>
-                {view.speech && (
+                {(nativeSpeech || view.speech) && (
                   <button type="button" className={'btn sm sq' + (listening ? ' primary' : '')} disabled={(micBusy && !listening) || waiting} onClick={mic}
                     aria-label={micLabel} title={micLabel} aria-pressed={listening}>
                     <Mic size={15} />

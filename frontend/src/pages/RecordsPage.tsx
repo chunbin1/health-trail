@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, X } from 'lucide-react'
 import { api, fmtDate, fmtMonth, fmtNum, flagClass, metricValue, today, type Entity, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { Modal } from '../components/Modal'
 import { isEN, noun, t, tr, tx, type Key } from '../i18n'
-import { openRecord, recTitle, useApp, useLoad, useRefOptions } from '../state'
+import { dismissKeyboard, openRecord, recTitle, useApp, useLoad, useRefOptions } from '../state'
 import { Empty, KIND, KindIcon, kindStyle } from '../ui'
 
 const SUBTITLE: Record<string, Key> = {
@@ -40,9 +40,16 @@ export function RecordsPage({ entityName, end }: { entityName: string; end?: Rea
         {end}
       </div>
       <div className="row page-tools" style={{ gap: 12 }}>
-        <div className="input-search">
+        <div className={'input-search' + (q ? ' has-clear' : '')}>
           <Search size={15} />
-          <input className="input" placeholder={t('搜索{label}', { label: plural(e) })} value={q} onChange={(ev) => setQ(ev.target.value)} />
+          <input className="input" type="search" enterKeyHint="search" placeholder={t('搜索{label}', { label: plural(e) })} value={q}
+            onChange={(ev) => setQ(ev.target.value)}
+            onKeyDown={(ev) => { if (ev.key === 'Enter') dismissKeyboard() }} />
+          {q && (
+            <button type="button" className="input-clear" aria-label={t('清空')} onClick={() => setQ('')}>
+              <X size={16} />
+            </button>
+          )}
         </div>
         {statusField && (
           <div className="seg">

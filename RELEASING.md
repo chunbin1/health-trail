@@ -165,3 +165,48 @@ Windows 用 `make win`，得到 `health-trail.exe`。必须带 `-H windowsgui`�
 ## 证书到期
 
 Developer ID Application 证书的到期日，在「钥匙串访问」里双击证书就能看到。到期前，按上面的方法重新申请一张，再更新 `DEVELOPER_ID_P12` 和 `DEVELOPER_ID_P12_PASSWORD`。已经发出去的版本不受影响：签名带了时间戳，公证也有记录。
+
+## iOS 版：App Store / TestFlight 发布
+
+iOS 版（Bundle ID `com.chunbin1.healthtrail`）通过独立的 GitHub Actions 工作流 `.github/workflows/ios-release.yml` 自动编译 `HealthTrailCore.xcframework`、签名打包 `.ipa` 并上传到 App Store Connect / TestFlight，与桌面版 `release.yml` 互相独立、互不阻塞。
+
+每次推送分支时，`ci.yml` 里的 `ios` 任务也会自动跑 `go test ./mobile/...`、编译 `HealthTrailCore.xcframework` 并做一次无签名 Release archive 校验。
+
+### 1. 准备 GitHub Secrets
+
+- **Apple Distribution 证书（必填）**：
+  1. 打开「钥匙串访问」→「登录」→「我的证书」，找到 `Apple Distribution: … (XU4K6FP3HC)`（如果没有，在 Xcode → Settings → Accounts → Manage Certificates 里点 `+` 创建一张 Apple Distribution）。
+  2. 右键导出为 `.p12` 并设置密码，然后写入 GitHub Secrets：
+     ```bash
+     base64 -i ~/Desktop/ios-distribution.p12 | gh secret set IOS_DIST_P12
+     gh secret set IOS_DIST_P12_PASSWORD
+     ```
+  3. 导出后把 `.p12` 备份到密码管理器并从桌面删掉。
+- **App Store Connect API 密钥**：
+  - 工作流优先读取 `IOS_ASC_KEY`、`IOS_ASC_KEY_ID`、`IOS_ASC_ISSUER_ID`；如果未单独设置，会自动复用桌面公证用的 `NOTARY_KEY`、`NOTARY_KEY_ID`、`NOTARY_ISSUER_ID`。
+  - 注意：自动拉取描述文件（`-allowProvisioningUpdates`）并上传 TestFlight 需要该 API 密钥具有 **App Manager**（或 Admin）权限。如果原来的 `NOTARY_KEY` 只有 Developer 权限，建议在 App Store Connect → 集成 → App Store Connect API 新建一把 App Manager 权限的密钥并配置到 `IOS_ASC_KEY*`。
+
+### 2. App Store Connect 首次配置
+
+1. 打开 https://appstoreconnect.apple.com →「App」→ 进入已有的「Health Trail - 健康足迹」（Bundle ID `com.chunbin1.healthtrail`）。
+2. 在左侧栏点「+ 添加平台」→ 选择 **iOS**（与现有记录共用同一个 Bundle ID，首次上传前只需建好平台记录即可）。
+
+### 3. 触发 TestFlight 上传
+
+- **手动触发（推荐先用这个）**：
+  ```bash
+  # 正式打包并上传到 TestFlight
+  gh workflow run ios-release.yml -f version=1.0.0 -f upload=true
+
+  # 仅验证打包、不上传（干跑）
+  gh workflow run ios-release.yml -f version=1.0.0 -f upload=false
+  ```
+- **打标签触发**：推送 `ios-v1.0.0`（或随桌面版推送 `v1.x.x`）。推送 `v*` 标签时如果尚未配置 `IOS_DIST_P12`，工作流会自动跳过并给出提示，不会导致发布标红。
+- 上传完成后，几分钟内构建版本会出现在 App Store Connect → TestFlight 中，可供内部测试或提交 App Store 审核。
+
+### 4. 本机校验命令
+
+```bash
+make ios-core              # 编译前端并生成 ios/Frameworks/HealthTrailCore.xcframework
+make ios-archive-unsigned  # 本机执行无签名 iOS Release archive（产物在 dist/HealthTrail-ios.xcarchive）
+```

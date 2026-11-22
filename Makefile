@@ -43,7 +43,7 @@ DMG     := $(DIST)/HealthTrail-$(VERSION).dmg
 # what the app downloads to update itself (internal/update)
 ZIP     := $(DIST)/HealthTrail-$(VERSION).zip
 
-.PHONY: all ui bin app appstore-test dmg notarize test test-window dev dev-real win win-icon clean
+.PHONY: all ui bin app appstore-test dmg notarize test test-window dev dev-real win win-icon ios-core ios-archive-unsigned clean
 
 all: bin
 
@@ -149,5 +149,27 @@ dev-real: frontend/node_modules
 	@test -d frontend/dist || $(MAKE) ui
 	@./scripts/dev.sh --real
 
+ios-core: ui
+	./scripts/build_ios_core.sh
+
+ios-archive-unsigned: ios-core
+	@DEV_DIR="$${DEVELOPER_DIR:-}"; \
+	if [ -z "$$DEV_DIR" ]; then \
+		CUR="$$(xcode-select -p 2>/dev/null || true)"; \
+		case "$$CUR" in *Xcode*.app*) ;; *) [ -d /Applications/Xcode.app/Contents/Developer ] && DEV_DIR=/Applications/Xcode.app/Contents/Developer ;; esac; \
+	fi; \
+	mkdir -p "$(DIST)"; \
+	rm -rf "$(DIST)/HealthTrail-ios.xcarchive"; \
+	DEVELOPER_DIR="$$DEV_DIR" xcodebuild \
+		-project ios/HealthTrail.xcodeproj \
+		-scheme HealthTrail \
+		-configuration Release \
+		-destination 'generic/platform=iOS' \
+		-archivePath "$(DIST)/HealthTrail-ios.xcarchive" \
+		archive \
+		CODE_SIGNING_ALLOWED=NO \
+		MARKETING_VERSION="$(VERSION)" \
+		CURRENT_PROJECT_VERSION=1
+
 clean:
-	rm -rf health-trail "$(APP)" "$(TEST_APP)" "$(DIST)" frontend/dist
+	rm -rf health-trail "$(APP)" "$(TEST_APP)" "$(DIST)" frontend/dist ios/build

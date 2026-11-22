@@ -48,10 +48,16 @@ function parse(): Route {
   return { page }
 }
 
+let drawerHistoryDepth = 0
+
 export function useRoute(): [Route, (r: Route) => void] {
   const [route, setRoute] = useState(parse)
   useEffect(() => {
-    const on = () => setRoute(parse())
+    const on = () => {
+      const next = parse()
+      if (!next.open) drawerHistoryDepth = 0
+      setRoute(next)
+    }
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
   }, [])
@@ -70,12 +76,36 @@ export function hashParam(k: string) {
 
 export function openRecord(entity: string, id: number) {
   const page = currentPage()
+  drawerHistoryDepth += 1
   location.hash = `/${page}/${entity}/${id}`
 }
 
 export function closeRecord() {
+  if (drawerHistoryDepth > 0) {
+    drawerHistoryDepth -= 1
+    history.back()
+    return
+  }
   const page = currentPage()
   location.hash = '/' + page
+}
+
+export function dismissKeyboard() {
+  const el = document.activeElement
+  if (el instanceof HTMLElement) el.blur()
+}
+
+let bodyLocks = 0
+export function useBodyLock(active: boolean) {
+  useEffect(() => {
+    if (!active) return
+    bodyLocks += 1
+    document.body.classList.add('scroll-locked')
+    return () => {
+      bodyLocks = Math.max(0, bodyLocks - 1)
+      if (bodyLocks === 0) document.body.classList.remove('scroll-locked')
+    }
+  }, [active])
 }
 
 // ---- data loading

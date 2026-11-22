@@ -1,10 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { Search, TestTube2 } from 'lucide-react'
+import { Search, TestTube2, X } from 'lucide-react'
 import { api, flagClass, fmtDate, fmtNum } from '../api'
 import { LineChart } from '../components/LineChart'
 import { LabValue } from '../components/RecordDrawer'
 import { t, tr } from '../i18n'
-import { hashParam, openRecord, useLoad } from '../state'
+import { dismissKeyboard, hashParam, openRecord, useLoad } from '../state'
 import { Empty, KindIcon, RangeBar } from '../ui'
 import { RecordsPage } from './RecordsPage'
 
@@ -65,9 +65,16 @@ function Trends() {
   return (
     <div className="split">
       <section className="card flush" style={{ padding: '12px 0 6px' }}>
-        <div className="input-search" style={{ maxWidth: 'none', margin: '0 12px 6px' }}>
+        <div className={'input-search' + (q ? ' has-clear' : '')} style={{ maxWidth: 'none', margin: '0 12px 6px' }}>
           <Search size={15} />
-          <input className="input" placeholder={t('找指标，如 白细胞')} value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input" type="search" enterKeyHint="search" placeholder={t('找指标，如 白细胞')} value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') dismissKeyboard() }} />
+          {q && (
+            <button type="button" className="input-clear" aria-label={t('清空')} onClick={() => setQ('')}>
+              <X size={16} />
+            </button>
+          )}
         </div>
         <div className="list" style={{ maxHeight: '68vh', overflowY: 'auto' }}>
           {shown.map((i) => (
@@ -96,7 +103,7 @@ function Trends() {
             <LineChart unit={latest?.unit} low={latest?.ref_low} high={latest?.ref_high}
               points={exact.filter((x) => x.value_num != null).map((x) => ({ date: x.test_date, v: x.value_num, flag: x.flag }))} />
           )}
-          <table className="data" style={{ marginTop: 16 }}>
+          <table className="data lab-tbl" style={{ marginTop: 16 }}>
             <thead><tr><th>{t('日期')}</th><th>{t('结果')}</th><th style={{ width: '30%' }} /><th>{t('报告')}</th></tr></thead>
             <tbody>
               {[...exact].reverse().map((x) => (

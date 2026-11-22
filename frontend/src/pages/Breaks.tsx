@@ -3,6 +3,7 @@ import { Clock, Coffee, Droplets, Pause, Play, RotateCcw, SkipForward, Volume2 }
 import type { BreakTimerConfig } from '../api'
 import { BreakRing } from '../components/BreakRing'
 import { t } from '../i18n'
+import { isIOSApp } from '../ios'
 import { Switch } from '../ui'
 import { playChime } from '../utils/chime'
 import { useBreakTimer } from '../utils/useBreakTimer'
@@ -41,6 +42,7 @@ export function Breaks() {
     )
   }
 
+  const ios = isIOSApp()
   const { state, total_sec, today, history, config } = snap
 
   const statusText = (() => {
@@ -70,7 +72,7 @@ export function Breaks() {
           end: config.schedule_end,
         })
       default:
-        return t('点击「开始专注」，菜单栏会同步显示倒计时。')
+        return ios ? t('点击「开始专注」，开始本轮工作与休息倒计时。') : t('点击「开始专注」，菜单栏会同步显示倒计时。')
     }
   })()
 
@@ -381,29 +383,33 @@ export function Breaks() {
             </div>
 
             <div>
-              <div className="break-setting-row">
-                <div className="break-setting-info">
-                  <div className="break-setting-title">{t('菜单栏显示倒计时')}</div>
-                  <div className="break-setting-sub">{t('Mac 菜单栏实时显示剩余时间，Windows 悬停托盘图标可见')}</div>
-                </div>
-                <Switch
-                  checked={draft.menu_bar_countdown}
-                  onChange={(v) => { void toggleSwitch('menu_bar_countdown', v) }}
-                  label={t('菜单栏显示倒计时')}
-                />
-              </div>
+              {!ios && (
+                <>
+                  <div className="break-setting-row">
+                    <div className="break-setting-info">
+                      <div className="break-setting-title">{t('菜单栏显示倒计时')}</div>
+                      <div className="break-setting-sub">{t('Mac 菜单栏实时显示剩余时间，Windows 悬停托盘图标可见')}</div>
+                    </div>
+                    <Switch
+                      checked={draft.menu_bar_countdown}
+                      onChange={(v) => { void toggleSwitch('menu_bar_countdown', v) }}
+                      label={t('菜单栏显示倒计时')}
+                    />
+                  </div>
 
-              <div className="break-setting-row">
-                <div className="break-setting-info">
-                  <div className="break-setting-title">{t('到点弹出休息浮窗')}</div>
-                  <div className="break-setting-sub">{t('桌面端到点自动在屏幕中央弹出轻量休息倒计时卡片')}</div>
-                </div>
-                <Switch
-                  checked={draft.popup_enabled}
-                  onChange={(v) => { void toggleSwitch('popup_enabled', v) }}
-                  label={t('到点弹出休息浮窗')}
-                />
-              </div>
+                  <div className="break-setting-row">
+                    <div className="break-setting-info">
+                      <div className="break-setting-title">{t('到点弹出休息浮窗')}</div>
+                      <div className="break-setting-sub">{t('桌面端到点自动在屏幕中央弹出轻量休息倒计时卡片')}</div>
+                    </div>
+                    <Switch
+                      checked={draft.popup_enabled}
+                      onChange={(v) => { void toggleSwitch('popup_enabled', v) }}
+                      label={t('到点弹出休息浮窗')}
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="break-setting-row">
                 <div className="break-setting-info">

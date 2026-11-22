@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import {
   Activity, CalendarCheck2, CalendarClock, Coffee, FileText, HeartPulse, Hospital, LayoutGrid, LineChart as LineIcon,
-  Pill, PillBottle, Plug, Search, Sparkles, Stethoscope, TestTube2, type LucideIcon,
+  Pill, PillBottle, Plug, Search, Settings, Sparkles, Stethoscope, TestTube2, type LucideIcon,
 } from 'lucide-react'
 
 // Each kind of record has one icon and one identity color (--c-<kind>),
@@ -23,6 +23,7 @@ export const KIND: Record<string, { icon: LucideIcon; color: string }> = {
   metrics: { icon: LineIcon, color: 'var(--c-metrics)' },
   metric_kinds: { icon: LineIcon, color: 'var(--c-metrics)' },
   connect: { icon: Plug, color: 'var(--c-connect)' },
+  settings: { icon: Settings, color: 'var(--ink-2)' },
   search: { icon: Search, color: 'var(--ink-2)' },
   stethoscope: { icon: Stethoscope, color: 'var(--accent)' },
 }
