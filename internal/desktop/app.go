@@ -30,6 +30,7 @@ import (
 	"github.com/lee/health-trail/frontend"
 	"github.com/lee/health-trail/internal/assistant"
 	"github.com/lee/health-trail/internal/attachopen"
+	"github.com/lee/health-trail/internal/breaktimer"
 	"github.com/lee/health-trail/internal/calsync"
 	"github.com/lee/health-trail/internal/folders"
 	"github.com/lee/health-trail/internal/mcpserver"
@@ -97,10 +98,14 @@ type app struct {
 	settings    *settings
 	backups     *backups
 	updates     *updates
+	breaks      *breaktimer.Engine
 	grants      *folders.Grants    // folders the person let the sandboxed app read
 	shell       *shell             // the window and menu bar icon, in the app only
 	remind      *reminders.Service // in the app only
 	cal         *calsync.Sync      // in the app only
+	breakWinMu  sync.RWMutex
+	mainWin     *application.WebviewWindow
+	breakWin    *application.WebviewWindow
 	token       string
 	port        string
 	openDir     string // copies of attachments opened from the window, in the app only
@@ -119,7 +124,7 @@ func newApp(dataDir, port string) *app {
 	if err != nil {
 		log.Fatalf("读取访问令牌失败：%v", err)
 	}
-	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir), grants: folders.New(dataDir), ear: platformEar()}
+	a := &app{st: st, token: token, port: port, settings: loadSettings(dataDir), backups: newBackups(st, dataDir), breaks: breaktimer.New(dataDir, nil), grants: folders.New(dataDir), ear: platformEar()}
 	a.updates = newUpdates(a.settings)
 	a.backups.lang = a.settings.lang
 	a.grants.Open()
@@ -196,6 +201,9 @@ func (a *app) handler() http.Handler {
 			if a.shell != nil {
 				a.shell.refresh() // the menu bar menu follows the language
 			}
+			if bw := a.getBreakWin(); bw != nil {
+				bw.ExecJS(fmt.Sprintf(`window.dispatchEvent(new CustomEvent("health-trail-lang", { detail: %q }))`, *in.Lang))
+			}
 		}
 		if in.LAN != nil && *in.LAN {
 			writeError(w, a.msg("手机访问暂时关闭", "Phone access is turned off for now"))
@@ -214,6 +222,7 @@ func (a *app) handler() http.Handler {
 		json.NewEncoder(w).Encode(a.info(r))
 	})
 	a.backups.routes(mux)
+	a.breakTimerRoutes(mux)
 	mux.Handle("/", api)
 	return mux
 }
@@ -451,6 +460,7 @@ func RunServe(dataDir, port string, lanFlag bool) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go a.backups.loop(ctx)
+	go a.runBreakTimer(ctx)
 	<-ctx.Done()
 	a.listener.close()
 	a.backups.quit()
@@ -526,7 +536,29 @@ func RunApp(dataDir, port string) {
 			Backdrop: application.MacBackdropTranslucent,
 		},
 	})
-	a.shell = newShell(wapp, win, a.settings.lang, a.backups.windowClosed)
+	breakWin := wapp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            "休息一下",
+		Width:            420,
+		Height:           340,
+		AlwaysOnTop:      true,
+		DisableResize:    true,
+		Frameless:        true,
+		Hidden:           true,
+		InitialPosition:  application.WindowCentered,
+		URL:              page + "&view=break",
+		BackgroundColour: application.NewRGBA(0, 0, 0, 0),
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTranslucent,
+		},
+	})
+	breakWin.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		e.Cancel()
+		breakWin.Hide()
+	})
+	a.setBreakWindows(win, breakWin)
+	a.shell = newShell(wapp, win, a.settings.lang, a.backups.windowClosed, a.breaks)
+	a.bindBreakEvents()
+	go a.runBreakTimer(ctx)
 	a.updates.backup = a.backups.beforeUpdate
 	a.updates.quit = wapp.Quit
 	a.updates.changed = func(u *updates) {

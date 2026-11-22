@@ -38,6 +38,7 @@
   --c-metrics: #ea6a1f;
   --c-habits: #16855f;
   --c-checkins: #16855f;
+  --c-breaks: #0b84a5;
   --c-connect: #57605b;
 
   --r-sm: 8px;
@@ -86,6 +87,7 @@
     --c-metrics: #f58a4c;
     --c-habits: #35a57e;
     --c-checkins: #35a57e;
+    --c-breaks: #38b2d4;
     --c-connect: #aab1ad;
     --shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 48px rgba(0, 0, 0, 0.5);
@@ -921,3 +923,85 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
 }
 .setup-steps .step-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 2px; font-size: 14px; }
 .okay { display: flex; align-items: center; gap: 8px; color: var(--accent); background: var(--accent-soft); padding: 10px 14px; border-radius: 10px; font-size: 13px; }
+
+/* ============ break timer ============ */
+
+html:has(.break-overlay) { scrollbar-gutter: auto; overflow: hidden; }
+
+.break-hero {
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+}
+.break-ring { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.break-ring svg { display: block; transform: rotate(-90deg); }
+.break-ring .ring-bg { fill: none; stroke: var(--surface-3); }
+.break-ring .ring-fg { fill: none; stroke: var(--c-breaks); stroke-linecap: round; transition: stroke-dashoffset 0.35s ease; }
+.break-ring.working .ring-fg { stroke: var(--accent); }
+.break-ring.done .ring-fg { stroke: var(--accent); }
+.break-ring-center {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 10px;
+}
+.break-time { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.break-phase { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.break-hero-body { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.break-status-pill {
+  display: inline-flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%;
+  padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: color-mix(in srgb, var(--c-breaks) 13%, transparent); color: var(--c-breaks);
+}
+.break-status-pill.working { background: var(--accent-soft); color: var(--accent); }
+.break-status-pill.idle { background: var(--surface-3); color: var(--ink-2); }
+
+.break-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 640px) { .break-stats { grid-template-columns: minmax(0, 1fr); } }
+.break-stat-box {
+  background: var(--surface-2); border-radius: var(--r); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+}
+.break-stat-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.break-stat-num { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.break-stat-num small { font-size: 13px; font-weight: 500; color: var(--ink-3); margin-left: 4px; }
+.break-progress { height: 7px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.break-progress > div { height: 100%; border-radius: 99px; background: var(--c-breaks); transition: width 0.25s ease; }
+
+.break-history {
+  margin-top: 14px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end;
+}
+.break-day { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.break-bars {
+  height: 54px; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 3px;
+}
+.break-bar { width: 8px; border-radius: 4px 4px 2px 2px; min-height: 3px; transition: height 0.2s ease; }
+.break-bar.water { background: var(--c-breaks); }
+.break-bar.breaks { background: var(--accent); }
+.break-day-lbl { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.break-day.today .break-day-lbl { color: var(--ink); font-weight: 600; }
+
+.break-setting-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.break-setting-row:first-child { border-top: 0; padding-top: 0; }
+.break-setting-info { min-width: 0; flex: 1; }
+.break-setting-title { font-weight: 550; font-size: 14px; }
+.break-setting-sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+
+/* Independent floating break window (420x340) */
+.break-overlay {
+  height: 100%; width: 100%; display: flex; flex-direction: column; justify-content: space-between;
+  padding: 16px 20px 18px; background: var(--surface); color: var(--ink);
+  user-select: none; overflow: hidden;
+}
+html.mac-window .break-overlay { background: color-mix(in srgb, var(--surface) 88%, transparent); }
+.break-overlay-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  --wails-draggable: drag;
+}
+.break-overlay-head button { --wails-draggable: no-drag; }
+.break-overlay-center {
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px;
+}
+.break-overlay-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.break-overlay-sub { font-size: 13px; color: var(--ink-2); }
+.break-overlay-actions { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.break-overlay-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
