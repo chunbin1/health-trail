@@ -636,6 +636,28 @@ const EN = {
   '结束时间': 'End time',
   '仅工作日（周一至周五）': 'Weekdays only (Mon–Fri)',
   '保存设置': 'Save settings',
+
+  // iOS app mode
+  '{name} API 密钥': '{name} API key',
+  '请填入你已有的 {name} API 密钥，密钥仅保存在本设备。': 'Enter your existing {name} API key. It is stored only on this device.',
+  '把你说的话、打的字或发的图片整理成档案里的记录。密钥只存在本设备上，不放进备份；图片会发给所选接口。': 'Turns what you say, type, or photograph into health records. Your key stays on this device and is excluded from backups; images are sent to the selected API.',
+  '连接模式': 'Connection mode',
+  '当前连接：家里电脑（{host}）': 'Connected to: Home computer ({host})',
+  '当前连接：家里电脑': 'Connected to: Home computer',
+  '当前模式：这台 iPhone（本地存储，离线可用）': 'Current mode: This iPhone (local storage, works offline)',
+  '切换连接': 'Switch',
+  '切换': 'Switch',
+  '当前已连接到家里电脑，健康数据保存在你的电脑上。': 'Connected to your home computer. Health data is stored on your computer.',
+  '健康数据保存在本设备的私有存储中，由系统加密保护。': 'Health data is stored privately on this device and protected by system encryption.',
+  '给本 App 里的 AI 助手用。选一个服务商填入你已有的密钥，或自己填一个兼容 OpenAI 的接口。密钥只存在本设备上；图片会发给所选接口。': 'For the in-app AI assistant. Pick a provider and enter your existing key, or enter any OpenAI-compatible API. Your key stays on this device; images are sent to the selected API.',
+  '填入你已有的兼容 OpenAI 接口密钥，即可在 App 内使用 AI 助手。': 'Enter your existing OpenAI-compatible API key to use the AI assistant in the app.',
+  '已连接家里电脑（{host}）': 'Connected to home computer ({host})',
+  '已连接家里电脑': 'Connected to home computer',
+  '这里会汇总你的健康状况。点上方按钮直接记录，也可以用 {capture} 打字或发照片整理成记录。': 'Your health overview lives here. Tap the buttons above to log records, or use {capture} to type or send photos.',
+  '点击「开始专注」，开始本轮工作与休息倒计时。': 'Tap Start focus to begin your work and break countdown.',
+  '还没有设置接口。填入你已有的 API 密钥，就可以在这里打字或发照片记档案。': 'No API set up yet. Enter your existing API key below to type or send photos to log records.',
+  '语音识别不可用': 'Speech recognition is unavailable',
+  '返回指标列表': 'All indicators',
 } satisfies Record<string, string | Plural>
 
 export type Key = keyof typeof EN

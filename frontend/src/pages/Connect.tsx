@@ -3,6 +3,7 @@ import { Check, Copy, MessageSquare, Plug, ShieldCheck, SquareTerminal } from 'l
 import { api, type AssistantConfig } from '../api'
 import { AssistantSetup } from '../components/AssistantSetup'
 import { t, tr } from '../i18n'
+import { isIOSApp } from '../ios'
 import { useApp, useLoad } from '../state'
 import { IconButton } from '../ui'
 
@@ -61,12 +62,17 @@ function storedAI(): AI {
 function AssistantAPI() {
   const { data, error, reload } = useLoad(() => api.assistant(), [])
   const [cfg, setCfg] = useState<AssistantConfig | null>(null)
+  const ios = isIOSApp()
   const view = cfg || data
   return (
     <>
       <div>
-        <h2>{t('方式一 · API')}</h2>
-        <div className="sub" style={{ marginTop: 4 }}>{t('给窗口里的 AI 助手用。选一个服务商照着步骤拿到密钥，也可以自己填一个兼容 OpenAI 的接口。密钥只存在这台电脑上。声音用 Mac 本机识别，不经过这个接口；图片会发给它。')}</div>
+        <h2>{ios ? t('AI助手') : t('方式一 · API')}</h2>
+        <div className="sub" style={{ marginTop: 4 }}>
+          {ios
+            ? t('给本 App 里的 AI 助手用。选一个服务商填入你已有的密钥，或自己填一个兼容 OpenAI 的接口。密钥只存在本设备上；图片会发给所选接口。')
+            : t('给窗口里的 AI 助手用。选一个服务商照着步骤拿到密钥，也可以自己填一个兼容 OpenAI 的接口。密钥只存在这台电脑上。声音用 Mac 本机识别，不经过这个接口；图片会发给它。')}
+        </div>
       </div>
       <section className="card">
         {error && <div className="error">{error}</div>}
@@ -79,6 +85,7 @@ function AssistantAPI() {
 export function Connect() {
   const { data: info, error } = useLoad(() => api.info(), [])
   const [ai, setAI] = useState<AI>(storedAI)
+  const ios = isIOSApp()
   if (error) return <div className="error">{error}</div>
   if (!info) return null
 
@@ -92,12 +99,21 @@ export function Connect() {
   return (
     <>
       <div className="page-head">
-        <div className="titles"><h1>{t('连接 AI')}</h1><div className="sub">{t('两种方式都可以：用 API 接窗口里的 AI 助手，或用 MCP 让 Claude、Codex 等读写档案。')}</div></div>
+        <div className="titles">
+          <h1>{t('连接 AI')}</h1>
+          <div className="sub">
+            {ios
+              ? t('填入你已有的兼容 OpenAI 接口密钥，即可在 App 内使用 AI 助手。')
+              : t('两种方式都可以：用 API 接窗口里的 AI 助手，或用 MCP 让 Claude、Codex 等读写档案。')}
+          </div>
+        </div>
       </div>
       <div className="stack" style={{ maxWidth: 760 }}>
         <AssistantAPI />
-        <div>
-          <h2>{t('方式二 · MCP')}</h2>
+        {!ios && (
+          <>
+            <div>
+              <h2>{t('方式二 · MCP')}</h2>
           <div className="sub" style={{ marginTop: 4 }}>{t('让 Claude、Codex 等外部 AI 通过 MCP 读写这台电脑上的档案。选你用的那个，把配置抄过去。')}</div>
         </div>
         <div className="notice">
@@ -160,6 +176,8 @@ export function Connect() {
               <CodeBox text={info.mcp_http_config} />
             </div>
           </Section>
+        )}
+          </>
         )}
       </div>
     </>

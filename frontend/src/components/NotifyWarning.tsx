@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BellOff } from 'lucide-react'
 import { api } from '../api'
 import { t } from '../i18n'
+import { isIOSApp } from '../ios'
 import { useLoad } from '../state'
 
 // Shown in the Mac app's window while macOS doesn't allow its notifications:
@@ -9,8 +10,9 @@ import { useLoad } from '../state'
 // ask) when the window comes back to the front and every few seconds, so it
 // goes away as soon as they're turned on in System Settings.
 export function NotifyWarning() {
-  const { data, reload } = useLoad(() => api.notifications().catch(() => ({ allowed: null })), [])
-  const off = data?.allowed === false
+  const ios = isIOSApp()
+  const { data, reload } = useLoad(() => (ios ? Promise.resolve({ allowed: null }) : api.notifications().catch(() => ({ allowed: null }))), [ios])
+  const off = !ios && data?.allowed === false
   useEffect(() => {
     if (!off) return
     const id = setInterval(reload, 5_000)

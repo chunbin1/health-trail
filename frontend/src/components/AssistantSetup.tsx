@@ -2,6 +2,7 @@ import { CircleCheck } from 'lucide-react'
 import { useState, type MouseEvent } from 'react'
 import { api, inWindow, type AIProvider, type AssistantConfig } from '../api'
 import { isEN, t } from '../i18n'
+import { isIOSApp } from '../ios'
 import { useApp } from '../state'
 import { AssistantLog } from './AssistantLog'
 
@@ -124,6 +125,7 @@ export function AssistantSetup({ cfg, onSaved, onCancel }: { cfg: AssistantConfi
     setBusy('')
   }
 
+  const ios = isIOSApp()
   const name = p ? (isEN() ? p.name_en : p.name) : ''
   const picked = p && !other ? p.models.find((m) => m.id === model) : undefined
   const keyField = (
@@ -150,27 +152,35 @@ export function AssistantSetup({ cfg, onSaved, onCancel }: { cfg: AssistantConfi
       )}
       {p ? (
         <>
-          <ol className="setup-steps full">
-            <li>
-              <div className="step-body">
-                <span>{t('注册一个{name}账号（已经有了就跳过）', { name })}</span>
-                <div className="row"><ProviderLink p={p} page="signup">{t('去注册')}</ProviderLink></div>
-                {p.invite && <span className="sub">{t('这个注册链接带着作者的邀请码：你不会多花钱，作者可能拿到平台的奖励。不想用的话，自己打开{name}官网注册也一样。', { name })}</span>}
-              </div>
-            </li>
-            <li>
-              <div className="step-body">
-                <span>{t('在{name}的 API Key 页面新建一个密钥，复制下来', { name })}</span>
-                <div className="row"><ProviderLink p={p} page="key">{t('去创建密钥')}</ProviderLink></div>
-              </div>
-            </li>
-            <li>
-              <label className="step-body">
-                <span>{t('把密钥粘贴到这里')}</span>
-                {keyField}
-              </label>
-            </li>
-          </ol>
+          {ios ? (
+            <label className="field full">
+              <span className="lbl">{t('{name} API 密钥', { name })}</span>
+              {keyField}
+              <span className="hint">{t('请填入你已有的 {name} API 密钥，密钥仅保存在本设备。', { name })}</span>
+            </label>
+          ) : (
+            <ol className="setup-steps full">
+              <li>
+                <div className="step-body">
+                  <span>{t('注册一个{name}账号（已经有了就跳过）', { name })}</span>
+                  <div className="row"><ProviderLink p={p} page="signup">{t('去注册')}</ProviderLink></div>
+                  {p.invite && <span className="sub">{t('这个注册链接带着作者的邀请码：你不会多花钱，作者可能拿到平台的奖励。不想用的话，自己打开{name}官网注册也一样。', { name })}</span>}
+                </div>
+              </li>
+              <li>
+                <div className="step-body">
+                  <span>{t('在{name}的 API Key 页面新建一个密钥，复制下来', { name })}</span>
+                  <div className="row"><ProviderLink p={p} page="key">{t('去创建密钥')}</ProviderLink></div>
+                </div>
+              </li>
+              <li>
+                <label className="step-body">
+                  <span>{t('把密钥粘贴到这里')}</span>
+                  {keyField}
+                </label>
+              </li>
+            </ol>
+          )}
           <label className="field full">
             <span className="lbl">{t('模型')}</span>
             <select className="input" value={other ? '' : model} onChange={(e) => {

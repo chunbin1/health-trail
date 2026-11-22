@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Database, FolderOpen, Languages, Power, RefreshCw, Smartphone, Sparkles } from 'lucide-react'
+import { Database, FolderOpen, Languages, Monitor, Power, RefreshCw, Smartphone, Sparkles } from 'lucide-react'
 import { api, fmtDate, type AssistantConfig, type CalSync, type UpdateStatus } from '../api'
 import { t, type Lang } from '../i18n'
+import { iosBridgeInfo, iosMode, isIOSApp, openConnectionSettings } from '../ios'
 import { useApp, useLoad } from '../state'
 import { Switch } from '../ui'
 import { NotifyWarning } from '../components/NotifyWarning'
@@ -247,18 +248,38 @@ function AllowedFolders() {
   )
 }
 
-// The OpenAI-compatible service used by AI助手. The key stays on this computer.
+// The OpenAI-compatible service used by AI助手. The key stays on this device.
 function CaptureService() {
   const { data, error, reload } = useLoad(() => api.assistant(), [])
   const [cfg, setCfg] = useState<AssistantConfig | null>(null)
+  const ios = isIOSApp()
   if (error) return <div className="error">{error}</div>
   const view = cfg || data
   if (!view) return null
   return (
     <Section icon={<Sparkles size={20} />} title={t('AI助手')}
-      sub={t('把你说的话、打的字或发的图片整理成档案里的记录。密钥只存在这台电脑上，不放进备份。声音用 Mac 本机识别，不经过这个接口；图片会发给它。')}>
+      sub={ios
+        ? t('把你说的话、打的字或发的图片整理成档案里的记录。密钥只存在本设备上，不放进备份；图片会发给所选接口。')
+        : t('把你说的话、打的字或发的图片整理成档案里的记录。密钥只存在这台电脑上，不放进备份。声音用 Mac 本机识别，不经过这个接口；图片会发给它。')}>
       <AssistantSetup cfg={view} onSaved={(c) => { setCfg(c); reload() }} />
     </Section>
+  )
+}
+
+// iOS app only: switch between local on-device storage and connecting to a home computer.
+function ConnectionMode() {
+  const mode = iosMode()
+  const host = iosBridgeInfo()?.remoteHost
+  const sub = mode === 'remote'
+    ? (host ? t('当前连接：家里电脑（{host}）', { host }) : t('当前连接：家里电脑'))
+    : t('当前模式：这台 iPhone（本地存储，离线可用）')
+  return (
+    <Section
+      icon={mode === 'remote' ? <Monitor size={20} /> : <Smartphone size={20} />}
+      title={t('连接模式')}
+      sub={sub}
+      right={<button type="button" className="btn sm" onClick={() => openConnectionSettings()}>{t('切换连接')}</button>}
+    />
   )
 }
 
@@ -267,6 +288,8 @@ function CaptureService() {
 export function Settings() {
   const { lang, switchLang } = useApp()
   const { data: info, error } = useLoad(() => api.info(), [])
+  const ios = isIOSApp()
+  const remote = ios && iosMode() === 'remote'
   if (error) return <div className="error">{error}</div>
   if (!info) return null
 
@@ -276,7 +299,8 @@ export function Settings() {
         <div className="titles"><h1>{t('设置')}</h1></div>
       </div>
       <div className="stack" style={{ maxWidth: 760 }}>
-        <NotifyWarning />
+        {!ios && <NotifyWarning />}
+        {ios && <ConnectionMode />}
         <Section icon={<Languages size={20} />} title={t('语言')}
           right={
             <select className="input" style={{ width: 'auto' }} aria-label={t('语言')} value={lang}
@@ -287,20 +311,23 @@ export function Settings() {
 
         <CaptureService />
 
-        <AtLogin />
+        {!ios && <AtLogin />}
 
-        <Updates />
+        {!ios && <Updates />}
 
-        <PhoneSync />
+        {!ios && <PhoneSync />}
 
-        <AllowedFolders />
+        {!ios && <AllowedFolders />}
 
-        <BackupSettings />
+        {!ios && <BackupSettings />}
 
-        <Section icon={<Database size={20} />} title={t('数据')} sub={t('数据库是 health.db（SQLite），附件在 files/。备份时复制整个目录即可；建议开启 FileVault 磁盘加密。')}>
+        <Section icon={<Database size={20} />} title={t('数据')}
+          sub={ios
+            ? (remote ? t('当前已连接到家里电脑，健康数据保存在你的电脑上。') : t('健康数据保存在本设备的私有存储中，由系统加密保护。'))
+            : t('数据库是 health.db（SQLite），附件在 files/。备份时复制整个目录即可；建议开启 FileVault 磁盘加密。')}>
           <dl className="kv" style={{ boxShadow: 'none', padding: 0, background: 'none' }}>
-            <div className="kv-row"><dt>{t('数据目录')}</dt><dd><code>{info.data_dir}</code></dd></div>
-            <div className="kv-row"><dt>{t('本地服务')}</dt><dd>{info.listening || t('未启动')}</dd></div>
+            {!ios && <div className="kv-row"><dt>{t('数据目录')}</dt><dd><code>{info.data_dir}</code></dd></div>}
+            {!ios && <div className="kv-row"><dt>{t('本地服务')}</dt><dd>{info.listening || t('未启动')}</dd></div>}
             <div className="kv-row"><dt>{t('版本')}</dt><dd>{info.version}</dd></div>
           </dl>
         </Section>

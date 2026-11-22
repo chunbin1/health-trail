@@ -8,6 +8,7 @@ import { Modal } from '../components/Modal'
 import { NotifyWarning } from '../components/NotifyWarning'
 import { LabValue, TakeDose } from '../components/RecordDrawer'
 import { isEN, noun, t, tr, tx, type Key } from '../i18n'
+import { isIOSApp } from '../ios'
 import { openRecord, recTitle, useApp, useListChoice, useLoad } from '../state'
 import { Empty, IconButton, KindIcon, RangeBar, Ring, Sparkline, kindStyle } from '../ui'
 import { HabitGrid } from './Checkins'
@@ -127,7 +128,7 @@ export function Overview() {
         {o.abnormal_labs_latest.length === 0
           ? <Empty compact>{t('各项指标最近一次的结果都在参考范围内')}</Empty>
           : (
-            <table className="data">
+            <table className="data lab-overview-tbl">
               <tbody>
                 {o.abnormal_labs_latest.slice(0, 7).map((r) => (
                   <tr key={r.id} className="clickable" onClick={() => openRecord('lab_results', r.id)}>
@@ -227,7 +228,11 @@ export function Overview() {
       {empty && (
         <div className="notice" style={{ marginBottom: 20 }}>
           <Sparkles size={18} />
-          <span>{tr('这里会汇总你的健康状况。可以用 {capture} 说话或打字记下，也可以到 {link} 接好外部 AI，把体检报告截图发给它。', { capture: <a href="#/capture">{t('AI助手')}</a>, link: <a href="#/connect">{t('连接 AI|link')}</a> })}</span>
+          <span>
+            {isIOSApp()
+              ? tr('这里会汇总你的健康状况。点上方按钮直接记录，也可以用 {capture} 打字或发照片整理成记录。', { capture: <a href="#/capture">{t('AI助手')}</a> })
+              : tr('这里会汇总你的健康状况。可以用 {capture} 说话或打字记下，也可以到 {link} 接好外部 AI，把体检报告截图发给它。', { capture: <a href="#/capture">{t('AI助手')}</a>, link: <a href="#/connect">{t('连接 AI|link')}</a> })}
+          </span>
         </div>
       )}
 

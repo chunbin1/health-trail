@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
+import { useBodyLock } from '../state'
 import { IconButton } from '../ui'
 
 function useEscape(onClose: () => void) {
@@ -15,6 +16,7 @@ function useEscape(onClose: () => void) {
 // so a form can keep its buttons inside the <form>.
 export function Modal({ title, icon, onClose, children, wide }: { title: string; icon?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean }) {
   useEscape(onClose)
+  useBodyLock(true)
   return (
     <div className="overlay center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={'modal' + (wide ? ' wide' : '')} role="dialog" aria-label={title}>
@@ -31,6 +33,7 @@ export function Modal({ title, icon, onClose, children, wide }: { title: string;
 
 export function Drawer({ onClose, head, children }: { onClose: () => void; head?: ReactNode; children: ReactNode }) {
   useEscape(onClose)
+  useBodyLock(true)
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="drawer" role="dialog">

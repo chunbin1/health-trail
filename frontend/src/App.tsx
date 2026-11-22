@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { MoreHorizontal, Search as SearchIcon, Settings as SettingsIcon, Sparkles, X } from 'lucide-react'
+import { ChevronLeft, Monitor, MoreHorizontal, Search as SearchIcon, Settings as SettingsIcon, Sparkles, X } from 'lucide-react'
 import { api, type Overview as OV } from './api'
 import { hideWebMenu } from './contextmenu'
 import { t, tx, type Key } from './i18n'
+import { iosBridgeInfo, iosMode, isIOSApp, openConnectionSettings } from './ios'
 import { RecordDrawer } from './components/RecordDrawer'
 import { UpdateCard } from './components/UpdateCard'
 import { Breaks } from './pages/Breaks'
@@ -15,7 +16,7 @@ import { RecordList, RecordsPage } from './pages/RecordsPage'
 import { Reports } from './pages/Reports'
 import { Settings } from './pages/Settings'
 import { AllHabits } from './pages/Habits'
-import { useApp, useLoad, useRoute } from './state'
+import { closeRecord, dismissKeyboard, runBackInterceptors, useApp, useBodyLock, useLoad, useRoute } from './state'
 import { Empty, KindIcon, KIND } from './ui'
 
 const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string }[] }[] = [
@@ -42,9 +43,10 @@ const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string 
 // window comes back, when the app has just checked ("update-checked"), on
 // each page change and every half hour (the app checks GitHub itself; this
 // only reads what it found). Outside the app the API isn't there.
-function useUpdateStatus(page: string) {
-  const { data, reload } = useLoad(() => api.updateStatus().catch(() => null), [page])
+function useUpdateStatus(page: string, enabled: boolean) {
+  const { data, reload } = useLoad(() => (enabled ? api.updateStatus().catch(() => null) : Promise.resolve(null)), [page, enabled])
   useEffect(() => {
+    if (!enabled) return
     const id = setInterval(reload, 30 * 60_000)
     window.addEventListener('focus', reload)
     window.addEventListener('update-checked', reload)
@@ -54,8 +56,8 @@ function useUpdateStatus(page: string) {
       window.removeEventListener('update-checked', reload)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  return data ?? null
+  }, [enabled])
+  return enabled ? (data ?? null) : null
 }
 
 const TABS = ['overview', 'checkins', 'reports', 'metrics']
@@ -70,6 +72,18 @@ export function App() {
   const [counts, setCounts] = useState<OV['counts']>({})
   const [q, setQ] = useState('')
   const [more, setMore] = useState(false)
+  const pageStackRef = useRef<string[]>([route.page])
+  useEffect(() => {
+    const cur = route.page
+    if (TABS.includes(cur)) {
+      pageStackRef.current = [cur]
+    } else {
+      const stack = pageStackRef.current
+      const existing = stack.lastIndexOf(cur)
+      if (existing >= 0) pageStackRef.current = stack.slice(0, existing + 1)
+      else pageStackRef.current = [...stack, cur]
+    }
+  }, [route.page])
   useEffect(() => {
     api.overview().then((o) => setCounts(o.counts)).catch(() => {})
   }, [version])
@@ -87,6 +101,7 @@ export function App() {
   // panel. Leaving the page must not throw away the sentence or the reply
   // still on its way.
   const [assistOpen, setAssistOpen] = useState(false)
+  useBodyLock(more || assistOpen)
   const [captureOn, setCaptureOn] = useState(page === 'capture')
   const assist = useLoad(() => api.assistant().catch(() => null), [page])
   const assistReload = useRef(assist.reload)
@@ -148,7 +163,11 @@ export function App() {
 
   // the settings sit behind a gear at the end of the 连接 AI row, with a dot
   // when the Mac app has found a newer version (and a card above the row)
-  const update = useUpdateStatus(page)
+  const ios = isIOSApp()
+  const bridge = iosBridgeInfo()
+  const remote = ios && iosMode() === 'remote' && !bridge?.nativeRemoteBanner
+  const remoteHost = bridge?.remoteHost
+  const update = useUpdateStatus(page, !ios)
   const newer = !!update?.state.latest
   // the update API is only in the Mac window: there, no Back / Reload menu
   const inWindow = !!update
@@ -160,6 +179,32 @@ export function App() {
       {newer && <span className="dot" />}
     </a>
   )
+
+  const goBack = () => {
+    dismissKeyboard()
+    if (more) { setMore(false); return true }
+    if (assistOpen) { setAssistOpen(false); return true }
+    if (route.open) { closeRecord(); return true }
+    if (runBackInterceptors()) return true
+    if (TABS.includes(page)) return false
+    const stack = pageStackRef.current
+    if (stack.length > 1) {
+      stack.pop()
+      go({ page: stack[stack.length - 1] || 'overview' })
+    } else {
+      go({ page: 'overview' })
+    }
+    return true
+  }
+  const goBackRef = useRef(goBack)
+  goBackRef.current = goBack
+  useEffect(() => {
+    const w = window as Window & { __HEALTH_TRAIL_GO_BACK__?: () => boolean }
+    w.__HEALTH_TRAIL_GO_BACK__ = () => goBackRef.current()
+    return () => { delete w.__HEALTH_TRAIL_GO_BACK__ }
+  }, [])
+
+  const showMobileBack = !TABS.includes(page) && page !== 'capture' && page !== 'habits'
 
   return (
     <div className="app">
@@ -178,15 +223,32 @@ export function App() {
         ))}
         <div className="side-foot">
           <UpdateCard status={update} />
-          <div className="foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>
+          <div className="foot-row">{!ios && navItem('connect', '连接 AI')}{settingsLink}</div>
         </div>
       </nav>
       <div className="main-wrap">
         <div className="drag-strip drag" />
         <main className="main">
+          {showMobileBack && (
+            <div className="mobile-back-bar">
+              <button type="button" className="mobile-back-btn" onClick={() => { goBack() }}>
+                <ChevronLeft size={18} />
+                <span>{t('返回')}</span>
+              </button>
+            </div>
+          )}
+          {remote && page !== 'capture' && (
+            <div className="remote-banner">
+              <Monitor size={15} />
+              <span className="ellipsis">
+                {remoteHost ? t('已连接家里电脑（{host}）', { host: remoteHost }) : t('已连接家里电脑')}
+              </span>
+              <button type="button" className="btn sm" onClick={() => openConnectionSettings()}>{t('切换')}</button>
+            </div>
+          )}
           {captureOn && (
             <div className={page === 'capture' ? undefined : 'assist-dock'} hidden={page !== 'capture' && !assistOpen}>
-              <Capture panel={page !== 'capture'} onClose={() => setAssistOpen(false)} />
+              <Capture panel={page !== 'capture'} onClose={() => setAssistOpen(false)} onBack={goBack} />
             </div>
           )}
           {body}
@@ -210,7 +272,9 @@ export function App() {
         <div className="panel" onClick={(e) => e.stopPropagation()}>
           {['capture', 'breaks', 'conditions', 'symptoms', 'visits', 'medications', 'appointments', 'search'].map((p) =>
             navItem(p, LABEL[p], NAV.flatMap((g) => g.items).find((i) => i.page === p)?.count))}
-          <div className="foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>
+          {ios
+            ? navItem('settings', '设置')
+            : <div className="foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>}
         </div>
       </div>
 
@@ -230,15 +294,23 @@ export function App() {
 function Search({ q, setQ }: { q: string; setQ: (q: string) => void }) {
   const { entity } = useApp()
   const { data, error } = useLoad(() => (q.trim() ? api.search(q.trim()) : Promise.resolve([])), [q])
+  const desktop = typeof window !== 'undefined' && window.innerWidth > 760
   return (
     <>
       <div className="page-head">
         <div className="titles"><h1>{t('搜索')}</h1></div>
       </div>
-      <div className="input-search" style={{ maxWidth: 480, marginBottom: 20 }}>
+      <form className={'input-search' + (q ? ' has-clear' : '')} style={{ maxWidth: 480, marginBottom: 20 }}
+        onSubmit={(e) => { e.preventDefault(); dismissKeyboard() }}>
         <SearchIcon size={15} />
-        <input className="input" autoFocus placeholder={t('搜索所有记录，如 胃、头孢、协和')} value={q} onChange={(e) => setQ(e.target.value)} />
-      </div>
+        <input className="input" type="search" enterKeyHint="search" autoFocus={desktop}
+          placeholder={t('搜索所有记录，如 胃、头孢、协和')} value={q} onChange={(e) => setQ(e.target.value)} />
+        {q && (
+          <button type="button" className="input-clear" aria-label={t('清空')} onClick={() => setQ('')}>
+            <X size={16} />
+          </button>
+        )}
+      </form>
       {error && <div className="error">{error}</div>}
       {data?.length === 0 && q && <Empty icon={SearchIcon}>{t('没有找到「{q}」', { q })}</Empty>}
       <div className="stack">

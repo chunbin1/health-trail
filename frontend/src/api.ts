@@ -114,6 +114,8 @@ export interface ListChoice {
 export interface Info {
   data_dir: string
   version: string
+  mobile?: boolean
+  platform?: string
   lan: boolean
   lang: string
   lists: Record<string, ListChoice> // lists the person arranged, by name (useListChoice)
