@@ -181,6 +181,10 @@ jobs:
       - name: Archive and export HealthTrail.ipa
         if: steps.config.outputs.skip != 'true' && steps.config.outputs.has_signing == 'true'
         run: |
+          # Archive unsigned so Xcode does not require an iOS App Development
+          # provisioning profile (which fails when no test devices are registered).
+          # -exportArchive below signs the .ipa with Apple Distribution + an
+          # auto-fetched App Store Distribution profile (no devices required).
           xcodebuild \
             -project ios/HealthTrail.xcodeproj \
             -scheme HealthTrail \
@@ -188,10 +192,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath ios/build/HealthTrail.xcarchive \
             archive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION="${{ steps.ver.outputs.marketing_version }}" \
             CURRENT_PROJECT_VERSION="${{ steps.ver.outputs.build_number }}"
 
