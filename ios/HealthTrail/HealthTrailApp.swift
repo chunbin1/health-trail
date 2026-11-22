@@ -16,7 +16,7 @@ struct HealthTrailApp: App {
                         Task {
                             await appState.handleBecomeActive()
                         }
-                    } else if newPhase == .background || newPhase == .inactive {
+                    } else if newPhase == .background {
                         appState.speechManager.stop()
                     }
                 }
