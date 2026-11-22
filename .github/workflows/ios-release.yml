@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   ios-release:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - name: Check iOS signing configuration
@@ -181,6 +181,7 @@ jobs:
       - name: Archive and export HealthTrail.ipa
         if: steps.config.outputs.skip != 'true' && steps.config.outputs.has_signing == 'true'
         run: |
+          xcodebuild -version
           # Archive unsigned so Xcode does not require an iOS App Development
           # provisioning profile (which fails when no test devices are registered).
           # -exportArchive below signs the .ipa with Apple Distribution + an
