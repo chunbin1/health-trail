@@ -913,6 +913,17 @@ button, a, .row-item, .tab, .pill, .nav-item, .icon-btn { touch-action: manipula
   .mobile-back-bar { display: flex; align-items: center; margin: -8px 0 6px -8px; }
   .input-clear { width: 40px; height: 40px; }
 }
+.trends-list-body { max-height: 68vh; overflow-y: auto; }
+.trends-list .row-item.selected { background: var(--accent-soft); }
+.trends-chev { display: none; flex: none; color: var(--ink-3); }
+@media (max-width: 760px) {
+  .trends-split:not(.show-detail) .trends-detail { display: none; }
+  .trends-split.show-detail .trends-list { display: none; }
+  .trends-list-body { max-height: none; overflow-y: visible; }
+  .trends-list .row-item.selected { background: transparent; }
+  .trends-chev { display: inline-block; }
+  .trends-back { margin: -8px 0 8px -10px; }
+}
 html.ios-app { -webkit-tap-highlight-color: transparent; }
 html.ios-app .tabbar, html.ios-app .more-sheet { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .remote-banner {

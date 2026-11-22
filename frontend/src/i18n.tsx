@@ -657,6 +657,7 @@ const EN = {
   '点击「开始专注」，开始本轮工作与休息倒计时。': 'Tap Start focus to begin your work and break countdown.',
   '还没有设置接口。填入你已有的 API 密钥，就可以在这里打字或发照片记档案。': 'No API set up yet. Enter your existing API key below to type or send photos to log records.',
   '语音识别不可用': 'Speech recognition is unavailable',
+  '返回指标列表': 'All indicators',
 } satisfies Record<string, string | Plural>
 
 export type Key = keyof typeof EN

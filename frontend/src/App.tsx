@@ -16,7 +16,7 @@ import { RecordList, RecordsPage } from './pages/RecordsPage'
 import { Reports } from './pages/Reports'
 import { Settings } from './pages/Settings'
 import { AllHabits } from './pages/Habits'
-import { closeRecord, dismissKeyboard, useApp, useBodyLock, useLoad, useRoute } from './state'
+import { closeRecord, dismissKeyboard, runBackInterceptors, useApp, useBodyLock, useLoad, useRoute } from './state'
 import { Empty, KindIcon, KIND } from './ui'
 
 const NAV: { group: Key | ''; items: { page: string; label: Key; count?: string }[] }[] = [
@@ -185,6 +185,7 @@ export function App() {
     if (more) { setMore(false); return true }
     if (assistOpen) { setAssistOpen(false); return true }
     if (route.open) { closeRecord(); return true }
+    if (runBackInterceptors()) return true
     if (TABS.includes(page)) return false
     const stack = pageStackRef.current
     if (stack.length > 1) {

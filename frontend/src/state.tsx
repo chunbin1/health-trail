@@ -95,6 +95,20 @@ export function dismissKeyboard() {
   if (el instanceof HTMLElement) el.blur()
 }
 
+const backInterceptors = new Set<() => boolean>()
+
+export function registerBackInterceptor(fn: () => boolean): () => void {
+  backInterceptors.add(fn)
+  return () => { backInterceptors.delete(fn) }
+}
+
+export function runBackInterceptors(): boolean {
+  for (const fn of backInterceptors) {
+    if (fn()) return true
+  }
+  return false
+}
+
 let bodyLocks = 0
 export function useBodyLock(active: boolean) {
   useEffect(() => {
