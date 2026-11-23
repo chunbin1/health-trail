@@ -15,6 +15,7 @@
 		AA0100060000000000000001 /* ConnectionSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200060000000000000001 /* ConnectionSettingsView.swift */; };
 		AA0100070000000000000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200070000000000000001 /* ContentView.swift */; };
 		AA01000B0000000000000001 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000E0000000000000001 /* SpeechManager.swift */; };
+		AA01000C0000000000000001 /* BreakReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000F0000000000000001 /* BreakReminder.swift */; };
 		AA0100080000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0200080000000000000001 /* Assets.xcassets */; };
 		AA0100090000000000000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = AA02000A0000000000000001 /* InfoPlist.strings */; };
 		AA01000A0000000000000001 /* HealthTrailCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA02000D0000000000000001 /* HealthTrailCore.xcframework */; };
@@ -30,6 +31,7 @@
 		AA0200060000000000000001 /* ConnectionSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionSettingsView.swift; sourceTree = "<group>"; };
 		AA0200070000000000000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA02000E0000000000000001 /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
+		AA02000F0000000000000001 /* BreakReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreakReminder.swift; sourceTree = "<group>"; };
 		AA0200080000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA0200090000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA02000B0000000000000001 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -69,6 +71,7 @@
 				AA0200060000000000000001 /* ConnectionSettingsView.swift */,
 				AA0200070000000000000001 /* ContentView.swift */,
 				AA02000E0000000000000001 /* SpeechManager.swift */,
+				AA02000F0000000000000001 /* BreakReminder.swift */,
 				AA0200080000000000000001 /* Assets.xcassets */,
 				AA0200090000000000000001 /* Info.plist */,
 				AA02000A0000000000000001 /* InfoPlist.strings */,
@@ -171,6 +174,7 @@
 				AA0100060000000000000001 /* ConnectionSettingsView.swift in Sources */,
 				AA0100070000000000000001 /* ContentView.swift in Sources */,
 				AA01000B0000000000000001 /* SpeechManager.swift in Sources */,
+				AA01000C0000000000000001 /* BreakReminder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

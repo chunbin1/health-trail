@@ -18,6 +18,7 @@ struct HealthTrailApp: App {
                         }
                     } else if newPhase == .background {
                         appState.speechManager.stop()
+                        appState.armBreakReminder()
                     }
                 }
         }

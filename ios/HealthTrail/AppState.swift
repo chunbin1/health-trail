@@ -228,6 +228,7 @@ final class AppState: ObservableObject {
         case .local:
             await startLocalServer(forceReload: forceReload)
         case .remote:
+            BreakReminder.shared.unbind()
             guard let target = buildRemoteLaunchURL(baseURLString: remoteBaseURL) else {
                 loadError = L10n.pick(
                     zh: "家用电脑地址无效，请在连接设置中重新填写。",
@@ -246,6 +247,7 @@ final class AppState: ObservableObject {
         if let existing = localURL, LocalCoreBridge.isRunning(), await isLocalServerHealthy(baseURL: existing) {
             activeURL = existing
             loadError = nil
+            BreakReminder.shared.bind(baseURL: existing)
             if forceReload {
                 webViewReloadToken = UUID()
             }
@@ -264,12 +266,18 @@ final class AppState: ObservableObject {
             localURL = startedURL
             activeURL = startedURL
             loadError = nil
+            BreakReminder.shared.bind(baseURL: startedURL)
             if forceReload {
                 webViewReloadToken = UUID()
             }
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    func armBreakReminder() {
+        guard mode == .local else { return }
+        BreakReminder.shared.syncNow()
     }
 
     private func isLocalServerHealthy(baseURL: URL) async -> Bool {
