@@ -65,7 +65,9 @@ const TABS = ['checkins', 'reports', 'overview', 'metrics']
 const LABEL: Record<string, Key> = Object.fromEntries(NAV.flatMap((g) => g.items.map((i) => [i.page, i.label])))
 LABEL.connect = '连接 AI'
 LABEL.settings = '设置'
+LABEL.backup = '设置'
 LABEL.search = '搜索'
+LABEL.habits = '全部打卡项'
 
 export function App() {
   const [route, go] = useRoute()
@@ -207,10 +209,10 @@ export function App() {
     return () => { delete w.__HEALTH_TRAIL_GO_BACK__ }
   }, [])
 
-  const showMobileBack = !TABS.includes(page) && page !== 'capture' && page !== 'habits'
+  const showMobileBack = !TABS.includes(page) && page !== 'capture'
 
   const assistSheet = assistOpen && page !== 'capture'
-  const appClass = ['app', showMobileBack ? 'subpage' : '', assistSheet ? 'assist-open' : '', more ? 'more-open' : ''].filter(Boolean).join(' ')
+  const appClass = ['app', showMobileBack ? 'subpage' : '', assistSheet ? 'assist-open' : '', more ? 'more-open' : '', page === 'search' ? 'page-search' : ''].filter(Boolean).join(' ')
 
   return (
     <div className={appClass}>
@@ -237,10 +239,10 @@ export function App() {
         <main className="main">
           {showMobileBack && (
             <div className="mobile-back-bar">
-              <button type="button" className="mobile-back-btn" onClick={() => { goBack() }}>
-                <ChevronLeft size={18} />
-                <span>{t('返回')}</span>
+              <button type="button" className="mobile-back-btn icon-only" aria-label={t('返回')} onClick={() => { goBack() }}>
+                <ChevronLeft size={22} />
               </button>
+              <div className="mobile-title">{LABEL[page] ? t(LABEL[page]) : ''}</div>
             </div>
           )}
           {remote && page !== 'capture' && (
@@ -278,12 +280,16 @@ export function App() {
         </button>
       </nav>
       <div className={'more-sheet' + (more ? ' open' : '')} onClick={() => setMore(false)}>
-        <div className="panel" onClick={(e) => e.stopPropagation()}>
-          {['capture', 'breaks', 'conditions', 'symptoms', 'visits', 'medications', 'appointments', 'search'].map((p) =>
-            navItem(p, LABEL[p], NAV.flatMap((g) => g.items).find((i) => i.page === p)?.count))}
-          {ios
-            ? navItem('settings', '设置')
-            : <div className="foot-row">{navItem('connect', '连接 AI')}{settingsLink}</div>}
+        <div className="panel" onClick={(e) => { if ((e.target as HTMLElement).closest('a')) setMore(false); e.stopPropagation() }}>
+          <div className="more-grab" />
+          <div className="more-label">{t('工具')}</div>
+          {navItem('capture', 'AI助手')}
+          {navItem('breaks', '休息')}
+          {navItem('search', '搜索')}
+          {!ios && navItem('connect', '连接 AI')}
+          <div className="more-label">{t('记录')}</div>
+          {(['conditions', 'symptoms', 'visits', 'medications', 'appointments'] as const).map((p) => navItem(p, LABEL[p], p))}
+          {navItem('settings', '设置')}
         </div>
       </div>
 

@@ -109,7 +109,7 @@ export function Checkins() {
         <div className="titles"><h1>{t('打卡')}</h1><div className="sub">{t('每天的小习惯，点一下就记上')}</div></div>
         {/* on a phone only its icon, so 新打卡项 stays beside the title */}
         <a className="btn all-habits" href="#/habits" aria-label={t('全部打卡项')} title={t('全部打卡项')}><ListChecks size={16} /><span className="wide-only">{t('全部打卡项')}</span></a>
-        <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} />{t('新打卡项')}</button>
+        <button className="btn primary checkins-add" aria-label={t('新打卡项')} onClick={() => setAdding(true)}><Plus size={18} /><span className="wide-only">{t('新打卡项')}</span></button>
       </div>
       <div className="stack">
         <section className="card">
@@ -125,7 +125,11 @@ export function Checkins() {
         </section>
 
         <section className="card">
-          <div className="card-head"><h2>{t('最近 30 天')}</h2><span className="muted small">{t('{from} – 今天', { from: fmtDate(from) })}</span></div>
+          <div className="card-head">
+            <h2>{t('最近 30 天')}</h2>
+            <a href="#/habits" className="card-link phone-only">{t('全部打卡项')}<ChevronRight size={14} /></a>
+            <span className="muted small wide-only">{t('{from} – 今天', { from: fmtDate(from) })}</span>
+          </div>
           {stats?.length === 0 && <Empty compact>{t('暂无')}</Empty>}
           <div className="habit-rows">
             {stats?.map((s) => (

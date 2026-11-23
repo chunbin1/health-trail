@@ -113,7 +113,7 @@ function Trends({ active }: { active: boolean }) {
           <div className="mobile-back-bar trends-back">
             <button type="button" className="mobile-back-btn" onClick={() => setMobileDetail(false)}>
               <ChevronLeft size={18} />
-              <span>{t('返回指标列表')}</span>
+              <span>{t('报告')}</span>
             </button>
           </div>
           <div className="drawer-title" style={{ marginBottom: 16 }}>

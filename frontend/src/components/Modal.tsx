@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { ChevronLeft, X } from 'lucide-react'
 import { t } from '../i18n'
 import { useBodyLock } from '../state'
 import { IconButton } from '../ui'
@@ -38,9 +38,10 @@ export function Drawer({ onClose, head, children }: { onClose: () => void; head?
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="drawer" role="dialog">
         <div className="drawer-head">
+          <button type="button" className="drawer-back" aria-label={t('返回')} onClick={onClose}><ChevronLeft size={22} /></button>
           {head}
           <span className="spacer" />
-          <IconButton label={t('关闭')} onClick={onClose}><X size={18} /></IconButton>
+          <IconButton className="drawer-x" label={t('关闭')} onClick={onClose}><X size={18} /></IconButton>
         </div>
         <div className="drawer-body">{children}</div>
       </div>

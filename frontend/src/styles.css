@@ -238,7 +238,11 @@ html.mac-window .main { padding-top: 40px; }
     background: var(--surface); border-radius: var(--r-lg); padding: 8px; box-shadow: var(--shadow-lg);
     animation: rise 0.18s ease-out;
   }
-  .more-sheet .nav-item { height: 44px; font-size: 15px; }
+  .more-sheet .nav-item { height: 44px; font-size: 15px; border-radius: 10px; }
+  .more-sheet .nav-item .chip-ico { width: 28px; height: 28px; border-radius: 8px; }
+  .more-sheet .nav-item .count { font-size: 15px; font-weight: 500; }
+  .more-grab { width: 36px; height: 5px; border-radius: 99px; background: var(--line-2); margin: 4px auto 6px; }
+  .more-label { font-size: 12px; font-weight: 650; color: var(--ink-3); padding: 8px 10px 2px; }
 }
 
 /* ============ surfaces ============ */
@@ -534,6 +538,35 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 .hello { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
 .hello .titles { margin-right: auto; }
 .hello h1 { display: flex; align-items: center; gap: 8px; }
+.hello-tools { display: none; position: relative; gap: 8px; align-items: center; }
+.hello-tool {
+  width: 36px; height: 36px; border-radius: 18px; border: 0; padding: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  background: var(--surface); color: var(--ink); box-shadow: var(--ring);
+}
+.hello-tool.pri { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.hello-tool.pri:hover { background: var(--accent-hover); }
+.hello-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 2; width: 188px;
+  background: var(--surface); border-radius: 14px; padding: 6px; box-shadow: var(--shadow-lg);
+}
+.hello-menu button {
+  width: 100%; min-height: 42px; border: 0; border-radius: 10px; background: transparent;
+  display: flex; align-items: center; gap: 10px; padding: 0 8px; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--ink); text-align: left;
+}
+.hello-menu button:hover { background: var(--surface-2); }
+.hello.menu-open { position: relative; z-index: 36; }
+.hello-dim {
+  position: fixed; inset: 0; z-index: 30; border: 0; padding: 0; cursor: pointer;
+  background: rgba(10, 14, 12, 0.32);
+}
+@media (max-width: 760px) {
+  .hello { flex-wrap: nowrap; gap: 8px; }
+  .hello h1 { font-size: 32px; letter-spacing: -0.035em; line-height: 1.1; }
+  .hello-quick { display: none; }
+  .hello-tools { display: flex; }
+}
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 900px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .stat {
@@ -662,8 +695,8 @@ table.data .panel-row td { padding-top: 16px; font-size: 12px; font-weight: 600;
 @media (max-width: 560px) {
   /* a tab switcher keeps one place on a phone whatever buttons the tab has:
      the title on its own line, then the switcher first on the next */
-  .page-head:has(> .tab-switch) > .titles { flex-basis: 100%; order: -2; }
-  .page-head > .tab-switch { order: -1; }
+  .page-head:has(> .tab-switch) > .titles { flex-basis: 100%; }
+  .page-head > .tab-switch { margin-left: auto; }
   .card { padding: 16px; }
   .card .row-item { margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
   .card.flush .row-item { margin: 0; }
@@ -923,8 +956,53 @@ button, a, .row-item, .tab, .pill, .nav-item, .icon-btn { touch-action: manipula
 }
 .mobile-back-btn:active { background: var(--surface-3); }
 .mobile-back-btn.icon-only { padding: 0; justify-content: center; margin-left: -10px; }
+.drawer-back { display: none; }
 @media (max-width: 760px) {
-  .mobile-back-bar { display: flex; align-items: center; margin: -8px 0 6px -8px; }
+  .app.subpage .main { position: relative; }
+  .mobile-back-bar {
+    display: flex; align-items: center; position: sticky; top: 0; z-index: 6;
+    min-height: 44px; margin: -12px -16px 12px; padding: 0 4px;
+    background: color-mix(in srgb, var(--canvas) 88%, transparent);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  }
+  .app.subpage .mobile-back-btn.icon-only { margin-left: 0; }
+  .mobile-title {
+    position: absolute; left: 72px; right: 72px; text-align: center;
+    font-size: 17px; font-weight: 650; pointer-events: none;
+  }
+  .app.subpage .page-head {
+    position: absolute; z-index: 7; margin: 0;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    flex-wrap: nowrap; gap: 4px;
+  }
+  .app.subpage .page-head .titles { display: none; }
+  .app.subpage .page-head .btn {
+    background: none; box-shadow: none; color: var(--accent); font-weight: 600; height: 36px; padding: 0 8px;
+  }
+  .app.subpage .page-head .wide-only { display: none; }
+  .page-search .mobile-title { display: none; }
+  .page-search .page-head { display: none; }
+  .page-search .input-search {
+    position: absolute; z-index: 7; margin: 0 !important; max-width: none !important;
+    top: max(10px, calc(2px + env(safe-area-inset-top)));
+    left: 52px; right: 12px;
+  }
+  .page-head .checkins-add { width: 36px; height: 36px; padding: 0; border-radius: 18px; }
+  .checkins-add .wide-only, a.all-habits { display: none; }
+  .card .habits { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .card .habit {
+    background: transparent; border-radius: 0; padding: 12px 2px;
+    border-bottom: 1px solid var(--line); box-shadow: none;
+  }
+  .card .habit:last-child { border-bottom: 0; }
+  .card .habit.done, .card .habit.done:disabled:hover { background: transparent; }
+  .drawer-back {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; margin-left: -8px; border: 0; border-radius: 10px;
+    background: none; color: var(--accent); cursor: pointer;
+  }
+  .drawer-x { display: none; }
   .input-clear { width: 40px; height: 40px; }
 }
 .trends-list-body { max-height: 68vh; overflow-y: auto; }
@@ -937,6 +1015,10 @@ button, a, .row-item, .tab, .pill, .nav-item, .icon-btn { touch-action: manipula
   .trends-list .row-item.selected { background: transparent; }
   .trends-chev { display: inline-block; }
   .trends-back { margin: -8px 0 8px -10px; }
+  div:has(> .trends-split.show-detail) > .page-top { display: none; }
+  .app:has(.trends-split.show-detail) .tabbar { display: none; }
+  .app:has(.trends-split.show-detail) .main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .app:has(.trends-split.show-detail) .assist-ball { bottom: calc(16px + env(safe-area-inset-bottom)); }
 }
 html.ios-app { -webkit-tap-highlight-color: transparent; }
 html.ios-app .tabbar, html.ios-app .more-sheet { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
