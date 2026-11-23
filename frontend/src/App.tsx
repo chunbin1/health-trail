@@ -60,7 +60,8 @@ function useUpdateStatus(page: string, enabled: boolean) {
   return enabled ? (data ?? null) : null
 }
 
-const TABS = ['overview', 'checkins', 'reports', 'metrics']
+// Phone tab bar, left to right. 今天 sits in the middle, under the thumb.
+const TABS = ['checkins', 'reports', 'overview', 'metrics']
 const LABEL: Record<string, Key> = Object.fromEntries(NAV.flatMap((g) => g.items.map((i) => [i.page, i.label])))
 LABEL.connect = '连接 AI'
 LABEL.settings = '设置'
@@ -206,8 +207,11 @@ export function App() {
 
   const showMobileBack = !TABS.includes(page) && page !== 'capture' && page !== 'habits'
 
+  const assistSheet = assistOpen && page !== 'capture'
+  const appClass = ['app', showMobileBack ? 'subpage' : '', assistSheet ? 'assist-open' : '', more ? 'more-open' : ''].filter(Boolean).join(' ')
+
   return (
-    <div className="app">
+    <div className={appClass}>
       <nav className="sidebar drag">
         <div className="brand"><img src="/icon.svg" alt="" />{t('健康足迹')}</div>
         <div className="side-search">
@@ -246,6 +250,9 @@ export function App() {
               <button type="button" className="btn sm" onClick={() => openConnectionSettings()}>{t('切换')}</button>
             </div>
           )}
+          {assistSheet && (
+            <button type="button" className="assist-backdrop" aria-label={t('关闭')} onClick={() => setAssistOpen(false)} />
+          )}
           {captureOn && (
             <div className={page === 'capture' ? undefined : 'assist-dock'} hidden={page !== 'capture' && !assistOpen}>
               <Capture panel={page !== 'capture'} onClose={() => setAssistOpen(false)} onBack={goBack} />
@@ -259,13 +266,13 @@ export function App() {
         {TABS.map((p) => {
           const Icon = KIND[p].icon
           return (
-            <a key={p} href={'#/' + p} className={'tab' + (navPage === p ? ' active' : '')}>
-              <Icon size={22} strokeWidth={navPage === p ? 2.3 : 1.8} />{t(LABEL[p])}
+            <a key={p} href={'#/' + p} className={'tab' + (p === 'overview' ? ' home' : '') + (navPage === p ? ' active' : '')}>
+              <Icon size={p === 'overview' ? 30 : 26} strokeWidth={navPage === p ? 2.3 : 1.8} />{t(LABEL[p])}
             </a>
           )
         })}
         <button className={'tab' + (!TABS.includes(navPage) ? ' active' : '')} onClick={() => setMore(true)}>
-          <MoreHorizontal size={22} />{t('更多')}
+          <MoreHorizontal size={26} />{t('更多')}
         </button>
       </nav>
       <div className={'more-sheet' + (more ? ' open' : '')} onClick={() => setMore(false)}>

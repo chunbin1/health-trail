@@ -219,9 +219,11 @@ html.mac-window .main { padding-top: 40px; }
     backdrop-filter: saturate(1.6) blur(18px); -webkit-backdrop-filter: saturate(1.6) blur(18px);
     border-top: 1px solid var(--line);
   }
+  .app.subpage .tabbar { display: none; }
+  .app.subpage .main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
   .tab {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-    min-height: 44px; padding: 4px 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px;
+    min-height: 48px; padding: 2px 0 4px;
     font-size: 10.5px; color: var(--ink-3); background: none; border: 0; text-decoration: none !important;
   }
   .tab.active { color: var(--accent); font-weight: 600; }
@@ -871,6 +873,7 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
   box-shadow: var(--shadow-lg);
 }
 .assist-ball:hover { background: var(--accent-hover); }
+.assist-backdrop { display: none; }
 .assist-dock[hidden] { display: none; }
 .assist-dock {
   position: fixed; z-index: 35; right: 20px; bottom: 80px;
@@ -878,7 +881,7 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg);
 }
-.assist-dock .page-head { margin: 0; padding: 12px 14px 0; flex-wrap: nowrap; }
+.assist-dock .page-head { margin: 0; padding: 12px 14px 0; flex-wrap: nowrap; align-items: center; }
 .assist-dock .page-head h1 { font-size: 16px; }
 .assist-dock .page-head .sub, .assist-dock .notice { display: none; }
 .assist-dock > .capture-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -889,12 +892,23 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
 .assist-dock .chat-bar { position: static; background: var(--surface); padding-top: 0; }
 @media (max-width: 760px) {
   .assist-ball { right: 16px; bottom: calc(78px + env(safe-area-inset-bottom)); }
-  .assist-dock {
-    left: 12px; right: 12px; width: auto;
-    bottom: calc(138px + env(safe-area-inset-bottom));
-    height: min(68vh, 560px);
-    max-height: calc(100vh - 154px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  .app.subpage .assist-ball { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .app.assist-open .assist-ball,
+  .app.more-open .assist-ball { display: none; }
+  .app.assist-open .assist-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    border: 0; padding: 0; background: rgba(10, 14, 12, 0.32); cursor: pointer;
   }
+  /* The page stays put. The chat covers the tab bar and the ball; the title
+     (or the back row, on a pushed page) stays visible above it. */
+  .assist-dock {
+    left: 0; right: 0; bottom: 0; width: auto;
+    top: calc(env(safe-area-inset-top) + 108px);
+    height: auto; max-height: none;
+    border-radius: 16px 16px 0 0; z-index: 60;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app.subpage .assist-dock { top: calc(env(safe-area-inset-top) + 64px); }
 }
 
 /* iOS app shell polish & remote home-computer banner */
