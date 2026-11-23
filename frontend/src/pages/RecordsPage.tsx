@@ -36,7 +36,11 @@ export function RecordsPage({ entityName, end }: { entityName: string; end?: Rea
           <h1>{tx(e.label)}</h1>
           <div className="sub">{SUBTITLE[entityName] && t(SUBTITLE[entityName])}{data ? t(' · 共 {n} 条', { n: data.total }) : ''}</div>
         </div>
-        <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} />{t('添加{label}', { label: noun(e) })}</button>
+        <button className="btn primary" onClick={() => setAdding(true)}>
+          <Plus size={16} className="wide-only" />
+          <span className="wide-only">{t('添加{label}', { label: noun(e) })}</span>
+          <span className="phone-only">{t('添加')}</span>
+        </button>
         {end}
       </div>
       <div className="row page-tools" style={{ gap: 12 }}>

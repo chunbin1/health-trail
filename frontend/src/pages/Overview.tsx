@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from 'react'
-import { Check, ChevronRight, Plus, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Check, ChevronRight, Plus, Search, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { addDays, api, fmtDate, fmtNum, metricValue, MONTHS, nowLocal, today, type MedDay, type Rec } from '../api'
 import { EntityForm } from '../components/EntityForm'
 import { tell } from '../components/Dialog'
@@ -72,6 +72,7 @@ export function Overview() {
     return out
   }, [types])
   const [adding, setAdding] = useState<string | null>(null)
+  const [addMenu, setAddMenu] = useState(false)
   // the body metrics to leave off this page, kept in settings.json
   const list = useListChoice('today_metrics', o?.latest_metrics.map((m) => m.metric_type) || [])
   const tiles = list.ordered.filter(list.shown).map((n) => o!.latest_metrics.find((m) => m.metric_type === n)!)
@@ -209,12 +210,30 @@ export function Overview() {
 
   return (
     <>
-      <div className="hello">
+      <div className={'hello' + (addMenu ? ' menu-open' : '')}>
         <div className="titles">
           <div className="sub">{todayLine(d)}</div>
           <h1>{greeting()}<IconButton small label={t('调整首页')} onClick={() => setArranging(true)}><SlidersHorizontal size={15} /></IconButton></h1>
         </div>
-        <div className="row">
+        <div className="hello-tools">
+          <button type="button" className="hello-tool" aria-label={t('搜索')} onClick={() => { location.hash = '#/search' }}>
+            <Search size={18} />
+          </button>
+          <button type="button" className={'hello-tool pri' + (addMenu ? ' on' : '')} aria-label={t('新建')} aria-expanded={addMenu}
+            onClick={() => setAddMenu((v) => !v)}>
+            <Plus size={20} strokeWidth={2.4} />
+          </button>
+          {addMenu && (
+            <div className="hello-menu" role="menu">
+              {QUICK.map(([k, label]) => (
+                <button key={k} type="button" role="menuitem" onClick={() => { setAddMenu(false); setAdding(k) }}>
+                  <KindIcon kind={k} />{t(label)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="row hello-quick">
           {QUICK.map(([k, label]) => (
             <button key={k} className="btn" onClick={() => setAdding(k)}>
               <Plus size={14} style={{ color: `var(--c-${k})` }} strokeWidth={2.6} />{t(label)}
@@ -222,6 +241,7 @@ export function Overview() {
           ))}
         </div>
       </div>
+      {addMenu && <button type="button" className="hello-dim" aria-label={t('关闭')} onClick={() => setAddMenu(false)} />}
 
       <NotifyWarning />
 
