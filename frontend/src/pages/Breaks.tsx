@@ -59,7 +59,9 @@ export function Breaks() {
   const phaseHint = (() => {
     switch (state) {
       case 'working':
-        return t('工作 {m} 分钟后将提醒你喝水并起身活动。', { m: config.work_minutes })
+        return ios
+          ? t('工作 {m} 分钟后，手机会弹出喝水提醒，锁屏也能看到。', { m: config.work_minutes })
+          : t('工作 {m} 分钟后将提醒你喝水并起身活动。', { m: config.work_minutes })
       case 'break':
         return t('离开屏幕站一会儿，喝口水放松眼睛和肩颈。')
       case 'break_done':

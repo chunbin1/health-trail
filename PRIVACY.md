@@ -27,6 +27,7 @@ The App only requests system permissions when you use a related feature:
 - **Camera / Photo Library:** To attach photos of lab reports or prescriptions to your local records.
 - **Local Network:** Only when connecting to your own Health Trail desktop server on your local Wi-Fi.
 - **Microphone / Speech Recognition (Strictly On-Device):** Optional voice dictation for the AI Assistant runs strictly on-device (`requiresOnDeviceRecognition = true`). Audio is never uploaded to Apple or any remote server; on devices or languages that do not support on-device offline speech recognition, in-app dictation is unavailable rather than falling back to cloud processing.
+- **Notifications:** If you start the water and stretch timer, the App schedules a local notification on your iPhone for when the timer is due. That reminder stays on the device and is not sent to any server.
 
 ### 4. Data Control & Deletion
 Because all data is stored locally on your device and excluded from iCloud/system backups, you have full control at all times. You can edit or delete any record inside the App, and uninstalling the App permanently removes all local data.
@@ -56,6 +57,7 @@ Health Trail is a personal record-keeping tool and does not provide medical advi
 - **相机 / 相册**：用于拍摄或选取检查报告、处方照片并保存到本机记录。
 - **本地网络**：仅在您主动连接同一 Wi-Fi 下的自有桌面端时使用。
 - **麦克风 / 语音识别（仅限设备端离线识别）**：AI 助手的语音听写强制启用设备端离线识别（`requiresOnDeviceRecognition = true`），语音音频绝不上传至苹果或任何外部服务器；若当前设备或语言不支持端侧离线识别，应用内听写会提示不可用而不会回退到云端识别。
+- **通知**：若你开启喝水与起身计时，到点时应用会在本机安排一条通知。这条提醒只留在手机上，不会发到任何服务器。
 
 ### 4. 数据控制与删除
 所有数据均存储在您的设备本地且排除了 iCloud / 系统备份，您可以随时在应用内编辑或删除任意记录；卸载应用将永久清除本机全部数据。
