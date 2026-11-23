@@ -588,6 +588,7 @@ const EN = {
   '已满': 'Done',
   '时段外': 'Off hours',
   '工作 {m} 分钟后将提醒你喝水并起身活动。': 'You’ll be reminded to drink water and stretch after {m} min.',
+  '工作 {m} 分钟后，手机会弹出喝水提醒，锁屏也能看到。': 'After {m} min your iPhone shows a water reminder, including on the lock screen.',
   '离开屏幕站一会儿，喝口水放松眼睛和肩颈。': 'Step back from the screen, drink some water, and relax.',
   '本次休息已满，回到电脑前再手动开始下一轮。': 'Break finished. Start the next round once you’re back.',
   '计时已暂停，点击「继续计时」即可接着倒计时。': 'Timer paused. Click Resume when you’re ready.',

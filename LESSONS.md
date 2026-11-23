@@ -316,6 +316,11 @@ iOS 本机模式运行的是 `mobile/` 而不是 `internal/desktop/`。桌面端
 - 证据：2026-11-22，iOS v1 初版在「休息」页报 `/api/break-timer` 404，总览页也因 `NotifyWarning` 触发 `/api/notifications` 404；全量 14 页 30 接口审计后在 `mobile/breaktimer.go` 补齐挂载并给 `NotifyWarning` 加 `isIOSApp()` 守卫。
 - 出现：1
 
+### 53. iOS 喝水提醒必须事先排进系统通知，不能只靠进程里的倒计时
+休息计时在 `mobile/` 里每秒 `Tick` 一次，应用一进后台进程就被挂起，到点既没有 Mac 那种休息浮窗，也不会自己弹出横幅。要在倒计时还在走的时候，用 `UNUserNotificationCenter` 按剩余秒数排一条本机通知（同一条 identifier 覆盖更新），进后台前再排一次；应用在前台时也要在 `willPresent` 里交出 `.banner`，否则系统默认不显示。暂停、停止或进入休息后取消这条待发送通知。连接家用电脑时不要排，提醒在电脑上。
+- 证据：2026-11-23，真机上喝水计时到点没有系统通知。
+- 出现：1
+
 ## 已移入 CLAUDE.md 的规则
 
 - #9 测量布局、截图要等动画和尺寸观察结束 → CLAUDE.md「验证」（2026-10-21 第 3 次：日期弹窗刚点开就截图，画面里没有弹窗，量出的位置却是对的）
