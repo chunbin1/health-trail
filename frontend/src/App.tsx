@@ -127,8 +127,10 @@ export function App() {
     const onDown = (e: MouseEvent) => {
       const t = e.target
       if (!(t instanceof Element)) return
-      // the date popper is drawn outside the panel; a click there is still inside the chat
-      if (t.closest('.assist-dock, .assist-ball, .dt-popper')) return
+      // the date popper is drawn outside the panel; a click there is still inside the chat.
+      // the dimmed backdrop has its own click handler. If mousedown closed the
+      // sheet first, the following click would land on the page title behind it.
+      if (t.closest('.assist-dock, .assist-ball, .assist-backdrop, .dt-popper')) return
       setAssistOpen(false)
     }
     document.addEventListener('keydown', onKey)
