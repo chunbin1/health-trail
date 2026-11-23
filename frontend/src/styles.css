@@ -353,6 +353,25 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 .pill:hover { color: var(--ink); }
 .pill.on { background: var(--ink); color: var(--canvas); box-shadow: none; font-weight: 600; }
 .pill.icon { width: 32px; padding: 0; justify-content: center; }
+.metric-pills { margin-bottom: 18px; min-height: 34px; }
+.metric-now { display: flex; gap: 28px; margin-bottom: 14px; align-items: flex-end; flex-wrap: wrap; }
+.metric-big { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+.metric-big small { font-size: 14px; font-weight: 500; color: var(--ink-3); margin-left: 3px; }
+.metric-delta { font-size: 17px; font-weight: 650; }
+.metric-log { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.metric-log .metric-val { width: 120px; }
+.metric-log .metric-ctx { width: 160px; }
+.metric-log .metric-when { width: 220px; }
+.metric-log-save { height: 38px; }
+@media (max-width: 760px) {
+  .metric-pills { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px 12px; padding: 0 16px 2px; }
+  .metric-pills .pill { flex: none; }
+  .metric-now { gap: 16px; margin-bottom: 4px; }
+  .metric-log { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
+  .metric-log .metric-val, .metric-log .metric-ctx, .metric-log .metric-when { width: auto; }
+  .metric-log .metric-when, .metric-log-save { grid-column: 1 / -1; }
+  .metric-log-save { width: 100%; height: 44px; }
+}
 
 .switch { position: relative; width: 40px; height: 24px; flex: none; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
@@ -896,6 +915,7 @@ html.mac-window .capture-page { top: 36px; padding-top: 8px; }
   /* a phone's scrollbar takes no room: line the cards up with the input */
   .capture-page .chat-log { padding-right: 16px; }
   .phone-only { display: inline-flex; }
+  .wide-only { display: none; }
 }
 
 /* Floating assistant: a ball at the lower right, only once an API is configured. */
@@ -1146,6 +1166,11 @@ html:has(.break-overlay) { scrollbar-gutter: auto; overflow: hidden; }
 
 .break-history {
   margin-top: 14px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end;
+}
+@media (max-width: 760px) {
+  .break-history { display: none; }
+  .break-hero { flex-direction: column; text-align: center; }
+  .break-hero .row, .break-status-pill { margin-left: auto; margin-right: auto; }
 }
 .break-day { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
 .break-bars {

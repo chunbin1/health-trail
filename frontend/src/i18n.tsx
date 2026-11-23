@@ -231,6 +231,7 @@ const EN = {
   '已归档': 'Archived',
   '全部打卡项': 'All check-in items',
   '在用': 'In use',
+  '已停用': 'Stopped',
   '共打卡 {n} 天': 'Days checked off: {n}',
   '最近一次 {date}': 'last {date}',
   '还没打过卡': 'Not checked off yet',
@@ -326,6 +327,7 @@ const EN = {
   // metrics
   '1 年': '1 year',
   '体重、血压、血糖等日常测量': 'Everyday measurements such as weight, blood pressure and blood glucose',
+  '体重、血压、血糖': 'Weight, blood pressure, blood glucose',
   '最近': 'Latest',
   '区间变化': 'Change',
   '区间范围': 'Range',

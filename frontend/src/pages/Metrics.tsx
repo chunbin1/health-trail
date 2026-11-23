@@ -33,6 +33,12 @@ export function Metrics() {
   const kindId = useRef<number>()
   if (kind) kindId.current = kind.id
   const [addingKind, setAddingKind] = useState(false)
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 760)
+  useEffect(() => {
+    const on = () => setPhone(window.innerWidth <= 760)
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
   // the pills in the person's order, as on the 今天 page; before a choice,
   // the key ones and those with readings
   const { data: o } = useLoad(() => api.overview(), [])
@@ -78,18 +84,21 @@ export function Metrics() {
   return (
     <>
       <div className="page-head">
-        <div className="titles"><h1>{t('身体数据')}</h1><div className="sub">{t('体重、血压、血糖等日常测量')}</div></div>
+        <div className="titles">
+          <h1>{t('身体数据')}</h1>
+          <div className="sub"><span className="wide-only">{t('体重、血压、血糖等日常测量')}</span><span className="phone-only">{t('体重、血压、血糖')}</span></div>
+        </div>
       </div>
       {/* drawn once it's known which are shown, so nothing jumps */}
-      <div className="pills" style={{ marginBottom: 18, minHeight: 34 }}>
+      <div className="pills metric-pills">
         {list.loaded && o && <>
           {shown.map((m) => (
             <button key={m} className={'pill' + (m === type ? ' on' : '')} onClick={() => setType(m)}>{tx(m)}</button>
           ))}
           {/* kept together so a wrap never splits them */}
           <span className="pill-group">
-            <button className="pill" onClick={() => setAddingKind(true)}><Plus size={13} />{t('新指标')}</button>
-            <button type="button" className="pill icon" onClick={() => setChoosing(true)} aria-label={t('选择直接显示的指标')} title={t('选择直接显示的指标')}><SlidersHorizontal size={14} /></button>
+            <button className="pill" aria-label={t('新指标')} onClick={() => setAddingKind(true)}><Plus size={14} /><span className="wide-only">{t('新指标')}</span></button>
+            <button type="button" className="pill icon wide-only" onClick={() => setChoosing(true)} aria-label={t('选择直接显示的指标')} title={t('选择直接显示的指标')}><SlidersHorizontal size={14} /></button>
           </span>
         </>}
       </div>
@@ -97,25 +106,25 @@ export function Metrics() {
         <section className="card">
           <div className="card-head">
             <h2>{tx(type)}{kind && (
-              <IconButton small label={t('修改这个指标')} onClick={() => openRecord('metric_kinds', kind.id)}><Pencil size={14} /></IconButton>
+              <IconButton className="wide-only" small label={t('修改这个指标')} onClick={() => openRecord('metric_kinds', kind.id)}><Pencil size={14} /></IconButton>
             )}</h2>
-            <div className="seg">
-              {RANGES.map((d) => <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{rangeLabel(d)}</button>)}
+            <div className="seg metric-ranges">
+              {RANGES.map((d) => <button key={d} className={(days === d ? 'on ' : '') + (d === 0 ? 'wide-only' : '')} onClick={() => setDays(d)}>{rangeLabel(d)}</button>)}
             </div>
           </div>
           {last && (
-            <div className="row" style={{ gap: 28, marginBottom: 14, alignItems: 'flex-end' }}>
-              <div><div className="sub">{t('最近')}</div><div><span style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em' }} className="num">{metricValue(last)}</span> <span className="muted">{unit}</span>{last.category && <span className="tag" style={{ marginLeft: 8 }}>{tx(last.category)}</span>}</div></div>
+            <div className="metric-now">
+              <div><div className="sub">{t('最近')}</div><div className="metric-big num">{metricValue(last)}<small>{unit}</small></div></div>
               {delta != null && !isBP && (
-                <div><div className="sub">{t('区间变化')}</div><div className="num" style={{ fontSize: 17, fontWeight: 600 }}>{delta > 0 ? '+' : ''}{fmtNum(delta)} {unit}</div></div>
+                <div><div className="sub">{t('区间变化')}</div><div className="num metric-delta">{delta > 0 ? '+' : ''}{fmtNum(delta)} {unit}</div></div>
               )}
               {vals.length > 1 && !isBP && (
-                <div><div className="sub">{t('区间范围')}</div><div className="num" style={{ fontSize: 17, fontWeight: 600 }}>{fmtNum(Math.min(...vals))} – {fmtNum(Math.max(...vals))}</div></div>
+                <div className="wide-only"><div className="sub">{t('区间范围')}</div><div className="num" style={{ fontSize: 17, fontWeight: 600 }}>{fmtNum(Math.min(...vals))} – {fmtNum(Math.max(...vals))}</div></div>
               )}
-              <div className="sub" style={{ marginLeft: 'auto' }}>{t('{n} 次测量', { n: rows!.length })}</div>
+              <div className="sub wide-only" style={{ marginLeft: 'auto' }}>{t('{n} 次测量', { n: rows!.length })}</div>
             </div>
           )}
-          <LineChart unit={unit} names={isBP ? [t('收缩压'), t('舒张压')] : undefined}
+          <LineChart height={phone ? 120 : 240} unit={unit} names={isBP ? [t('收缩压'), t('舒张压')] : undefined}
             points={(rows || []).map((r) => ({ date: r.measured_at, v: r.value, v2: r.value2 }))} />
         </section>
 
@@ -136,26 +145,26 @@ export function Metrics() {
         ) : (
         <section className="card">
           <div className="card-head"><h2>{t('记一笔')}</h2></div>
-          <form className="row" onSubmit={add} style={{ gap: 10, alignItems: 'flex-end' }}>
-            <label className="field" style={{ width: 120 }}>
+          <form className="metric-log" onSubmit={add}>
+            <label className="field metric-val">
               <span className="lbl">{paren(isBP ? t('收缩压') : t('数值'), unit)}</span>
               <input className="input num" inputMode="decimal" value={v} onChange={(e) => setV(e.target.value)} required />
             </label>
             {isBP && (
-              <label className="field" style={{ width: 120 }}>
+              <label className="field metric-val">
                 <span className="lbl">{t('舒张压')}</span>
                 <input className="input num" inputMode="decimal" value={v2} onChange={(e) => setV2(e.target.value)} />
               </label>
             )}
-            <label className="field" style={{ width: 160 }}>
+            <label className="field metric-ctx">
               <span className="lbl">{t('情境')}</span>
               <input className="input" placeholder={t('如 空腹、晨起')} value={ctx} onChange={(e) => setCtx(e.target.value)} />
             </label>
-            <label className="field" style={{ width: 220 }}>
+            <label className="field metric-when">
               <span className="lbl">{t('时间（不填为现在）')}</span>
               <DateTimeInput value={at} onChange={setAt} />
             </label>
-            <button className="btn primary" style={{ height: 38 }}><Plus size={16} />{t('记录|button')}</button>
+            <button className="btn primary metric-log-save"><Plus size={16} className="wide-only" />{t('记录|button')}</button>
           </form>
           {error && <div className="error" style={{ marginTop: 10 }}>{error}</div>}
         </section>
