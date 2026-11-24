@@ -441,6 +441,7 @@ const EN = {
   '把你说的话或打的字整理成档案里的记录。密钥只存在这台电脑上，不放进备份。声音用 Mac 本机识别，不经过这个接口。': 'Turns what you say or type into records. The key stays on this computer and is not included in backups. Speech is recognized on the Mac and is not sent to this service.',
   '把你说的话、打的字或发的图片整理成档案里的记录。密钥只存在这台电脑上，不放进备份。声音用 Mac 本机识别，不经过这个接口；图片会发给它。': 'Turns what you say, type or send as a picture into records. The key stays on this computer and is not included in backups. Speech is recognized on the Mac and is not sent to this service; pictures are.',
   '说或输入要记的事，例如：今天早上头痛，大概 4 分': 'Say or type what to record, e.g. headache this morning, about a 4',
+  '输入消息，或发一张化验单': 'Type a message, or send a lab photo',
   '输入消息，或发一张化验单。Enter 发送': 'Type a message, or send a lab photo. Enter to send',
   '发送': 'Send',
   '添加图片': 'Add a picture',

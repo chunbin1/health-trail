@@ -134,7 +134,13 @@ export function Metrics() {
           </div>
           {last && (
             <div className="metric-now">
-              <div><div className="sub">{t('最近')}</div><div className="metric-big num">{metricValue(last)}<small>{unit}</small></div></div>
+              <div>
+                <div className="sub">{t('最近')}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <div className="metric-big num">{metricValue(last)}<small>{unit}</small></div>
+                  {last.category && <span className="tag">{tx(last.category)}</span>}
+                </div>
+              </div>
               {delta != null && !isBP && (
                 <div><div className="sub">{t('区间变化')}</div><div className="num metric-delta">{delta > 0 ? '+' : ''}{fmtNum(delta)} {unit}</div></div>
               )}
@@ -214,6 +220,11 @@ export function Metrics() {
         <BottomSheet label={t('全部指标')} onClose={() => setAllOpen(false)}>
           <div className="metric-sheet-head">
             <h2>{t('全部指标')}</h2>
+            {kind && (
+              <button type="button" className="btn ghost" onClick={() => { setAllOpen(false); openRecord('metric_kinds', kind.id) }}>
+                <Pencil size={14} />{t('修改这个指标')}
+              </button>
+            )}
           </div>
           <div className="list">
             {shown.map((m) => {

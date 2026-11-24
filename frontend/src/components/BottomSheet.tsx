@@ -27,6 +27,12 @@ export function BottomSheet({ label, onClose, children, open = true, keep = fals
   const shiftRef = useRef(0)
   const [shift, setShift] = useState(0)
   const [settle, setSettle] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    shiftRef.current = 0
+    setShift(0)
+    setSettle(false)
+  }, [open])
   if (!open && !keep) return null
 
   function place(n: number) {

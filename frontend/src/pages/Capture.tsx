@@ -3,6 +3,7 @@ import { Check, ChevronLeft, ImagePlus, Mic, SendHorizontal, Trash2, X } from 'l
 import { api, ApiError, fmtDate, today, type AssistantConfig, type ChatHead, type ChatMsgWire, type ChatTurn, type DraftItem, type DraftStatus, type Entity, type Field, type LabDraft, type ToolStep } from '../api'
 import { DateTimeInput } from '../components/DateTimeInput'
 import { AssistantSetup } from '../components/AssistantSetup'
+import { useNarrow } from '../components/BottomSheet'
 import { ask } from '../components/Dialog'
 import { t, tx } from '../i18n'
 import { hasIOSSpeech, isIOSApp, startIOSSpeech, stopIOSSpeech, subscribeIOSSpeech } from '../ios'
@@ -209,6 +210,7 @@ function joinSpeech(prefix: string, spoken: string): string {
 
 export function Capture({ panel, onClose, onBack }: { panel?: boolean; onClose?: () => void; onBack?: () => void } = {}) {
   const { entity, changed, toast, lang } = useApp()
+  const narrow = useNarrow()
   const nativeSpeech = hasIOSSpeech()
   const speechPrefixRef = useRef('')
   const listeningRef = useRef(false)
@@ -983,32 +985,77 @@ export function Capture({ panel, onClose, onBack }: { panel?: boolean; onClose?:
                 ))}
               </div>
             )}
-            <textarea className="input" style={{ width: '100%' }} rows={3} value={text}
-              placeholder={t('输入消息，或发一张化验单。Enter 发送')}
-              onChange={(e) => writeText(e.target.value)} onKeyDown={onKey} onPaste={onPaste} />
-            <div className="row" style={{ marginTop: 8 }}>
-              <SaveMode auto={auto} onChange={(on) => {
-                api.setAssistant({ auto_save: on }).then((c) => setCfg(c), (e) => setErr(e.message))
-              }} />
-              <input ref={fileRef} type="file" accept={KINDS.join(',')} multiple hidden onChange={(e) => { addFiles([...e.target.files || []]); e.target.value = '' }} />
-              {/* icons only, so the row never wraps; send stays at the right edge */}
-              <div className="chat-tools">
-                <button type="button" className="btn sm sq" disabled={waiting} onClick={() => fileRef.current?.click()}
-                  aria-label={t('添加图片')} title={t('添加图片')}>
-                  <ImagePlus size={15} />
-                </button>
-                {(nativeSpeech || view.speech) && (
-                  <button type="button" className={'btn sm sq' + (listening ? ' primary' : '')} disabled={(micBusy && !listening) || waiting} onClick={mic}
-                    aria-label={micLabel} title={micLabel} aria-pressed={listening}>
-                    <Mic size={15} />
-                  </button>
-                )}
-                <button type="button" className="btn primary sm sq" disabled={waiting || (!nativeSpeech && micBusy)} onClick={send}
-                  aria-label={waiting ? t('正在思考…') : t('发送')} title={waiting ? t('正在思考…') : t('发送')}>
-                  <SendHorizontal size={15} />
-                </button>
-              </div>
-            </div>
+            <input ref={fileRef} type="file" accept={KINDS.join(',')} multiple hidden onChange={(e) => { addFiles([...e.target.files || []]); e.target.value = '' }} />
+            {narrow ? (
+              <>
+                <div className="chat-meta-row">
+                  <SaveMode auto={auto} onChange={(on) => {
+                    api.setAssistant({ auto_save: on }).then((c) => setCfg(c), (e) => setErr(e.message))
+                  }} />
+                </div>
+                <div className="chat-pill">
+                  <textarea
+                    ref={(el) => {
+                      if (!el) return
+                      el.style.height = 'auto'
+                      el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+                    }}
+                    className="chat-pill-input"
+                    rows={1}
+                    enterKeyHint="send"
+                    value={text}
+                    placeholder={t('输入消息，或发一张化验单')}
+                    onChange={(e) => writeText(e.target.value)}
+                    onKeyDown={onKey}
+                    onPaste={onPaste}
+                  />
+                  <div className="chat-tools">
+                    <button type="button" className="btn sm sq" disabled={waiting} onClick={() => fileRef.current?.click()}
+                      aria-label={t('添加图片')} title={t('添加图片')}>
+                      <ImagePlus size={16} />
+                    </button>
+                    {(nativeSpeech || view.speech) && (
+                      <button type="button" className={'btn sm sq' + (listening ? ' primary' : '')} disabled={(micBusy && !listening) || waiting} onClick={mic}
+                        aria-label={micLabel} title={micLabel} aria-pressed={listening}>
+                        <Mic size={16} />
+                      </button>
+                    )}
+                    <button type="button" className="btn primary sm sq chat-send" disabled={waiting || (!nativeSpeech && micBusy)} onClick={send}
+                      aria-label={waiting ? t('正在思考…') : t('发送')} title={waiting ? t('正在思考…') : t('发送')}>
+                      <SendHorizontal size={16} />
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <textarea className="input" style={{ width: '100%' }} rows={3} value={text}
+                  placeholder={t('输入消息，或发一张化验单。Enter 发送')}
+                  onChange={(e) => writeText(e.target.value)} onKeyDown={onKey} onPaste={onPaste} />
+                <div className="row" style={{ marginTop: 8 }}>
+                  <SaveMode auto={auto} onChange={(on) => {
+                    api.setAssistant({ auto_save: on }).then((c) => setCfg(c), (e) => setErr(e.message))
+                  }} />
+                  {/* icons only, so the row never wraps; send stays at the right edge */}
+                  <div className="chat-tools">
+                    <button type="button" className="btn sm sq" disabled={waiting} onClick={() => fileRef.current?.click()}
+                      aria-label={t('添加图片')} title={t('添加图片')}>
+                      <ImagePlus size={15} />
+                    </button>
+                    {(nativeSpeech || view.speech) && (
+                      <button type="button" className={'btn sm sq' + (listening ? ' primary' : '')} disabled={(micBusy && !listening) || waiting} onClick={mic}
+                        aria-label={micLabel} title={micLabel} aria-pressed={listening}>
+                        <Mic size={15} />
+                      </button>
+                    )}
+                    <button type="button" className="btn primary sm sq" disabled={waiting || (!nativeSpeech && micBusy)} onClick={send}
+                      aria-label={waiting ? t('正在思考…') : t('发送')} title={waiting ? t('正在思考…') : t('发送')}>
+                      <SendHorizontal size={15} />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

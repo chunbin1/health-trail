@@ -4,7 +4,7 @@ import { api, type Overview as OV } from './api'
 import { hideWebMenu } from './contextmenu'
 import { t, tx, type Key } from './i18n'
 import { iosBridgeInfo, iosMode, isIOSApp, openConnectionSettings } from './ios'
-import { BottomSheet } from './components/BottomSheet'
+import { BottomSheet, useNarrow } from './components/BottomSheet'
 import { RecordDrawer } from './components/RecordDrawer'
 import { UpdateCard } from './components/UpdateCard'
 import { Breaks } from './pages/Breaks'
@@ -104,8 +104,9 @@ export function App() {
   // AI助手 stays mounted once opened, whether as the page or the floating
   // panel. Leaving the page must not throw away the sentence or the reply
   // still on its way.
+  const narrow = useNarrow()
   const [assistOpen, setAssistOpen] = useState(false)
-  useBodyLock(more || assistOpen)
+  useBodyLock(more || (assistOpen && !narrow))
   const [captureOn, setCaptureOn] = useState(page === 'capture')
   const assist = useLoad(() => api.assistant().catch(() => null), [page])
   const assistReload = useRef(assist.reload)
@@ -137,12 +138,12 @@ export function App() {
       setAssistOpen(false)
     }
     document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onDown)
+    if (!narrow) document.addEventListener('mousedown', onDown)
     return () => {
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('mousedown', onDown)
     }
-  }, [assistOpen])
+  }, [assistOpen, narrow])
   let body
   switch (page) {
     case 'capture': body = null; break
@@ -255,10 +256,10 @@ export function App() {
               <button type="button" className="btn sm" onClick={() => openConnectionSettings()}>{t('切换')}</button>
             </div>
           )}
-          {assistSheet && (
+          {assistSheet && !narrow && (
             <button type="button" className="assist-backdrop" aria-label={t('关闭')} onClick={() => setAssistOpen(false)} />
           )}
-          {captureOn && (
+          {captureOn && (page === 'capture' || !narrow) && (
             <div className={page === 'capture' ? undefined : 'assist-dock'} hidden={page !== 'capture' && !assistOpen}>
               <Capture panel={page !== 'capture'} onClose={() => setAssistOpen(false)} onBack={goBack} />
             </div>
@@ -286,6 +287,7 @@ export function App() {
             <div className="more-label">{t('工具')}</div>
             {navItem('capture', 'AI助手')}
             {navItem('breaks', '休息')}
+            {navItem('search', '搜索')}
             {!ios && navItem('connect', '连接 AI')}
             <div className="more-label">{t('记录')}</div>
             {(['conditions', 'symptoms', 'visits', 'medications', 'appointments'] as const).map((p) => navItem(p, LABEL[p], p))}
@@ -294,6 +296,11 @@ export function App() {
         </BottomSheet>
       )}
 
+      {captureOn && narrow && page !== 'capture' && (
+        <BottomSheet label={t('AI助手')} open={assistOpen} keep className="assist-sheet" onClose={() => setAssistOpen(false)}>
+          <Capture panel onClose={() => setAssistOpen(false)} onBack={goBack} />
+        </BottomSheet>
+      )}
       {configured && page !== 'capture' && (
         <button type="button" className={'assist-ball' + (assistOpen ? ' open' : '')}
           aria-expanded={assistOpen} aria-label={assistOpen ? t('关闭') : t('AI助手')}
