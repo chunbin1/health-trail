@@ -317,6 +317,9 @@ func (s *shell) updateTrayStatusLocked(snap breaktimer.Snapshot, en bool) {
 	}
 	if runtime.GOOS != "windows" {
 		lbl := trayLabel(snap, en)
+		if lbl != "" {
+			ensureTrayMonospacedFont()
+		}
 		if lbl != s.lastTrayLabel {
 			s.lastTrayLabel = lbl
 			s.tray.SetLabel(lbl)
