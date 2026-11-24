@@ -4,6 +4,7 @@ import { api, type Overview as OV } from './api'
 import { hideWebMenu } from './contextmenu'
 import { t, tx, type Key } from './i18n'
 import { iosBridgeInfo, iosMode, isIOSApp, openConnectionSettings } from './ios'
+import { BottomSheet } from './components/BottomSheet'
 import { RecordDrawer } from './components/RecordDrawer'
 import { UpdateCard } from './components/UpdateCard'
 import { Breaks } from './pages/Breaks'
@@ -279,19 +280,19 @@ export function App() {
           <MoreHorizontal size={26} />{t('更多')}
         </button>
       </nav>
-      <div className={'more-sheet' + (more ? ' open' : '')} onClick={() => setMore(false)}>
-        <div className="panel" onClick={(e) => { if ((e.target as HTMLElement).closest('a')) setMore(false); e.stopPropagation() }}>
-          <div className="more-grab" />
-          <div className="more-label">{t('工具')}</div>
-          {navItem('capture', 'AI助手')}
-          {navItem('breaks', '休息')}
-          {navItem('search', '搜索')}
-          {!ios && navItem('connect', '连接 AI')}
-          <div className="more-label">{t('记录')}</div>
-          {(['conditions', 'symptoms', 'visits', 'medications', 'appointments'] as const).map((p) => navItem(p, LABEL[p], p))}
-          {navItem('settings', '设置')}
-        </div>
-      </div>
+      {more && (
+        <BottomSheet label={t('更多')} onClose={() => setMore(false)}>
+          <div className="more-menu" onClick={(e) => { if ((e.target as HTMLElement).closest('a')) setMore(false) }}>
+            <div className="more-label">{t('工具')}</div>
+            {navItem('capture', 'AI助手')}
+            {navItem('breaks', '休息')}
+            {!ios && navItem('connect', '连接 AI')}
+            <div className="more-label">{t('记录')}</div>
+            {(['conditions', 'symptoms', 'visits', 'medications', 'appointments'] as const).map((p) => navItem(p, LABEL[p], p))}
+            {navItem('settings', '设置')}
+          </div>
+        </BottomSheet>
+      )}
 
       {configured && page !== 'capture' && (
         <button type="button" className={'assist-ball' + (assistOpen ? ' open' : '')}

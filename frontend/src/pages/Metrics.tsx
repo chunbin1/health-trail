@@ -5,6 +5,7 @@ import { DateTimeInput } from '../components/DateTimeInput'
 import { EntityForm } from '../components/EntityForm'
 import { LineChart } from '../components/LineChart'
 import { ArrangeList } from '../components/ArrangeList'
+import { BottomSheet } from '../components/BottomSheet'
 import { Modal } from '../components/Modal'
 import { noun, paren, t, tx } from '../i18n'
 import { hashParam, openRecord, useApp, useListChoice, useLoad, useMetricKinds } from '../state'
@@ -46,7 +47,19 @@ export function Metrics() {
   const list = useListChoice('metrics_page', mk.types, (m) => KEY_METRICS.includes(m) || withData.has(m))
   // one opened by a link shows while it's chosen
   const shown = list.ordered.filter((m) => list.shown(m) || m === type)
+  const hidden = list.ordered.filter((m) => !list.shown(m) && m !== type)
+  const latest = new Map((o?.latest_metrics || []).map((m) => [m.metric_type, m]))
+  // picking one that was left off the row puts it back, so it isn't a dead end
+  function pickMetric(m: string) {
+    if (list.loaded && !list.shown(m)) {
+      const hide = list.ordered.filter((n) => !list.shown(n) && n !== m)
+      list.save(list.ordered, hide)
+    }
+    setType(m)
+    setAllOpen(false)
+  }
   const [choosing, setChoosing] = useState(false)
+  const [allOpen, setAllOpen] = useState(false)
   // the metric was renamed (follow it) or deleted (show the first one) from
   // its drawer. Only when the list reloads: a metric just added is chosen
   // before it's in it.
@@ -90,6 +103,7 @@ export function Metrics() {
         </div>
       </div>
       {/* drawn once it's known which are shown, so nothing jumps */}
+      <div className="metric-switch">
       <div className="pills metric-pills">
         {list.loaded && o && <>
           {shown.map((m) => (
@@ -101,6 +115,12 @@ export function Metrics() {
             <button type="button" className="pill icon wide-only" onClick={() => setChoosing(true)} aria-label={t('选择直接显示的指标')} title={t('选择直接显示的指标')}><SlidersHorizontal size={14} /></button>
           </span>
         </>}
+      </div>
+      {list.loaded && (
+        <button type="button" className="pill metric-all phone-only" onClick={() => setAllOpen(true)}>
+          {t('全部')}{hidden.length > 0 && <span className="metric-all-n">{hidden.length}</span>}
+        </button>
+      )}
       </div>
       <div className="stack">
         <section className="card">
@@ -190,6 +210,28 @@ export function Metrics() {
         ) : rows && <div className="card"><Empty compact>{derived && heights && !height ? t('记一次身高，就能按体重算出 BMI') : t('这段时间没有{type}的记录', { type: tx(type) })}</Empty></div>}
       </div>
 
+      {allOpen && (
+        <BottomSheet label={t('全部指标')} onClose={() => setAllOpen(false)}>
+          <div className="metric-sheet-head">
+            <h2>{t('全部指标')}</h2>
+          </div>
+          <div className="list">
+            {shown.map((m) => {
+              const lat = latest.get(m)
+              return <MetricPick key={m} name={m} on={m === type} value={lat && metricValue(lat)} unit={lat?.unit} onPick={() => pickMetric(m)} />
+            })}
+            {hidden.length > 0 && <div className="group-label">{t('未显示在上面')}</div>}
+            {hidden.map((m) => {
+              const lat = latest.get(m)
+              return <MetricPick key={m} name={m} value={lat && metricValue(lat)} unit={lat?.unit} onPick={() => pickMetric(m)} />
+            })}
+          </div>
+          <div className="sheet-actions">
+            <button type="button" className="sheet-add" onClick={() => { setAllOpen(false); setChoosing(true) }}>{t('调整展示')}</button>
+            <button type="button" className="sheet-add" onClick={() => { setAllOpen(false); setAddingKind(true) }}><Plus size={18} />{t('新指标')}</button>
+          </div>
+        </BottomSheet>
+      )}
       {choosing && (
         <ArrangeList title={t('选择直接显示的指标')} icon={<KindIcon kind="metrics" />}
           items={list.ordered.map((m) => ({ key: m, label: tx(m) }))} shown={list.shown} onChange={list.save}
@@ -202,5 +244,14 @@ export function Metrics() {
         </Modal>
       )}
     </>
+  )
+}
+
+function MetricPick({ name, on, value, unit, onPick }: { name: string; on?: boolean; value?: string; unit?: string | null; onPick: () => void }) {
+  return (
+    <button type="button" className={'row-item' + (on ? ' selected' : '')} onClick={onPick}>
+      <div className="body title">{tx(name)}</div>
+      {value && <span className="val num">{value}{unit ? <span className="muted small"> {tx(unit)}</span> : null}</span>}
+    </button>
   )
 }
