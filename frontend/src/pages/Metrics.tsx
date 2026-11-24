@@ -5,6 +5,7 @@ import { DateTimeInput } from '../components/DateTimeInput'
 import { EntityForm } from '../components/EntityForm'
 import { LineChart } from '../components/LineChart'
 import { ArrangeList } from '../components/ArrangeList'
+import { BottomSheet } from '../components/BottomSheet'
 import { Modal } from '../components/Modal'
 import { noun, paren, t, tx } from '../i18n'
 import { hashParam, openRecord, useApp, useListChoice, useLoad, useMetricKinds } from '../state'
@@ -33,6 +34,12 @@ export function Metrics() {
   const kindId = useRef<number>()
   if (kind) kindId.current = kind.id
   const [addingKind, setAddingKind] = useState(false)
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 760)
+  useEffect(() => {
+    const on = () => setPhone(window.innerWidth <= 760)
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
   // the pills in the person's order, as on the 今天 page; before a choice,
   // the key ones and those with readings
   const { data: o } = useLoad(() => api.overview(), [])
@@ -40,7 +47,19 @@ export function Metrics() {
   const list = useListChoice('metrics_page', mk.types, (m) => KEY_METRICS.includes(m) || withData.has(m))
   // one opened by a link shows while it's chosen
   const shown = list.ordered.filter((m) => list.shown(m) || m === type)
+  const hidden = list.ordered.filter((m) => !list.shown(m) && m !== type)
+  const latest = new Map((o?.latest_metrics || []).map((m) => [m.metric_type, m]))
+  // picking one that was left off the row puts it back, so it isn't a dead end
+  function pickMetric(m: string) {
+    if (list.loaded && !list.shown(m)) {
+      const hide = list.ordered.filter((n) => !list.shown(n) && n !== m)
+      list.save(list.ordered, hide)
+    }
+    setType(m)
+    setAllOpen(false)
+  }
   const [choosing, setChoosing] = useState(false)
+  const [allOpen, setAllOpen] = useState(false)
   // the metric was renamed (follow it) or deleted (show the first one) from
   // its drawer. Only when the list reloads: a metric just added is chosen
   // before it's in it.
@@ -78,44 +97,60 @@ export function Metrics() {
   return (
     <>
       <div className="page-head">
-        <div className="titles"><h1>{t('身体数据')}</h1><div className="sub">{t('体重、血压、血糖等日常测量')}</div></div>
+        <div className="titles">
+          <h1>{t('身体数据')}</h1>
+          <div className="sub"><span className="wide-only">{t('体重、血压、血糖等日常测量')}</span><span className="phone-only">{t('体重、血压、血糖')}</span></div>
+        </div>
       </div>
       {/* drawn once it's known which are shown, so nothing jumps */}
-      <div className="pills" style={{ marginBottom: 18, minHeight: 34 }}>
+      <div className="metric-switch">
+      <div className="pills metric-pills">
         {list.loaded && o && <>
           {shown.map((m) => (
             <button key={m} className={'pill' + (m === type ? ' on' : '')} onClick={() => setType(m)}>{tx(m)}</button>
           ))}
           {/* kept together so a wrap never splits them */}
           <span className="pill-group">
-            <button className="pill" onClick={() => setAddingKind(true)}><Plus size={13} />{t('新指标')}</button>
-            <button type="button" className="pill icon" onClick={() => setChoosing(true)} aria-label={t('选择直接显示的指标')} title={t('选择直接显示的指标')}><SlidersHorizontal size={14} /></button>
+            <button className="pill" aria-label={t('新指标')} onClick={() => setAddingKind(true)}><Plus size={14} /><span className="wide-only">{t('新指标')}</span></button>
+            <button type="button" className="pill icon wide-only" onClick={() => setChoosing(true)} aria-label={t('选择直接显示的指标')} title={t('选择直接显示的指标')}><SlidersHorizontal size={14} /></button>
           </span>
         </>}
+      </div>
+      {list.loaded && (
+        <button type="button" className="pill metric-all phone-only" onClick={() => setAllOpen(true)}>
+          {t('全部')}{hidden.length > 0 && <span className="metric-all-n">{hidden.length}</span>}
+        </button>
+      )}
       </div>
       <div className="stack">
         <section className="card">
           <div className="card-head">
             <h2>{tx(type)}{kind && (
-              <IconButton small label={t('修改这个指标')} onClick={() => openRecord('metric_kinds', kind.id)}><Pencil size={14} /></IconButton>
+              <IconButton className="wide-only" small label={t('修改这个指标')} onClick={() => openRecord('metric_kinds', kind.id)}><Pencil size={14} /></IconButton>
             )}</h2>
-            <div className="seg">
-              {RANGES.map((d) => <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{rangeLabel(d)}</button>)}
+            <div className="seg metric-ranges">
+              {RANGES.map((d) => <button key={d} className={(days === d ? 'on ' : '') + (d === 0 ? 'wide-only' : '')} onClick={() => setDays(d)}>{rangeLabel(d)}</button>)}
             </div>
           </div>
           {last && (
-            <div className="row" style={{ gap: 28, marginBottom: 14, alignItems: 'flex-end' }}>
-              <div><div className="sub">{t('最近')}</div><div><span style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em' }} className="num">{metricValue(last)}</span> <span className="muted">{unit}</span>{last.category && <span className="tag" style={{ marginLeft: 8 }}>{tx(last.category)}</span>}</div></div>
+            <div className="metric-now">
+              <div>
+                <div className="sub">{t('最近')}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <div className="metric-big num">{metricValue(last)}<small>{unit}</small></div>
+                  {last.category && <span className="tag">{tx(last.category)}</span>}
+                </div>
+              </div>
               {delta != null && !isBP && (
-                <div><div className="sub">{t('区间变化')}</div><div className="num" style={{ fontSize: 17, fontWeight: 600 }}>{delta > 0 ? '+' : ''}{fmtNum(delta)} {unit}</div></div>
+                <div><div className="sub">{t('区间变化')}</div><div className="num metric-delta">{delta > 0 ? '+' : ''}{fmtNum(delta)} {unit}</div></div>
               )}
               {vals.length > 1 && !isBP && (
-                <div><div className="sub">{t('区间范围')}</div><div className="num" style={{ fontSize: 17, fontWeight: 600 }}>{fmtNum(Math.min(...vals))} – {fmtNum(Math.max(...vals))}</div></div>
+                <div className="wide-only"><div className="sub">{t('区间范围')}</div><div className="num" style={{ fontSize: 17, fontWeight: 600 }}>{fmtNum(Math.min(...vals))} – {fmtNum(Math.max(...vals))}</div></div>
               )}
-              <div className="sub" style={{ marginLeft: 'auto' }}>{t('{n} 次测量', { n: rows!.length })}</div>
+              <div className="sub wide-only" style={{ marginLeft: 'auto' }}>{t('{n} 次测量', { n: rows!.length })}</div>
             </div>
           )}
-          <LineChart unit={unit} names={isBP ? [t('收缩压'), t('舒张压')] : undefined}
+          <LineChart height={phone ? 120 : 240} unit={unit} names={isBP ? [t('收缩压'), t('舒张压')] : undefined}
             points={(rows || []).map((r) => ({ date: r.measured_at, v: r.value, v2: r.value2 }))} />
         </section>
 
@@ -136,26 +171,26 @@ export function Metrics() {
         ) : (
         <section className="card">
           <div className="card-head"><h2>{t('记一笔')}</h2></div>
-          <form className="row" onSubmit={add} style={{ gap: 10, alignItems: 'flex-end' }}>
-            <label className="field" style={{ width: 120 }}>
+          <form className="metric-log" onSubmit={add}>
+            <label className="field metric-val">
               <span className="lbl">{paren(isBP ? t('收缩压') : t('数值'), unit)}</span>
               <input className="input num" inputMode="decimal" value={v} onChange={(e) => setV(e.target.value)} required />
             </label>
             {isBP && (
-              <label className="field" style={{ width: 120 }}>
+              <label className="field metric-val">
                 <span className="lbl">{t('舒张压')}</span>
                 <input className="input num" inputMode="decimal" value={v2} onChange={(e) => setV2(e.target.value)} />
               </label>
             )}
-            <label className="field" style={{ width: 160 }}>
+            <label className="field metric-ctx">
               <span className="lbl">{t('情境')}</span>
               <input className="input" placeholder={t('如 空腹、晨起')} value={ctx} onChange={(e) => setCtx(e.target.value)} />
             </label>
-            <label className="field" style={{ width: 220 }}>
+            <label className="field metric-when">
               <span className="lbl">{t('时间（不填为现在）')}</span>
               <DateTimeInput value={at} onChange={setAt} />
             </label>
-            <button className="btn primary" style={{ height: 38 }}><Plus size={16} />{t('记录|button')}</button>
+            <button className="btn primary metric-log-save"><Plus size={16} className="wide-only" />{t('记录|button')}</button>
           </form>
           {error && <div className="error" style={{ marginTop: 10 }}>{error}</div>}
         </section>
@@ -181,6 +216,33 @@ export function Metrics() {
         ) : rows && <div className="card"><Empty compact>{derived && heights && !height ? t('记一次身高，就能按体重算出 BMI') : t('这段时间没有{type}的记录', { type: tx(type) })}</Empty></div>}
       </div>
 
+      {allOpen && (
+        <BottomSheet label={t('全部指标')} onClose={() => setAllOpen(false)}>
+          <div className="metric-sheet-head">
+            <h2>{t('全部指标')}</h2>
+            {kind && (
+              <button type="button" className="btn ghost" onClick={() => { setAllOpen(false); openRecord('metric_kinds', kind.id) }}>
+                <Pencil size={14} />{t('修改这个指标')}
+              </button>
+            )}
+          </div>
+          <div className="list">
+            {shown.map((m) => {
+              const lat = latest.get(m)
+              return <MetricPick key={m} name={m} on={m === type} value={lat && metricValue(lat)} unit={lat?.unit} onPick={() => pickMetric(m)} />
+            })}
+            {hidden.length > 0 && <div className="group-label">{t('未显示在上面')}</div>}
+            {hidden.map((m) => {
+              const lat = latest.get(m)
+              return <MetricPick key={m} name={m} value={lat && metricValue(lat)} unit={lat?.unit} onPick={() => pickMetric(m)} />
+            })}
+          </div>
+          <div className="sheet-actions">
+            <button type="button" className="sheet-add" onClick={() => { setAllOpen(false); setChoosing(true) }}>{t('调整展示')}</button>
+            <button type="button" className="sheet-add" onClick={() => { setAllOpen(false); setAddingKind(true) }}><Plus size={18} />{t('新指标')}</button>
+          </div>
+        </BottomSheet>
+      )}
       {choosing && (
         <ArrangeList title={t('选择直接显示的指标')} icon={<KindIcon kind="metrics" />}
           items={list.ordered.map((m) => ({ key: m, label: tx(m) }))} shown={list.shown} onChange={list.save}
@@ -193,5 +255,14 @@ export function Metrics() {
         </Modal>
       )}
     </>
+  )
+}
+
+function MetricPick({ name, on, value, unit, onPick }: { name: string; on?: boolean; value?: string; unit?: string | null; onPick: () => void }) {
+  return (
+    <button type="button" className={'row-item' + (on ? ' selected' : '')} onClick={onPick}>
+      <div className="body title">{tx(name)}</div>
+      {value && <span className="val num">{value}{unit ? <span className="muted small"> {tx(unit)}</span> : null}</span>}
+    </button>
   )
 }

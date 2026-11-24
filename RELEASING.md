@@ -201,7 +201,7 @@ iOS 版（Bundle ID `com.chunbin1.healthtrail`）通过独立的 GitHub Actions 
   # 仅验证打包、不上传（干跑）
   gh workflow run ios-release.yml -f version=1.0.0 -f upload=false
   ```
-- **打标签触发**：推送 `ios-v1.0.0`（或随桌面版推送 `v1.x.x`）。推送 `v*` 标签时如果尚未配置 `IOS_DIST_P12`，工作流会自动跳过并给出提示，不会导致发布标红。
+- **打标签触发**：推送 `ios-v1.0.0`（桌面端 `v*` 标签不再触发 iOS 发布，两端的发布标签各自独立）。
 - 上传完成后，几分钟内构建版本会出现在 App Store Connect → TestFlight 中，可供内部测试或提交 App Store 审核。
 
 ### 4. 本机校验命令

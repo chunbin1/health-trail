@@ -73,6 +73,7 @@ export function RecordsPage({ entityName, end }: { entityName: string; end?: Rea
         </div>
       ) : (
         entityName === 'appointments' ? <AppointmentLists entity={e} rows={data?.rows || []} />
+          : entityName === 'medications' && !status ? <MedicationLists entity={e} rows={data?.rows || []} />
           : <div className="card flush"><RecordList entity={e} rows={data?.rows || []} grouped /></div>
       )}
       {adding && (
@@ -86,6 +87,18 @@ export function RecordsPage({ entityName, end }: { entityName: string; end?: Rea
 
 // Appointments still to go to come first, soonest at the top; the rest
 // (past, done, cancelled) after, latest first.
+// Medicines in use (including as-needed and planned) come first; stopped ones after.
+function MedicationLists({ entity, rows }: { entity: Entity; rows: Rec[] }) {
+  const stopped = rows.filter((r) => r.status === '已停用')
+  const current = rows.filter((r) => r.status !== '已停用')
+  return (
+    <div className="stack">
+      {current.length > 0 && <div className="card flush"><div className="group-label">{t('在用')}</div><RecordList entity={entity} rows={current} /></div>}
+      {stopped.length > 0 && <div className="card flush"><div className="group-label">{t('已停用')}</div><RecordList entity={entity} rows={stopped} /></div>}
+    </div>
+  )
+}
+
 function AppointmentLists({ entity, rows }: { entity: Entity; rows: Rec[] }) {
   const day = today()
   const isAhead = (r: Rec) => String(r.scheduled_at) >= day && (!r.status || r.status === '待去')

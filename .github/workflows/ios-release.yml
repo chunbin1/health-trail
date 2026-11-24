@@ -26,7 +26,6 @@ on:
   push:
     tags:
       - 'ios-v*'
-      - 'v*'
 
 concurrency:
   group: ios-release-${{ github.ref }}
@@ -62,11 +61,6 @@ jobs:
           echo "has_signing=$HAS_SIGNING" >> "$GITHUB_OUTPUT"
 
           if [[ "$HAS_SIGNING" != "true" ]]; then
-            if [[ "$EVENT_NAME" == "push" && "$REF_NAME" == v* ]]; then
-              echo "::notice::IOS_DIST_P12 或 App Store Connect API Key 尚未配置，跳过 iOS App Store 发布（桌面版 release.yml 不受影响）。"
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
             if [[ "$UPLOAD" == "true" ]]; then
               echo "::error::缺少 iOS 签名或 App Store Connect 密钥：请配置 IOS_DIST_P12、IOS_DIST_P12_PASSWORD 以及 IOS_ASC_KEY/IOS_ASC_KEY_ID/IOS_ASC_ISSUER_ID（或复用 NOTARY_KEY*），详见 RELEASING.md。"
               exit 1
